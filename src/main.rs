@@ -1,17 +1,23 @@
 // mod midi_ports;
 mod engine;
 
-use engine::synth::play_midi;
+slint::include_modules!();
 
+use engine::synth::play_midi;
 use std::error::Error;
 
+fn main() -> Result<(), slint::PlatformError> {
+    let main_window = MainWindow::new()?;
+    // Set up callbacks
+    // let main_window_weak = main_window.as_weak();
+    main_window.on_play_midi(move || {
+        if let Err(err) = play_scale() {
+            eprintln!("play_scale error: {}", err);
+        }
+    });
 
-fn main() {
-    println!("Playing a scale!");
-    match play_scale() {
-        Ok(_) => (),
-        Err(err) => println!("Error: {}", err),
-    }
+    // Run program
+    main_window.run()
 }
 
 fn play_scale() -> Result<(), Box<dyn Error>> {
@@ -19,4 +25,3 @@ fn play_scale() -> Result<(), Box<dyn Error>> {
     play_midi(&notes)?;
     Ok(())
 }
-

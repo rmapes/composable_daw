@@ -1,0 +1,24 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+component PlayButton inherits Button {
+    width: 100px;
+    height: 40px;
+    text: "Play";
+}
+export component MainWindow inherits Window {
+    min-width: 400px;
+    preferred-height: 100px;
+    title: "Composable: Pluggable DAW";
+    callback play_midi();
+
+    VerticalBox {
+        alignment: center;
+        spacing: 5px;
+        PlayButton {
+            clicked => {
+                root.play_midi();
+            }
+        }
+    }
+}
+
