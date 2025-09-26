@@ -3,25 +3,21 @@ mod engine;
 
 slint::include_modules!();
 
-use engine::synth::play_midi;
-use std::error::Error;
+use std::rc::Rc;
+
 
 fn main() -> Result<(), slint::PlatformError> {
     let main_window = MainWindow::new()?;
+    let engine = Rc::new(engine::start());
+    let engine_clone = Rc::clone(&engine);
+    
     // Set up callbacks
-    // let main_window_weak = main_window.as_weak();
     main_window.on_play_midi(move || {
-        if let Err(err) = play_scale() {
-            eprintln!("play_scale error: {}", err);
-        }
+        engine_clone.play_midi();
     });
 
     // Run program
-    main_window.run()
-}
-
-fn play_scale() -> Result<(), Box<dyn Error>> {
-    let notes: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
-    play_midi(&notes)?;
+    main_window.run()?;
+    engine.quit();
     Ok(())
 }
