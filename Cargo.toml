@@ -1,0 +1,10 @@
+[package]
+name = "composable_daw"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fluidsynth = "0.0.1"
+midir = "0.10.2"
+oxisynth = "0.1.0"
+cpal = "0.15"
