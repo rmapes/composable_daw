@@ -1,5 +1,7 @@
 // mod midi_ports;
-mod synth;
+mod engine;
+
+use engine::synth::play_midi;
 
 use std::error::Error;
 
@@ -14,7 +16,7 @@ fn main() {
 
 fn play_scale() -> Result<(), Box<dyn Error>> {
     let notes: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
-    synth::play_midi(&notes)?;
+    play_midi(&notes)?;
     Ok(())
 }
 
