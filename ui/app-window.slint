@@ -11,10 +11,13 @@ export component MainWindow inherits Window {
     title: "Composable: Pluggable DAW";
     callback play_midi();
 
+    in property<bool> is_playing;
+
     VerticalBox {
         alignment: center;
         spacing: 5px;
         PlayButton {
+            enabled: !is_playing;
             clicked => {
                 root.play_midi();
             }
