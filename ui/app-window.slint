@@ -1,4 +1,5 @@
 import { Button, VerticalBox } from "std-widgets.slint";
+import { PatternEditor } from "pattern_editor.slint";
 
 component PlayButton inherits Button {
     width: 100px;
@@ -7,7 +8,7 @@ component PlayButton inherits Button {
 }
 export component MainWindow inherits Window {
     min-width: 400px;
-    preferred-height: 100px;
+    preferred-height: 500px;
     title: "Composable: Pluggable DAW";
     callback play_midi();
 
@@ -16,6 +17,10 @@ export component MainWindow inherits Window {
     VerticalBox {
         alignment: center;
         spacing: 5px;
+        PatternEditor {
+            width: 512px;
+            height: 384px;
+        }
         PlayButton {
             enabled: !is_playing;
             clicked => {

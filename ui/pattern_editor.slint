@@ -1,0 +1,64 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+
+component PatternPadButton inherits Rectangle {
+    in property <string> name;
+    in-out property <bool> on;
+    callback clicked();
+    background: green;
+
+    accessible-role: button;
+    accessible-label: self.name;
+    accessible-action-default => { /* simulate click */ }
+
+    TouchArea {
+        clicked => {
+            root.on = !root.on;
+        }
+    }
+
+
+    states [
+        on when on: {background: blue;}
+        off when !on: {background: black;}
+    ]
+}
+
+export component PatternEditor inherits Rectangle {
+    // Grid of notes vs beats to create a midi pattern that can be played on loop
+    // We will create the grid programatically
+    property <int> notes: 12;
+    property <int> beats: 16;
+    function note(i: int) -> int {
+        return floor(i/beats);
+    }
+    function beat(i: int) -> int {
+        return mod(i, beats);
+    }
+    property <length> spacing: 5px;
+    function cell_width() -> length {
+        return self.width / beats;
+    }
+    function cell_height() -> length {
+        return self.height / notes;
+    }
+    function butt_width() -> length {
+        return self.width / beats - 2 * spacing;
+    }
+    function butt_height() -> length {
+        return self.height / notes - 2 * spacing;
+    }
+    function butt_x(i: int) -> length {
+        return cell_width()*beat(i)+spacing;
+    }
+    function butt_y(i: int) -> length {
+        return cell_height()*note(i)+spacing;
+    }
+    for button[i] in notes*beats: PatternPadButton {
+        name: "Note_" + note(i) + "_Beat_"+ beat(i);
+        width: butt_width();
+        height: butt_height();
+        x: butt_x(i);
+        y: butt_y(i);
+    }
+    
+}
