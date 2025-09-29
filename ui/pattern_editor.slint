@@ -1,5 +1,12 @@
 import { Button, VerticalBox } from "std-widgets.slint";
 
+export struct Pattern {
+    notes: int,
+    beats: int,
+    note_values: [int],
+    pattern: [[bool]],
+}
+
 component PatternPadButton inherits Rectangle {
     in property <string> name;
     in-out property <bool> on;
@@ -26,26 +33,43 @@ component PatternPadButton inherits Rectangle {
 export component PatternEditor inherits Rectangle {
     // Grid of notes vs beats to create a midi pattern that can be played on loop
     // We will create the grid programatically
-    property <int> notes: 12;
-    property <int> beats: 16;
+    in-out property <Pattern> pattern: {
+        notes: 12,
+        beats: 16,
+        note_values: [60, 62, 64, 65, 67, 69, 71, 72],
+        pattern: [
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
+        ]
+    };
     function note(i: int) -> int {
-        return floor(i/beats);
+        return floor(i/pattern.beats);
     }
     function beat(i: int) -> int {
-        return mod(i, beats);
+        return mod(i, pattern.beats);
     }
     property <length> spacing: 5px;
     function cell_width() -> length {
-        return self.width / beats;
+        return self.width / pattern.beats;
     }
     function cell_height() -> length {
-        return self.height / notes;
+        return self.height / pattern.notes;
     }
     function butt_width() -> length {
-        return self.width / beats - 2 * spacing;
+        return self.width / pattern.beats - 2 * spacing;
     }
     function butt_height() -> length {
-        return self.height / notes - 2 * spacing;
+        return self.height / pattern.notes - 2 * spacing;
     }
     function butt_x(i: int) -> length {
         return cell_width()*beat(i)+spacing;
@@ -53,12 +77,17 @@ export component PatternEditor inherits Rectangle {
     function butt_y(i: int) -> length {
         return cell_height()*note(i)+spacing;
     }
-    for button[i] in notes*beats: PatternPadButton {
+    for button[i] in pattern.notes*pattern.beats: PatternPadButton {
         name: "Note_" + note(i) + "_Beat_"+ beat(i);
         width: butt_width();
         height: butt_height();
         x: butt_x(i);
         y: butt_y(i);
+        on: pattern.pattern[beat(i)][note(i)];
+        clicked => {
+            self.on = !self.on;
+            pattern.pattern[beat(i)][note(i)] = self.on;
+        }
     }
     
 }

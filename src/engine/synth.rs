@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+use crate::models::sequences::{Sequence, EventPriority};
+
 pub struct AudioEngine {
 	pub synth: Arc<Mutex<Synth>>,
 	_stream: cpal::Stream,
@@ -16,6 +18,26 @@ pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
 	let engine = start_audio()?;
 	for note in notes {
 		play_note(&engine.synth, *note, 4);
+	}
+	// Give the tail some time to ring out before dropping the stream
+	sleep(Duration::from_millis(250));
+	Ok(())
+}
+
+pub fn play_sequence(seq: &dyn Sequence) -> Result<(), Box<dyn Error>> {
+	let engine = start_audio()?;
+	let event_stream = seq.to_event_stream();
+	for tick in 0..event_stream.get_length_in_ticks() {
+		for priority in [EventPriority::SYSTEM, EventPriority::AUDIO, EventPriority::OTHER] {
+			// println!("Tick: {tick}");
+			for event in event_stream.get_events(tick, priority) {
+				if let Ok(mut guard) = engine.synth.lock() {
+					let _ = guard.send_event(event.to_midi());
+				}							
+			}
+		}
+		// Wait for next tick
+		sleep(event_stream.get_tick_duration());
 	}
 	// Give the tail some time to ring out before dropping the stream
 	sleep(Duration::from_millis(250));

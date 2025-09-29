@@ -1,9 +1,11 @@
 mod synth;
 
-use synth::play_midi;
+use synth::play_sequence;
 use std::error::Error;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+
+use crate::models::sequences::{PatternSeq};
 
 pub struct EngineController {
     tx: mpsc::Sender<Actions>,
@@ -85,6 +87,25 @@ impl EngineController {
 }
 
 fn play_scale() -> Result<(), Box<dyn Error>> {
-    let notes: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
-    play_midi(&notes)
+    // let _notes: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
+    // play_midi(&notes)
+    let pattern = PatternSeq {
+        note_values: vec![60, 62, 64, 65, 67, 69, 71, 72],
+        num_notes: 8, // Derive this from length of note_values
+        num_beats: 8,
+        bpm: 120,
+        pattern: vec![
+            vec![true,false,false,false,false,false,false,false],
+            vec![false,true,false,false,false,false,false,false],
+            vec![false,false,true,false,false,false,false,false],
+            vec![false,false,false,true,false,false,false,false],
+            vec![false,false,false,false,true,false,false,false],
+            vec![false,false,false,false,false,true,false,false],
+            vec![false,false,false,false,false,false,true,false],
+            vec![false,false,false,false,false,false,false,true],
+        ],
+        sample_rate: 960, /* ticks per second */    
+    };
+    play_sequence(&pattern)
+
 }

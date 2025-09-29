@@ -1,5 +1,6 @@
 // mod midi_ports;
 mod engine;
+mod models;
 
 slint::include_modules!();
 
