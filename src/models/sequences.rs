@@ -1,4 +1,5 @@
 use std::{collections::HashMap, cmp::max};
+use std::option::{Option};
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -32,7 +33,7 @@ pub trait EventStream {
 }
 
 pub trait Sequence {
-    fn to_event_stream(&self) -> Box<dyn EventStream>;
+    fn to_event_stream(&self) -> Option<Box<dyn EventStream>>;
 }
 
 ///////////////////////
@@ -135,7 +136,9 @@ impl Event for MidiEvent {
 }
 
 impl Sequence for PatternSeq {
-    fn to_event_stream(&self) -> Box<dyn EventStream> {
+    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+        println!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
+        println!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
         let ticks_per_beat = self.sample_rate * 60 / self.bpm as u32;
         let mut playing_notes = Vec::new();
         let mut event_stream = BaseEventStream::new(self.sample_rate);
@@ -151,6 +154,7 @@ impl Sequence for PatternSeq {
             playing_notes.clear();
             // Now add new notes to play
             for note_num in 0..self.num_notes {
+                println!("Note {note_num}, beat {beat}");
                 let note = self.note_values[note_num as usize];
                 if self.pattern[beat as usize][note_num as usize] {
                     event_stream.store_event(Box::new(MidiEvent {
@@ -170,6 +174,6 @@ impl Sequence for PatternSeq {
                 ticks: current_tick
             }));
         }
-        return Box::new(event_stream)
+        return Some(Box::new(event_stream))
     }    
 }

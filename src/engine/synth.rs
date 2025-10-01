@@ -14,20 +14,28 @@ pub struct AudioEngine {
 	_stream: cpal::Stream,
 }
 
-pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
-	let engine = start_audio()?;
-	for note in notes {
-		play_note(&engine.synth, *note, 4);
-	}
-	// Give the tail some time to ring out before dropping the stream
-	sleep(Duration::from_millis(250));
-	Ok(())
-}
+// pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
+// 	let engine = start_audio()?;
+// 	for note in notes {
+// 		play_note(&engine.synth, *note, 4);
+// 	}
+// 	// Give the tail some time to ring out before dropping the stream
+// 	sleep(Duration::from_millis(250));
+// 	Ok(())
+// }
 
 pub fn play_sequence(seq: &dyn Sequence) -> Result<(), Box<dyn Error>> {
 	let engine = start_audio()?;
 	let event_stream = seq.to_event_stream();
+	println!("Starting to play sequence");
+	if event_stream.is_none() {
+		// Empty event stream, so exit without playing anything
+		println!("Nothing to play");
+		return Ok(());
+	}
+	let event_stream = event_stream.unwrap();
 	for tick in 0..event_stream.get_length_in_ticks() {
+		// println!("Tick {tick}");
 		for priority in [EventPriority::SYSTEM, EventPriority::AUDIO, EventPriority::OTHER] {
 			// println!("Tick: {tick}");
 			for event in event_stream.get_events(tick, priority) {
@@ -41,6 +49,7 @@ pub fn play_sequence(seq: &dyn Sequence) -> Result<(), Box<dyn Error>> {
 	}
 	// Give the tail some time to ring out before dropping the stream
 	sleep(Duration::from_millis(250));
+	println!("Sequence complete");
 	Ok(())
 }
 

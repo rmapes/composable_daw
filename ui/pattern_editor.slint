@@ -1,4 +1,5 @@
 import { Button, VerticalBox } from "std-widgets.slint";
+import { Handlers } from  "app-window.slint";
 
 export struct Pattern {
     notes: int,
@@ -6,6 +7,7 @@ export struct Pattern {
     note_values: [int],
     pattern: [[bool]],
 }
+
 
 component PatternPadButton inherits Rectangle {
     in property <string> name;
@@ -87,6 +89,7 @@ export component PatternEditor inherits Rectangle {
         clicked => {
             self.on = !self.on;
             pattern.pattern[beat(i)][note(i)] = self.on;
+            Handlers.save-pattern(root.pattern)
         }
     }
     

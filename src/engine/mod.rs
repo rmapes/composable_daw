@@ -1,11 +1,10 @@
 mod synth;
 
 use synth::play_sequence;
-use std::error::Error;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
-use crate::models::sequences::{PatternSeq};
+use crate::models::shared::SongData;
 
 pub struct EngineController {
     tx: mpsc::Sender<Actions>,
@@ -44,7 +43,7 @@ enum Actions {
     Quit,
 }
 
-pub fn start<F>(observer_callback: F) -> EngineController 
+pub fn start<F>(observer_callback: F, shared_data: Arc<Mutex<SongData>>) -> EngineController 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
     let (tx, rx) = mpsc::channel::<Actions>();
@@ -61,7 +60,9 @@ where
                     state.is_playing = true;
                 }
                 observer.notify();
-                play_scale().unwrap();
+                if let Ok(song) = shared_data.lock() {
+                    play_sequence(&*song).unwrap();
+                }
                 if let Ok(mut state) = player_state.lock() {
                     state.is_playing = false;
                 }
@@ -86,26 +87,3 @@ impl EngineController {
 
 }
 
-fn play_scale() -> Result<(), Box<dyn Error>> {
-    // let _notes: [u8; 8] = [60, 62, 64, 65, 67, 69, 71, 72];
-    // play_midi(&notes)
-    let pattern = PatternSeq {
-        note_values: vec![60, 62, 64, 65, 67, 69, 71, 72],
-        num_notes: 8, // Derive this from length of note_values
-        num_beats: 8,
-        bpm: 120,
-        pattern: vec![
-            vec![true,false,false,false,false,false,false,false],
-            vec![false,true,false,false,false,false,false,false],
-            vec![false,false,true,false,false,false,false,false],
-            vec![false,false,false,true,false,false,false,false],
-            vec![false,false,false,false,true,false,false,false],
-            vec![false,false,false,false,false,true,false,false],
-            vec![false,false,false,false,false,false,true,false],
-            vec![false,false,false,false,false,false,false,true],
-        ],
-        sample_rate: 960, /* ticks per second */    
-    };
-    play_sequence(&pattern)
-
-}

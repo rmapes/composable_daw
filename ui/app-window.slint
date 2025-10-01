@@ -1,6 +1,114 @@
 import { Button, VerticalBox } from "std-widgets.slint";
-import { PatternEditor } from "pattern_editor.slint";
 
+
+export struct Pattern {
+    notes: int,
+    beats: int,
+    note_values: [int],
+    pattern: [[bool]],
+}
+
+export global Handlers {
+    callback save-pattern(Pattern);
+}
+
+component PatternPadButton inherits Rectangle {
+    in property <string> name;
+    in-out property <bool> on;
+    callback clicked();
+    background: green;
+
+    accessible-role: button;
+    accessible-label: self.name;
+    accessible-action-default => { /* simulate click */ }
+
+    TouchArea {
+        clicked => root.clicked();
+    }
+
+
+    states [
+        on when on: {background: blue;}
+        off when !on: {background: black;}
+    ]
+}
+
+
+
+component PatternEditor inherits Rectangle {
+    // Grid of notes vs beats to create a midi pattern that can be played on loop
+    // TODO: create the grid programatically using a native function
+    // function create_pattern(note_values: [int], beats: [int]) -> Pattern {
+    //     return {
+    //         notes: note_values.length,
+    //         beats: beats,
+    //         note_values: note_values,
+    //         pattern: 
+    //     };
+    // }
+    in-out property <Pattern> pattern: {
+        notes: 8,
+        beats: 16,
+        note_values: [72,71,69,67,65,64,62,60], // From top to bottom
+        pattern: [
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+            [false,false,false,false,false,false,false,false],
+        ]
+    };
+    function note(i: int) -> int {
+        return floor(i/pattern.beats);
+    }
+    function beat(i: int) -> int {
+        return mod(i, pattern.beats);
+    }
+    property <length> spacing: 5px;
+    function cell_width() -> length {
+        return self.width / pattern.beats;
+    }
+    function cell_height() -> length {
+        return self.height / pattern.notes;
+    }
+    function butt_width() -> length {
+        return self.width / pattern.beats - 2 * spacing;
+    }
+    function butt_height() -> length {
+        return self.height / pattern.notes - 2 * spacing;
+    }
+    function butt_x(i: int) -> length {
+        return cell_width()*beat(i)+spacing;
+    }
+    function butt_y(i: int) -> length {
+        return cell_height()*note(i)+spacing;
+    }
+    for button[i] in pattern.notes*pattern.beats: PatternPadButton {
+        name: "Note_" + note(i) + "_Beat_"+ beat(i);
+        width: butt_width();
+        height: butt_height();
+        x: butt_x(i);
+        y: butt_y(i);
+        on: pattern.pattern[beat(i)][note(i)];
+        clicked => {
+            self.on = !self.on;
+            pattern.pattern[beat(i)][note(i)] = self.on;
+            Handlers.save-pattern(root.pattern)
+        }
+    }
+    
+}
 component PlayButton inherits Button {
     width: 100px;
     height: 40px;
@@ -11,6 +119,7 @@ export component MainWindow inherits Window {
     preferred-height: 500px;
     title: "Composable: Pluggable DAW";
     callback play_midi();
+    
 
     in property<bool> is_playing;
 

@@ -1,0 +1,4 @@
+- Convert sample_rate from ticks per second to ticks per quarter beat, to minimise timing issues
+- Minimise size of all ints (convert u32 into smallest size that covers the range)
+- Minimise unnecessary copies
+- Replace debug println with log framework
