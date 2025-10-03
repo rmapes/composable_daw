@@ -74,7 +74,7 @@ where
     });
 
     
-    return EngineController {tx}
+    EngineController {tx}
 }
 
 impl EngineController {

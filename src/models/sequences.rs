@@ -4,9 +4,9 @@ use std::option::{Option};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EventPriority {
-    SYSTEM,
-    AUDIO,
-    OTHER
+    System,
+    Audio,
+    Other
 }
 
 // Event time allows different representations of when an event should occur
@@ -64,14 +64,8 @@ impl EventStream for BaseEventStream {
     fn store_event(&mut self, event: Box<dyn Event>) {
         // Add event at its tick and priority
         let event_tick = event.get_event_time().as_ticks(self.sample_rate);
-        if !self.events.contains_key(&event_tick) {
-            self.events.insert(event_tick, HashMap::new());
-        }
-        let tick_block = self.events.get_mut(&event_tick).unwrap();
-        if !tick_block.contains_key(&event.get_priority()) {
-            tick_block.insert(event.get_priority(), Vec::new());
-        }
-        let tick_priority_block = tick_block.get_mut(&event.get_priority()).unwrap();
+        let tick_block = self.events.entry(event_tick).or_default();
+        let tick_priority_block = tick_block.entry(event.get_priority()).or_default();
         tick_priority_block.push(event);
         self.length_in_ticks = max(self.length_in_ticks, event_tick);
     }
@@ -80,19 +74,19 @@ impl EventStream for BaseEventStream {
         if self.events.contains_key(&tick) {
             let tick_block = self.events.get(&tick).expect("Tick {tick} not found in events");
             if tick_block.contains_key(&priority) {
-                let tick_priority_block = tick_block.get(&priority).expect("Priority {priority} not found in tick_block");
-                return &tick_priority_block
+                return tick_block.get(&priority)
+                .expect("Priority {priority} not found in tick_block");
             }
         }
-        return &self.no_events;
+        &self.no_events
     }
     // Return length in ticks
     fn get_length_in_ticks(&self) -> u32 {
-        return self.length_in_ticks
+        self.length_in_ticks
     }
     // Return length of ticks
     fn get_tick_duration(&self) -> std::time::Duration {
-        return std::time::Duration::from_secs_f32(1.0_f32/self.sample_rate as f32);
+        std::time::Duration::from_secs_f32(1.0_f32/self.sample_rate as f32)
     }
 
 }
@@ -114,7 +108,7 @@ struct RawEventTime {
 
 impl EventTime for RawEventTime {
     fn as_ticks(&self, _sample_rate: u32) -> u32 {
-        return self.ticks;
+        self.ticks
     }
 }
 
@@ -125,13 +119,13 @@ pub struct MidiEvent {
 
 impl Event for MidiEvent {
     fn get_priority(&self) -> EventPriority {
-        return EventPriority::AUDIO;
+        EventPriority::Audio
     }
     fn get_event_time(&self) -> Box<dyn EventTime> {
-        return Box::new(RawEventTime{ ticks: self.ticks })
+        Box::new(RawEventTime{ ticks: self.ticks })
     }  
     fn to_midi(&self) -> oxisynth::MidiEvent {
-        return self.event.clone();
+        self.event
     }  
 }
 
@@ -176,6 +170,6 @@ impl Sequence for PatternSeq {
                 ticks: current_tick
             }));
         }
-        return Some(Box::new(event_stream))
+        Some(Box::new(event_stream))
     }    
 }

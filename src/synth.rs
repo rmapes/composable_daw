@@ -7,61 +7,48 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::models::sequences::{Sequence, EventPriority};
-
 pub struct AudioEngine {
 	pub synth: Arc<Mutex<Synth>>,
 	_stream: cpal::Stream,
 }
 
-// pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
-// 	let engine = start_audio()?;
-// 	for note in notes {
-// 		play_note(&engine.synth, *note, 4);
-// 	}
-// 	// Give the tail some time to ring out before dropping the stream
-// 	sleep(Duration::from_millis(250));
-// 	Ok(())
-// }
-
-pub fn play_sequence(seq: &dyn Sequence) -> Result<(), Box<dyn Error>> {
+pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
 	let engine = start_audio()?;
-	let event_stream = seq.to_event_stream();
-	println!("Starting to play sequence");
-	if event_stream.is_none() {
-		// Empty event stream, so exit without playing anything
-		println!("Nothing to play");
-		return Ok(());
-	}
-	let event_stream = event_stream.unwrap();
-	for tick in 0..event_stream.get_length_in_ticks() {
-		// println!("Tick {tick}");
-		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
-			// println!("Tick: {tick}");
-			for event in event_stream.get_events(tick, priority) {
-				if let Ok(mut guard) = engine.synth.lock() {
-					let _ = guard.send_event(event.to_midi());
-				}							
-			}
-		}
-		// Wait for next tick
-		sleep(event_stream.get_tick_duration());
+	for note in notes {
+		play_note(&engine.synth, *note, 4);
 	}
 	// Give the tail some time to ring out before dropping the stream
 	sleep(Duration::from_millis(250));
-	println!("Sequence complete");
 	Ok(())
 }
 
 
 fn create_synth() -> Synth {
 	let mut synth = Synth::default();
-	let mut file = File::open("./soundfonts/airfont_340.sf2").unwrap();
+	let mut file = File::open("./soundfonts/Antares_SoundFont.sf2").unwrap();
 	let font = SoundFont::load(&mut file).unwrap();
 	synth.add_font(font, true);
 	// If needed, select a default program: bank 0, program 0 on channel 0
 	// let _ = synth.program_select(0, 0, 0, 0);
 	synth
+}
+
+fn play_note(synth: &Arc<Mutex<Synth>>, note: u8, duration: u64) {
+	const VELOCITY: u8 = 0x64;
+	let note_on_msg: MidiEvent = MidiEvent::NoteOn {
+		channel: 0,
+		key: note,
+		vel: VELOCITY,
+	};
+	let note_off_msg: MidiEvent = MidiEvent::NoteOff { channel: 0, key: note };
+
+	if let Ok(mut guard) = synth.lock() {
+		let _ = guard.send_event(note_on_msg);
+	}
+	sleep(Duration::from_millis(duration * 150));
+	if let Ok(mut guard) = synth.lock() {
+		let _ = guard.send_event(note_off_msg);
+	}
 }
 
 fn start_audio() -> Result<AudioEngine, Box<dyn Error>> {
@@ -108,7 +95,7 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, synth: &Arc<Mutex<Synth
 	let mut right = vec![0.0_f32; frames];
 	if let Ok(mut guard) = synth.lock() {
 		// https://docs.rs/oxisynth/0.1.0/oxisynth/struct.Synth.html#method.write
-		guard.write_f32(frames, &mut left, 0, 1, &mut right, 0, 1);
+		let _ = guard.write_f32(frames, &mut left, 0, 1, &mut right, 0, 1);
 	}
 
 	match channels {

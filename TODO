@@ -1,4 +1,5 @@
-- Convert sample_rate from ticks per second to ticks per quarter beat, to minimise timing issues
+- Convert sample_rate from ticks per second to ticks per quarter note (PPQN) to minimise timing issues
+- Remove fixed beats per quarter note from pattern (provide a length for the pattern)
 - Minimise size of all ints (convert u32 into smallest size that covers the range)
 - Minimise unnecessary copies
 - Replace debug println with log framework

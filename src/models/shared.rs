@@ -22,6 +22,6 @@ impl Sequence for SongData {
         if self.patterns.is_empty() {
             return None
         }
-        return self.patterns[0].to_event_stream()
+        self.patterns[0].to_event_stream()
     }
 }
