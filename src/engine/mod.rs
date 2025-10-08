@@ -1,4 +1,5 @@
 mod synth;
+mod buss;
 
 use synth::play_sequence;
 use std::sync::{mpsc, Arc, Mutex};

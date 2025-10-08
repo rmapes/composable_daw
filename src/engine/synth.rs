@@ -8,6 +8,7 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::models::sequences::{Sequence, EventPriority};
+use super::buss::{Output, Buss};
 
 pub struct AudioEngine {
 	pub synth: Arc<Mutex<Synth>>,
@@ -23,6 +24,20 @@ pub struct AudioEngine {
 // 	sleep(Duration::from_millis(250));
 // 	Ok(())
 // }
+
+impl Output for Synth {
+	fn write_f32(&mut self, 
+		len: usize, 
+		left_out: &mut [f32], 
+		loff: usize, 
+		lincr: usize, 
+		right_out: &mut [f32], 
+		roff: usize, 
+		rincr: usize,
+	) {
+		self.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
+	}
+}
 
 pub fn play_sequence(seq: &dyn Sequence) -> Result<(), Box<dyn Error>> {
 	let engine = start_audio()?;
@@ -79,7 +94,10 @@ fn start_audio() -> Result<AudioEngine, Box<dyn Error>> {
 	if let Ok(mut guard) = synth.lock() {
 		guard.set_sample_rate(supported.sample_rate().0 as f32);
 	}
-	let synth_for_cb = Arc::clone(&synth);
+	let mut output_buss = Buss::new();
+	output_buss.add_input(synth.clone());
+	let buss = Arc::new(Mutex::new(output_buss));
+	let buss_for_cb = buss.clone();
 
 	let err_fn = |err| eprintln!("audio stream error: {err}");
 
@@ -88,7 +106,7 @@ fn start_audio() -> Result<AudioEngine, Box<dyn Error>> {
 			let config: cpal::StreamConfig = supported.clone().into();
 			device.build_output_stream(
 				&config,
-				move |data: &mut [f32], _| fill_output_buffer(data, channels, &synth_for_cb),
+				move |data: &mut [f32], _| fill_output_buffer(data, channels, &buss_for_cb),
 				err_fn,
 				None,
 			)?
@@ -101,12 +119,12 @@ fn start_audio() -> Result<AudioEngine, Box<dyn Error>> {
 	Ok(AudioEngine { synth, _stream: stream })
 }
 
-fn fill_output_buffer(data: &mut [f32], channels: usize, synth: &Arc<Mutex<Synth>>) {
+fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>) {
 	let frames = data.len() / channels;
 	// Render exactly 'frames' samples per channel using write_f32 as per docs
 	let mut left = vec![0.0_f32; frames];
 	let mut right = vec![0.0_f32; frames];
-	if let Ok(mut guard) = synth.lock() {
+	if let Ok(mut guard) = buss.lock() {
 		// https://docs.rs/oxisynth/0.1.0/oxisynth/struct.Synth.html#method.write
 		guard.write_f32(frames, &mut left, 0, 1, &mut right, 0, 1);
 	}
