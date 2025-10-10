@@ -3,7 +3,6 @@ BUSS is a mechanism to take multiple audio inputs and combine into a single outp
 */
 
 use std::cmp::min;
-use std::sync::{Arc, Mutex};
 
 pub trait Output: Send + Sync {
     // fn write<S: IsSamples>(&mut self, samples: S);
@@ -31,7 +30,7 @@ pub trait Output: Send + Sync {
 const BUF_SIZE: usize = 512;
 
 pub struct Buss {
-    inputs: Vec<Arc<Mutex<dyn Output>>>,
+    inputs: Vec<Box<dyn Output>>,
     // Maintain static buffers to avoid allocating memory during playback
     buf_size: usize, // Fix in new. Cannot be altered, as tied to statically allocated buffers
     left_buf: [f32; BUF_SIZE],
@@ -49,7 +48,7 @@ impl Buss {
         }
     }
     // Note Buss should not own inputs, only borrow them
-    pub fn add_input(&mut self, input: Arc<Mutex<dyn Output>>) {
+    pub fn add_input(&mut self, input: Box<dyn Output>) {
         self.inputs.push(input);
     }
 }
@@ -70,13 +69,9 @@ impl Output for Buss {
             let mut loff_local = loff;
             let mut roff_local = roff;
             let mut bytes_left = len;
-            let Ok(mut guard) = input.lock() else {
-                input.clear_poison();
-                continue;
-            }; 
             while bytes_left > 0 {
                 let bytes_to_read = min(buf_size, bytes_left);
-                (*guard).write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
+                input.write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
                 bytes_left -= bytes_to_read;
                 for i in 0..bytes_to_read {
                     left_out[loff_local] = 1.0_f32.min(left_out[loff_local] + self.left_buf[i]);

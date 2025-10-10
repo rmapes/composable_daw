@@ -33,7 +33,7 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output(seq: &dyn Sequence, sample_rate: u32 ) -> Result<BufferedOutput, Box<dyn Error>> {
+pub fn prepare_output(seq: &dyn Sequence, sample_rate: u32 ) -> Result<impl Output + 'static, Box<dyn Error>> {
 	let mut synth = create_synth();
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();

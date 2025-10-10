@@ -19,9 +19,9 @@ impl AudioEngine {
     pub fn start(&mut self) -> Result<(), cpal::PlayStreamError>{
         self._stream.play()
     }
-    pub fn add_input(&mut self, o: Arc<Mutex<dyn Output>>) {
+    pub fn add_input<O: Output + 'static>(&mut self, o: O) {
         if let Ok(mut guard) = self._input.lock() {
-            guard.add_input(o);
+            guard.add_input(Box::new(o));
         }
     }
 }

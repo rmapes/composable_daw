@@ -99,7 +99,7 @@ fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
     for pattern  in structure.patterns.iter() {
         let output = prepare_output(pattern, engine.sample_rate as u32)?;
         // println!("Pattern: {:#?}", pattern.pattern);
-        engine.add_input(Arc::new(Mutex::new(output)));
+        engine.add_input(output);
         len = max(len, 15000 * pattern.num_beats as u64 / pattern.bpm as u64);
     } 
     println!("Playing for {} ms", len);
