@@ -88,3 +88,42 @@ impl Output for Buss {
         }
     }
 }
+
+pub struct BufferedOutput {
+    left_buf: Vec<f32>,
+    right_buf: Vec<f32>,
+}
+
+impl BufferedOutput {
+    pub fn new() -> Self {
+        BufferedOutput {
+            left_buf: Vec::new(),
+            right_buf: Vec::new(),
+        }
+    }
+    pub fn read_f32<T: Output>(&mut self, len: usize, input: &mut T) {
+        let loff = self.left_buf.len();
+        let roff = self.right_buf.len();
+        self.left_buf.resize(loff+len, 0.0_f32);
+        self.right_buf.resize(roff+len, 0.0_f32);
+        input.write_f32(len, self.left_buf.as_mut_slice(), loff, 1, self.right_buf.as_mut_slice(), roff, 1);
+    }
+}
+
+
+impl Output for BufferedOutput {
+    fn write_f32(&mut self, 
+        len: usize, 
+        left_out: &mut [f32], 
+        loff: usize, 
+        lincr: usize, 
+        right_out: &mut [f32], 
+        roff: usize, 
+        rincr: usize,
+    ) {
+        for i in 0..len {
+            left_out[loff + lincr*i] = *self.left_buf.get(i).unwrap_or(&0.0_f32);
+            right_out[roff + rincr*i] = *self.right_buf.get(i).unwrap_or(&0.0_f32);
+        }
+    }
+}

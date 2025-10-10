@@ -1,10 +1,13 @@
 mod synth;
 mod buss;
+mod audio;
 
-use synth::play_sequence;
+use std::cmp::max;
+use std::error::Error;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+use crate::engine::synth::prepare_output;
 use crate::models::shared::SongData;
 
 pub struct EngineController {
@@ -62,7 +65,7 @@ where
                 }
                 observer.notify();
                 if let Ok(song) = shared_data.lock() {
-                    play_sequence(&*song).unwrap();
+                    play_structure(&song).unwrap();
                 }
                 if let Ok(mut state) = player_state.lock() {
                     state.is_playing = false;
@@ -88,3 +91,18 @@ impl EngineController {
 
 }
 
+// fn play_structure<T: Structure>(structure: &T) {
+fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
+	let mut engine = audio::init_audio()?;
+    // Match synth sample rate to the device sample rate so pitch/timing are correct
+    let mut len: u64 = 0;
+    for pattern  in structure.patterns.iter() {
+        let output = prepare_output(pattern, engine.sample_rate as u32)?;
+        engine.add_input(Arc::new(Mutex::new(output)));
+        len = max(len, 60000 * pattern.num_beats as u64 / pattern.bpm as u64);
+    } 
+    engine.start()?;
+    std::thread::sleep(std::time::Duration::from_millis(len));
+    println!("Sequence complete");
+    Ok(())
+ }

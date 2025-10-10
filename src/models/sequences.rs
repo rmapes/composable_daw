@@ -92,6 +92,7 @@ impl EventStream for BaseEventStream {
 }
 
 
+#[derive(Clone)]
 pub struct PatternSeq {
     pub note_values: Vec<u8>,
     pub num_notes: u8,

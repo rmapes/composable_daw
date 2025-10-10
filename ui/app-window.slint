@@ -10,6 +10,9 @@ export struct Pattern {
 
 export global Handlers {
     callback save-pattern(Pattern);
+    callback pattern-changed();
+    in-out property<Pattern> cur_pattern;
+    in-out property<int> cur_pattern_num;
 }
 
 component PatternPadButton inherits Rectangle {
@@ -46,29 +49,7 @@ component PatternEditor inherits Rectangle {
     //         pattern: 
     //     };
     // }
-    in-out property <Pattern> pattern: {
-        notes: 8,
-        beats: 16,
-        note_values: [72,71,69,67,65,64,62,60], // From top to bottom
-        pattern: [
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false],
-        ]
-    };
+    in-out property<Pattern> pattern; 
     function note(i: int) -> int {
         return floor(i/pattern.beats);
     }
@@ -114,6 +95,29 @@ component PlayButton inherits Button {
     height: 40px;
     text: "Play";
 }
+
+component PatternSelector inherits Rectangle {
+    in-out property<int> pattern_num;
+    HorizontalLayout {
+        Button {
+            enabled: pattern_num > 0;
+            text: "<";
+            clicked => {
+                pattern_num = max(0, pattern_num - 1);
+                Handlers.pattern-changed();
+            }
+        }
+        Text { text: pattern_num; }
+        Button {
+            text: ">";
+            clicked => {
+                pattern_num = pattern_num + 1;
+                Handlers.pattern-changed();
+            }
+        }
+
+    }
+}
 export component MainWindow inherits Window {
     min-width: 400px;
     preferred-height: 500px;
@@ -129,6 +133,10 @@ export component MainWindow inherits Window {
         PatternEditor {
             width: 512px;
             height: 384px;
+            pattern <=> Handlers.cur_pattern;
+        }
+        PatternSelector {
+            pattern_num <=> Handlers.cur_pattern_num;
         }
         PlayButton {
             enabled: !is_playing;
