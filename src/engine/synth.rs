@@ -1,7 +1,6 @@
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
-use std::sync::{Arc, Mutex};
 
 
 use crate::engine::buss::BufferedOutput;
@@ -19,11 +18,8 @@ use super::buss::Output;
 // 	Ok(())
 // }
 
-struct SynthWrapper {
-	synth: Arc<Mutex<Synth>>
-}
 
-impl Output for SynthWrapper {
+impl Output for Synth {
 	fn write_f32(&mut self, 
 		len: usize, 
 		left_out: &mut [f32], 
@@ -33,19 +29,13 @@ impl Output for SynthWrapper {
 		roff: usize, 
 		rincr: usize,
 	) {
-		if let Ok(mut guard) = self.synth.lock() {
-			guard.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
-		}
+		self.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
 	}
 }
 
 pub fn prepare_output(seq: &dyn Sequence, sample_rate: u32 ) -> Result<BufferedOutput, Box<dyn Error>> {
-	let synth = Arc::new(Mutex::new({
-		let mut synth = create_synth();
-		synth.set_sample_rate(sample_rate as f32);
-		synth
-	}));
-	let mut synth_output = SynthWrapper { synth: synth.clone() };
+	let mut synth = create_synth();
+	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
 	let mut output = BufferedOutput::new();
 	println!("Starting to play sequence");
@@ -60,13 +50,11 @@ pub fn prepare_output(seq: &dyn Sequence, sample_rate: u32 ) -> Result<BufferedO
 		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
 			// println!("Tick: {tick}");
 			for event in event_stream.get_events(tick, priority) {
-				if let Ok(mut guard) = synth.lock() {
-					let _ = guard.send_event(event.to_midi());
-				}							
+				synth.send_event(event.to_midi())?;
 			}
 		}
 		// Wait for next tick
-		output.read_f32((event_stream.get_tick_duration().as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth_output);
+		output.read_f32((event_stream.get_tick_duration().as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth);
 	}
 	Ok(output)
 }
