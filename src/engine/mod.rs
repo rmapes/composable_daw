@@ -98,9 +98,11 @@ fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
     let mut len: u64 = 0;
     for pattern  in structure.patterns.iter() {
         let output = prepare_output(pattern, engine.sample_rate as u32)?;
+        // println!("Pattern: {:#?}", pattern.pattern);
         engine.add_input(Arc::new(Mutex::new(output)));
-        len = max(len, 60000 * pattern.num_beats as u64 / pattern.bpm as u64);
+        len = max(len, 15000 * pattern.num_beats as u64 / pattern.bpm as u64);
     } 
+    println!("Playing for {} ms", len);
     engine.start()?;
     std::thread::sleep(std::time::Duration::from_millis(len));
     println!("Sequence complete");

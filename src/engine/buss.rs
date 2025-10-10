@@ -92,6 +92,8 @@ impl Output for Buss {
 pub struct BufferedOutput {
     left_buf: Vec<f32>,
     right_buf: Vec<f32>,
+    left_read_start: usize,
+    right_read_start: usize,
 }
 
 impl BufferedOutput {
@@ -99,6 +101,8 @@ impl BufferedOutput {
         BufferedOutput {
             left_buf: Vec::new(),
             right_buf: Vec::new(),
+            left_read_start: 0,
+            right_read_start: 0,
         }
     }
     pub fn read_f32<T: Output>(&mut self, len: usize, input: &mut T) {
@@ -122,8 +126,10 @@ impl Output for BufferedOutput {
         rincr: usize,
     ) {
         for i in 0..len {
-            left_out[loff + lincr*i] = *self.left_buf.get(i).unwrap_or(&0.0_f32);
-            right_out[roff + rincr*i] = *self.right_buf.get(i).unwrap_or(&0.0_f32);
+            left_out[loff + lincr*i] = *self.left_buf.get(self.left_read_start + i).unwrap_or(&0.0_f32);
+            right_out[roff + rincr*i] = *self.right_buf.get(self.right_read_start + i).unwrap_or(&0.0_f32);
         }
+        self.left_read_start += len;
+        self.right_read_start += len;
     }
 }
