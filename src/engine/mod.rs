@@ -7,6 +7,7 @@ use std::error::Error;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
+use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
 use crate::models::shared::SongData;
 
@@ -91,17 +92,18 @@ impl EngineController {
 
 }
 
-// fn play_structure<T: Structure>(structure: &T) {
 fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
 	let mut engine = audio::init_audio()?;
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len: u64 = 0;
-    for pattern  in structure.patterns.iter() {
-        let output = prepare_output(pattern, engine.sample_rate as u32)?;
-        // println!("Pattern: {:#?}", pattern.pattern);
-        engine.add_input(output);
+    let outputs: Vec<Box<BufferedOutput>> = structure.patterns.iter().map(|pattern| {
         len = max(len, 15000 * pattern.num_beats as u64 / pattern.bpm as u64);
-    } 
+        Box::new(prepare_output(pattern, engine.sample_rate as u32).unwrap())
+    }).collect();
+    let _ = outputs.into_iter().map(|output | {
+        let output: BufferedOutput = *output;
+        engine.add_input(output);       
+    } ).count();
     println!("Playing for {} ms", len);
     engine.start()?;
     std::thread::sleep(std::time::Duration::from_millis(len));
