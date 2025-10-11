@@ -1,13 +1,5 @@
-import { Button, VerticalBox } from "std-widgets.slint";
-import { Handlers } from  "app-window.slint";
-
-export struct Pattern {
-    notes: int,
-    beats: int,
-    note_values: [int],
-    pattern: [[bool]],
-}
-
+import { Pattern } from "models.slint";
+import { Handlers } from "handlers.slint";
 
 component PatternPadButton inherits Rectangle {
     in property <string> name;
@@ -20,9 +12,7 @@ component PatternPadButton inherits Rectangle {
     accessible-action-default => { /* simulate click */ }
 
     TouchArea {
-        clicked => {
-            root.on = !root.on;
-        }
+        clicked => root.clicked();
     }
 
 
@@ -32,28 +22,20 @@ component PatternPadButton inherits Rectangle {
     ]
 }
 
+
+
 export component PatternEditor inherits Rectangle {
     // Grid of notes vs beats to create a midi pattern that can be played on loop
-    // We will create the grid programatically
-    in-out property <Pattern> pattern: {
-        notes: 12,
-        beats: 16,
-        note_values: [60, 62, 64, 65, 67, 69, 71, 72],
-        pattern: [
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-            [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false],
-        ]
-    };
+    // TODO: create the grid programatically using a native function
+    // function create_pattern(note_values: [int], beats: [int]) -> Pattern {
+    //     return {
+    //         notes: note_values.length,
+    //         beats: beats,
+    //         note_values: note_values,
+    //         pattern: 
+    //     };
+    // }
+    in-out property<Pattern> pattern; 
     function note(i: int) -> int {
         return floor(i/pattern.beats);
     }

@@ -1,3 +1,9 @@
+- Allow multiple files in slint
+- Set up redux like state and actions in slint
+- Add unit tests
+- Eliminate Box wherever possible
+- Minimize use of traits vs concrete types
+
 - Convert sample_rate from ticks per second to ticks per quarter note (PPQN) to minimise timing issues
 - Remove fixed beats per quarter note from pattern (provide a length for the pattern)
 - Minimise size of all ints (convert u32 into smallest size that covers the range)

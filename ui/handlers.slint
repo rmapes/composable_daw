@@ -1,0 +1,8 @@
+import {Pattern} from "models.slint";
+
+export global Handlers {
+    callback save-pattern(Pattern);
+    callback pattern-changed();
+    in-out property<Pattern> cur_pattern;
+    in-out property<int> cur_pattern_num;
+}
