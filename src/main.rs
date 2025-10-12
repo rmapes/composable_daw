@@ -5,14 +5,17 @@
 // mod midi_ports;
 mod engine;
 mod models;
+mod ui;
 
-slint::include_modules!();
+use ui::{Song, Pattern, MainWindow, Handlers, State};
+use slint::ComponentHandle;
 
 
 use engine::PlayerState;
 use models::shared::SongData;
 use models::sequences::PatternSeq;
 use slint::{Model, ModelRc, VecModel};
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
 
@@ -54,40 +57,39 @@ fn main() -> Result<(), slint::PlatformError> {
         
     );
     let engine_clone = Rc::clone(&engine);
-    let pattern_notes = vec![72,71,69,67,65,64,62,60];
-    let num_notes = pattern_notes.len() as u8;
-    let num_beats: u8 = 16;
-    let pattern: Vec<Vec<bool>> = (0..num_beats).map(|_| { (0..num_notes).map(|_| {false}).collect()}).collect();
-    let empty_pattern = PatternSeq {
-        num_notes,
-        num_beats,
-        note_values: pattern_notes, // From top to bottom
-        pattern,
-        bpm: 120,
-        sample_rate: 960,
-    };
+    let song_state = Song::new();
     if let Ok(mut song) = shared_song_data.lock() { 
-        song.patterns.push(empty_pattern.clone());
+        song_state.sync_to(song.deref_mut());
     }
-    main_window.global::<Handlers>().set_cur_pattern(pattern_seq_to_pattern(&empty_pattern));
-    
+    let (selected_pattern, _tick) = song_state.tracks.row_data(0).unwrap().midi_content.patterns.row_data(0).unwrap();
+    main_window.global::<State>().set_song(song_state);
+    main_window.global::<Handlers>().set_cur_pattern(selected_pattern);
+
     // Handle state updates
     main_window.global::<Handlers>().on_pattern_changed({
         let shared_song_data = shared_song_data.clone();
         let main_window = main_window.clone_strong();
         move || {
-        if let Ok(mut song) = shared_song_data.lock() {   
-            let cur_pattern_num = main_window.global::<Handlers>().get_cur_pattern_num();     
-            while song.patterns.len() <= cur_pattern_num as usize {
-                song.patterns.push(empty_pattern.clone());
-            }
-            if let Some(stored_pattern) = song.patterns.get(cur_pattern_num as usize) {                
-                main_window.global::<Handlers>().set_cur_pattern(pattern_seq_to_pattern(stored_pattern));
-            } else {
-                println!("Can't get pattern at {}", cur_pattern_num);
+            if let Ok(mut song) = shared_song_data.lock() {   
+                let cur_pattern_num = main_window.global::<Handlers>().get_cur_pattern_num();
+                let song_state = main_window.global::<State>().get_song();
+                let cur_track_num = main_window.global::<State>().get_cur_track() as usize;
+                println!("Updating track {} out of {}", cur_track_num, song_state.tracks.row_count());
+                if let Some(track) = song_state.tracks.row_data(cur_track_num) {
+                    let track_rf = track.midi_content.patterns.clone();
+                    let patterns: &VecModel<(Pattern, i32)> = track_rf.as_any().downcast_ref::<VecModel<(Pattern, i32)>>().unwrap();
+                    println!("Increasing patterns from {} to {}", patterns.row_count(), cur_pattern_num);
+                    while patterns.row_count() <= cur_pattern_num as usize {
+                        patterns.push((Pattern::new(), 0));
+                    }
+                    let (selected_pattern, _tick) = patterns.row_data(cur_pattern_num as usize).unwrap();
+                    println!("Updating cur pattern");
+                    main_window.global::<Handlers>().set_cur_pattern(selected_pattern);
+                    song_state.sync_to(&mut song);
+                }
             }
         }
-    }});
+    });
     main_window.global::<Handlers>().on_save_pattern({
         let shared_song_data = shared_song_data.clone();
         let main_window = main_window.clone_strong();

@@ -1,8 +1,13 @@
-import {Pattern} from "models.slint";
+import {Pattern, Song} from "models.slint";
 
 export global Handlers {
     callback save-pattern(Pattern);
     callback pattern-changed();
     in-out property<Pattern> cur_pattern;
     in-out property<int> cur_pattern_num;
+}
+
+export global State {
+    in-out property<int> cur_track;
+    in-out property<Song> song;
 }
