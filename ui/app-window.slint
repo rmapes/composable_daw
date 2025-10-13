@@ -1,59 +1,43 @@
-import { Handlers } from "handlers.slint";
-import { Button, VerticalBox } from "std-widgets.slint";
-import { PatternEditor } from "pattern_editor.slint";
+import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Handlers } from "globals/handlers.slint";
+import { PatternEditor } from "components/pattern_editor.slint";
+import { ControlBar } from "components/control_bar.slint";
+import { TrackSettingsEditor } from "components/track_settings.slint";
+import { ComposerWindow } from "components/composer_window.slint";
+import { AppWindow } from "designkit/containers.slint";
 
-component PlayButton inherits Button {
-    width: 100px;
-    height: 40px;
-    text: "Play";
-}
 
-component PatternSelector inherits Rectangle {
-    in-out property<int> pattern_num;
-    HorizontalLayout {
-        Button {
-            enabled: pattern_num > 0;
-            text: "<";
-            clicked => {
-                pattern_num = max(0, pattern_num - 1);
-                Handlers.pattern-changed();
-            }
-        }
-        Text { text: pattern_num; }
-        Button {
-            text: ">";
-            clicked => {
-                pattern_num = pattern_num + 1;
-                Handlers.pattern-changed();
-            }
-        }
-
-    }
-}
-export component MainWindow inherits Window {
+export component MainWindow inherits AppWindow {
     min-width: 400px;
     preferred-height: 500px;
     title: "Composable: Pluggable DAW";
-    callback play_midi();
     
 
     in property<bool> is_playing;
 
     VerticalBox {
-        alignment: center;
-        spacing: 5px;
-        PatternEditor {
-            width: 512px;
-            height: 384px;
-            pattern <=> Handlers.cur_pattern;
-        }
-        PatternSelector {
-            pattern_num <=> Handlers.cur_pattern_num;
-        }
-        PlayButton {
-            enabled: !is_playing;
-            clicked => {
-                root.play_midi();
+        alignment: start;
+        // spacing: 5px;
+        ControlBar {}
+        HorizontalBox {
+            alignment: start;
+            TrackSettingsEditor {
+                vertical-stretch: 1; 
+                width: root.width * 20%;
+            }
+            VerticalBox {
+                alignment: start;
+                width: root.width * 60%;
+                ComposerWindow {
+                    vertical-stretch: 1; 
+                    horizontal-stretch: 1;
+    
+                }
+                PatternEditor {
+                    vertical-stretch: 1; 
+                    horizontal-stretch: 1;
+                       
+                }
             }
         }
     }

@@ -7,7 +7,7 @@ mod engine;
 mod models;
 mod ui;
 
-use ui::{Song, Pattern, MainWindow, Handlers, State};
+use ui::{Song, Pattern, MainWindow, Handlers, State, TransportActions};
 use slint::ComponentHandle;
 
 
@@ -116,7 +116,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }});
 
     // Set up callbacks
-    main_window.on_play_midi(move || {
+    main_window.global::<TransportActions>().on_play_midi(move || {
         engine_clone.play_midi();
     });
 

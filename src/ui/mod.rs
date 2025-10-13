@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use slint::{VecModel, ModelRc, Model};
+use slint::{VecModel, ModelRc, Model, SharedString };
 
 use crate::models::sequences::PatternSeq;
 use crate::models::shared::SongData;
@@ -35,12 +35,21 @@ impl Song {
     }
 }
 
+impl TrackSettings {
+    pub fn new(name: &str) -> TrackSettings {
+        TrackSettings {
+            name: SharedString::from(name)
+        }
+    }
+}
+
 impl Track {
     pub fn new_midi() -> Track {
         Track {
             trackType: TrackType::Midi,
             midi_content: MidiContent::new(),
             audio_content: AudioContent::new(),
+            settings: TrackSettings::new("Track 1"),
         }
     }
 }
@@ -66,7 +75,7 @@ impl Pattern {
         let num_notes: i32 = pattern_notes.len() as i32;
         let num_beats = 16;
         let pattern = vec_to_model((0..num_beats).map(|_| { vec_to_model((0..num_notes).map(|_| {false}).collect())}).collect());
-        Self { r#beats: num_beats, r#note_values: vec_to_model(pattern_notes), r#notes: num_notes, r#pattern: pattern }
+        Self { r#beats: num_beats, r#note_values: vec_to_model(pattern_notes), r#notes: num_notes, pattern }
     }
     pub fn from_pattern_seq(pattern: &PatternSeq) -> Pattern {
         Pattern {

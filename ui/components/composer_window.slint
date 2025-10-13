@@ -1,0 +1,54 @@
+import { Panel } from "../designkit/containers.slint";
+import { Track, TrackSettings, TrackType } from "../models/models.slint";
+import { VerticalBox, ListView } from "std-widgets.slint";
+
+
+component TrackControls {
+    in property <Track> track;
+    Text {
+        text: track.settings.name;
+    }
+}
+
+component TrackTimeline {
+    in property <Track> track;
+
+    Rectangle {
+        horizontal-stretch: 1;
+        background: black;
+    }
+}
+component ComposerTrackSlot inherits Panel {
+    in property <Track> track;
+    horizontal-stretch: 1;
+    HorizontalLayout {
+        TrackControls { track: track; }
+        TrackTimeline { track: track; }
+    }
+}
+export component ComposerWindow inherits Panel {
+    in property <[Track]> tracks;
+    horizontal-stretch: 1;
+    function make_track(name: string) -> Track {
+        return  {
+            trackType: TrackType.Midi,
+            midi_content: {},
+            audio_content: {},                        
+            settings: {
+                name: name,
+            }
+        };
+    }
+    VerticalBox {
+        ListView {
+            // for track in tracks:
+            //     ComposerTrackSlot{ 
+            //         track: track;  
+            //     }
+            for name in ["Track 1"]:
+            ComposerTrackSlot { 
+                        track: make_track(name);  
+            }
+        }
+    }    
+}

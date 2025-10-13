@@ -2,8 +2,10 @@
 Use this file to expose elements to core rust in main.rs 
 */
 
-import { Pattern, Song } from "models.slint";
-import { Handlers, State } from "handlers.slint";
+import { Pattern, Song, Track, TrackSettings } from "models/models.slint";
+import { Handlers, State } from "globals/handlers.slint";
 import { MainWindow } from "app-window.slint";
+import { TransportActions} from "components/transport.slint";
+
 // Export All. TODO: Split into models, handlers and main window
-export {MainWindow, Handlers, State, Pattern, Song}
+export {MainWindow, Handlers, State, Pattern, Song, Track, TrackSettings, TransportActions}

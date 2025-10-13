@@ -22,10 +22,15 @@ struct AudioContent {
 
 export enum TrackType { Midi, Audio }
 
+export struct TrackSettings {
+    name: string,
+}
+
 export struct Track {
     trackType: TrackType,
     midi_content: MidiContent,
     audio_content: AudioContent,
+    settings: TrackSettings,
 
 }
 
