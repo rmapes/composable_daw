@@ -63,6 +63,7 @@ fn main() -> Result<(), slint::PlatformError> {
     println!("Number of tracks {}", song_state.tracks.row_count());
     // let (selected_pattern, _tick) = song_state.tracks.row_data(0).unwrap().midi_content.patterns.row_data(0).unwrap();
     main_window.global::<State>().set_song(song_state);
+    main_window.global::<State>().set_cur_track(0);
 
     // Handle state updates
     // main_window.global::<Handlers>().on_pattern_changed({

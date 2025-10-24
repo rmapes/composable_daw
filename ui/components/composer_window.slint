@@ -6,8 +6,16 @@ import { State } from "../globals/handlers.slint";
 
 component TrackControls {
     in property <Track> track;
-    Text {
-        text: track.settings.name;
+    in property <bool> selected;
+    Rectangle {
+        states [
+            on when selected: {background: blue;}
+            off when !selected: {background: black;}
+        ]
+        Text {
+            text: track.settings.name;
+            color: white;
+        }   
     }
 }
 
@@ -21,9 +29,12 @@ component TrackTimeline {
 }
 component ComposerTrackSlot inherits Panel {
     in property <Track> track;
+    in-out property cur_track <=> State.cur_track;
+    in-out property song <=> State.song;
+    property <bool> selected: State.song.tracks[State.cur_track] == track;
     horizontal-stretch: 1;
     HorizontalLayout {
-        TrackControls { track: track; }
+        TrackControls { track: track; selected: selected;}
         TrackTimeline { track: track; }
     }
 }

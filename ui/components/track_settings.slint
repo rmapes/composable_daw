@@ -1,8 +1,14 @@
 import { Panel } from "../designkit/containers.slint";
-export global TrackSettingsState {
-    
-}
+import { State } from "../globals/handlers.slint";
+import { Track } from "../models/models.slint";
 
 export component TrackSettingsEditor inherits Panel {
+    in-out property cur_track <=> State.cur_track;
+    in-out property song <=> State.song;
+    property <Track> track: song.tracks[cur_track];
+
+    Text {
+        text: track.settings.name;
+    }
     
 }
