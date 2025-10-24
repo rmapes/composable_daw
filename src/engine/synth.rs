@@ -4,7 +4,7 @@ use std::fs::File;
 
 
 use crate::engine::buss::BufferedOutput;
-use crate::models::sequences::{Sequence, EventPriority};
+use crate::models::sequences::{EventStreamSource, EventPriority};
 use super::buss::Output;
 
 
@@ -33,7 +33,7 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output(seq: &dyn Sequence, sample_rate: u32 ) -> Result<BufferedOutput, Box<dyn Error>> {
+pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32 ) -> Result<BufferedOutput, Box<dyn Error>> {
 	let mut synth = create_synth();
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();

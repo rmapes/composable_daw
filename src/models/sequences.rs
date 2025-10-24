@@ -1,5 +1,8 @@
 use std::{collections::HashMap, cmp::max};
 use std::option::{Option};
+use std::slice::Iter;
+
+
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -7,6 +10,13 @@ pub enum EventPriority {
     System,
     Audio,
     Other
+}
+
+impl EventPriority {
+    fn iter() -> Iter<'static, EventPriority> {
+        static PRIORITIES: [EventPriority; 3] = [EventPriority::System, EventPriority::Audio, EventPriority::Other];
+        PRIORITIES.iter()
+    }
 }
 
 // Event time allows different representations of when an event should occur
@@ -17,22 +27,16 @@ pub trait EventTime {
     fn as_ticks(&self, sample_rate: u32) -> u32;
 }
 
-pub trait Event {
-    fn get_priority(&self) -> EventPriority;
-    fn get_event_time(&self) -> Box<dyn EventTime>;
-    fn to_midi(&self) -> oxisynth::MidiEvent;
-}
-
 // Event Stream actually consists of a hashmap of ticks to events, 
 // where each tick is mapped to a further hashmap of events by priority
 pub trait EventStream {
-    fn store_event(&mut self, event: Box<dyn Event>);
-    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<Box<dyn Event>>;
+    fn store_event(&mut self, event: MidiEvent);
+    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent>;
     fn get_length_in_ticks(&self) -> u32;
     fn get_tick_duration(&self) -> std::time::Duration;
 }
 
-pub trait Sequence {
+pub trait EventStreamSource {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>>;
 }
 
@@ -41,11 +45,12 @@ pub trait Sequence {
 /// 
 // Event Stream actually consists of a hashmap of ticks to events, 
 // where each tick is mapped to a further hashmap of events by priority
+const DEFAULT_PPQ: u32 = 960;
 struct BaseEventStream{
     sample_rate: u32,
-    events: HashMap<u32, HashMap<EventPriority, Vec<Box::<dyn Event>>>>,
+    events: HashMap<u32, HashMap<EventPriority, Vec<MidiEvent>>>,
     length_in_ticks: u32,
-    no_events: Vec<Box::<dyn Event>>,
+    no_events: Vec<MidiEvent>,
 }
 
 impl BaseEventStream{
@@ -61,7 +66,7 @@ impl BaseEventStream{
 
 impl EventStream for BaseEventStream {
     /* Take ownership of event and add to event list */
-    fn store_event(&mut self, event: Box<dyn Event>) {
+    fn store_event(&mut self, event: MidiEvent) {
         // Add event at its tick and priority
         let event_tick = event.get_event_time().as_ticks(self.sample_rate);
         let tick_block = self.events.entry(event_tick).or_default();
@@ -70,7 +75,7 @@ impl EventStream for BaseEventStream {
         self.length_in_ticks = max(self.length_in_ticks, event_tick);
     }
     // Return list of events at tick and priority
-    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<Box<dyn Event>> {
+    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent> {
         if self.events.contains_key(&tick) {
             let tick_block = self.events.get(&tick).expect("Tick {tick} not found in events");
             if tick_block.contains_key(&priority) {
@@ -118,19 +123,25 @@ pub struct MidiEvent {
     ticks: u32
 }
 
-impl Event for MidiEvent {
-    fn get_priority(&self) -> EventPriority {
+impl MidiEvent {
+    pub fn get_priority(&self) -> EventPriority {
         EventPriority::Audio
     }
-    fn get_event_time(&self) -> Box<dyn EventTime> {
+    pub fn get_event_time(&self) -> Box<dyn EventTime> {
         Box::new(RawEventTime{ ticks: self.ticks })
     }  
-    fn to_midi(&self) -> oxisynth::MidiEvent {
+    pub fn to_midi(&self) -> oxisynth::MidiEvent {
         self.event
     }  
+    pub fn clone_at(&self, new_tick: u32) -> Self {
+        Self {
+            event: self.event.clone(),
+            ticks: new_tick,
+        }
+    }
 }
 
-impl Sequence for PatternSeq {
+impl EventStreamSource for PatternSeq {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
         println!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
         println!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
@@ -143,10 +154,10 @@ impl Sequence for PatternSeq {
             let current_tick = (beat as u32) * ticks_per_beat;
             // Add events for note off
             for note in &playing_notes {
-                event_stream.store_event(Box::new(MidiEvent {
+                event_stream.store_event(MidiEvent {
                     event: oxisynth::MidiEvent::NoteOff { channel: 0, key: *note }, 
                     ticks: current_tick
-                }));
+                });
             }
             playing_notes.clear();
             // Now add new notes to play
@@ -154,10 +165,10 @@ impl Sequence for PatternSeq {
                 // println!("Note {note_num}, beat {beat}");
                 let note = self.note_values[note_num as usize];
                 if self.pattern[beat as usize][note_num as usize] {
-                    event_stream.store_event(Box::new(MidiEvent {
+                    event_stream.store_event(MidiEvent {
                         event: oxisynth::MidiEvent::NoteOn { channel: 0, key: note, vel: 100 }, 
                         ticks: current_tick
-                    }));
+                    });
                     playing_notes.push(note);  
                 }
             }
@@ -166,11 +177,69 @@ impl Sequence for PatternSeq {
         let current_tick = (self.num_beats as u32) * ticks_per_beat;
         // Add events for note off
         for note in &playing_notes {
-            event_stream.store_event(Box::new(MidiEvent {
+            event_stream.store_event(MidiEvent {
                 event: oxisynth::MidiEvent::NoteOff { channel: 0, key: *note }, 
                 ticks: current_tick
-            }));
+            });
         }
         Some(Box::new(event_stream))
     }    
+}
+
+// Implement Sequence Polymorphism
+
+pub enum Sequence {
+    Pattern(PatternSeq),
+    SequenceContainer(SequenceContainer)
+}
+
+impl EventStreamSource for Sequence {
+    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+        match(&self) {
+            Sequence::Pattern(seq) => seq.to_event_stream(),
+            Sequence::SequenceContainer(seq) => seq.to_event_stream()
+        }
+    }
+}
+
+
+/// Sequence Container: one container to rule them all
+/// 
+type Tick = u32;
+
+pub struct SequenceContainer {
+    pub sequences: HashMap<Tick, Sequence>,
+}
+
+impl SequenceContainer {
+    pub fn new()-> Self {
+        Self {
+            sequences: HashMap::new(),
+        }
+    }
+}
+
+impl EventStreamSource for SequenceContainer {
+    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+        let mut event_stream = BaseEventStream::new(DEFAULT_PPQ);
+        self.sequences.iter().map(|(offset, sequence)| {
+            if let Some(sequence_events) = sequence.to_event_stream() {
+                // Check whether we need to resample due to different sample rates
+                // we want 1 second in source sequence = 1 second in target
+                // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
+                let tick_duration_ns = sequence_events.get_tick_duration().as_nanos() as f64;
+                let tick_ratio = (tick_duration_ns * event_stream.sample_rate as f64) / 1_000_000_000.0;
+                for tick in 0..sequence_events.get_length_in_ticks() {
+                    for priority in EventPriority::iter() {
+                        let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
+                        for event in sequence_events.get_events(tick, *priority) {
+                            let new_event = event.clone_at(new_tick);
+                            event_stream.store_event(new_event);
+                        }                        
+                    }
+                }
+            }
+        });
+        Some(Box::new(event_stream))
+    }
 }

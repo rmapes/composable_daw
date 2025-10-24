@@ -1,6 +1,7 @@
 import { Panel } from "../designkit/containers.slint";
 import { Track, TrackSettings, TrackType } from "../models/models.slint";
 import { VerticalBox, ListView } from "std-widgets.slint";
+import { State } from "../globals/handlers.slint";
 
 
 component TrackControls {
@@ -27,7 +28,7 @@ component ComposerTrackSlot inherits Panel {
     }
 }
 export component ComposerWindow inherits Panel {
-    in property <[Track]> tracks;
+    in-out property song <=> State.song;
     horizontal-stretch: 1;
     function make_track(name: string) -> Track {
         return  {
@@ -41,14 +42,14 @@ export component ComposerWindow inherits Panel {
     }
     VerticalBox {
         ListView {
-            // for track in tracks:
-            //     ComposerTrackSlot{ 
-            //         track: track;  
-            //     }
-            for name in ["Track 1"]:
-            ComposerTrackSlot { 
-                        track: make_track(name);  
-            }
+            for track in song.tracks:
+                ComposerTrackSlot{ 
+                    track: track;  
+                }
+            // for name in ["Track 1"]:
+            // ComposerTrackSlot { 
+            //             track: make_track(name);  
+            // }
         }
     }    
 }

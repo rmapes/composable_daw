@@ -10,6 +10,7 @@ use std::thread;
 use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
 use crate::models::shared::SongData;
+use crate::models::components::{Track};
 
 pub struct EngineController {
     tx: mpsc::Sender<Actions>,
@@ -95,18 +96,28 @@ impl EngineController {
 fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
 	let mut engine = audio::init_audio()?;
     // Match synth sample rate to the device sample rate so pitch/timing are correct
-    let mut len: u64 = 0;
-    let outputs: Vec<Box<BufferedOutput>> = structure.patterns.iter().map(|pattern| {
-        len = max(len, 15000 * pattern.num_beats as u64 / pattern.bpm as u64);
-        Box::new(prepare_output(pattern, engine.sample_rate as u32).unwrap())
+    let mut len = std::time::Duration::from_millis(0);
+    let outputs: Vec<BufferedOutput> = structure.tracks.iter().map(|track| {
+        len = max(len, track.duration());
+        get_buffered_output_for_track(track, engine.sample_rate as u32)
     }).collect();
     let _ = outputs.into_iter().map(|output | {
-        let output: BufferedOutput = *output;
         engine.add_input(output);       
     } ).count();
-    println!("Playing for {} ms", len);
+    println!("Playing for {} ms", len.as_millis());
     engine.start()?;
-    std::thread::sleep(std::time::Duration::from_millis(len));
+    std::thread::sleep(len);
     println!("Sequence complete");
     Ok(())
  }
+
+ fn get_buffered_output_for_track(track: &Track, sample_rate: u32) -> BufferedOutput {
+    // Get the midi event stream
+    if let Some(event_stream) = &track.midi {
+    // For the moment, just pipe into synth. Eventually, we'll want to determine the audio generator from the track config
+        prepare_output(event_stream, sample_rate).unwrap()
+    } else {
+        BufferedOutput::new()
+    }
+ }
+ 

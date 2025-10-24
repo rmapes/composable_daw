@@ -27,11 +27,9 @@ impl Song {
             tracks: vec_to_model(vec![Track::new_midi()])
         }
     }
-    pub fn sync_to(&self, target: &mut SongData) {
-        target.patterns.clear();
-        if let Some(track) = self.tracks.row_data(0) {
-            target.patterns = track.midi_content.patterns.iter().map(|(pattern, _tick)| {pattern.to_pattern_seq()}).collect();
-        } 
+
+    pub fn sync_from(&mut self, source: &SongData) {
+        self.tracks = vec_to_model(source.tracks.iter().map(|track| {Track::from(track)}).collect());
     }
 }
 
@@ -50,6 +48,39 @@ impl Track {
             midi_content: MidiContent::new(),
             audio_content: AudioContent::new(),
             settings: TrackSettings::new("Track 1"),
+        }
+    }
+
+    pub fn from(track: &crate::models::components::Track) -> Self {
+        // For the moment only support midi tracks
+        let mut midi_content = MidiContent::new();
+        let patterns: Vec<(Pattern, i32)>;
+        if let Some(midi) = &track.midi {
+            patterns = midi.sequences.iter()
+                .filter(|&(_,sequence)| {
+                    if let crate::models::sequences::Sequence::Pattern(_) = sequence {
+                        true
+                    } else {
+                        false
+                    }
+                })
+                .map(|(tick, sequence)| {
+                    let pattern = match sequence  {
+                        crate::models::sequences::Sequence::Pattern(pattern) => Pattern::from_pattern_seq(&pattern),
+                        _ => Pattern::new() // Shouldn't get here. Consider throwing exception
+                    };
+                    (pattern, *tick as i32)
+                })
+                .collect();
+        } else {
+            patterns = Vec::new();
+        }
+        midi_content.patterns = vec_to_model(patterns);
+        Self {
+            trackType: TrackType::Midi,
+            midi_content: midi_content,
+            audio_content: AudioContent::new(),
+            settings: TrackSettings::new(&track.name),           
         }
     }
 }

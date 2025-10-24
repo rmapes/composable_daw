@@ -1,4 +1,5 @@
-- Allow multiple files in slint
+x - Allow multiple files in slint
+
 - Set up redux like state and actions in slint
 - Add unit tests
 - Eliminate Box wherever possible
@@ -9,3 +10,66 @@
 - Minimise size of all ints (convert u32 into smallest size that covers the range)
 - Minimise unnecessary copies
 - Replace debug println with log framework
+
+Planning:
+
+We need the following threads:
+ui
+audio
+general processing
+(possibly an autosave thread)
+
+slint automatically generates a separate ui thread, so we can keep general processing on the main thread, and have a separate thread for audio, controlled by an AudioController class. (which wraps notifies).
+
+ui and general can wait, i.e. can allocate memory and run locks.
+audio thread must be real time, so cannot allocate memory during play loops (but can do so outside of these loops).
+
+How to manage state:
+
+- copies to keep state in sync:
+  - multi write: write to all states every time they change
+  - replace:
+    - copy from: copy from core state before any major actions (could be costly)
+    - copy to: copy to substates after every update block
+  - sync:
+    - align at critical points.
+
+Multi write seems the best option.
+Probably best done via a central state object, whose class manages multi way updates.
+However, this may make it difficult to avoid locks in the audio thread. Could investigate whether try_lock would resolve this.
+
+State required:
+Audio:
+We need io from busses in order to plot volumes + spectrographs
+We need the routing of midi generators, audio generators, midi in, audio in, and audio out.
+Each generator will require state. For programmatic state (vs midi in and audio in) we can get away with taking a copy of the state on play.
+
+Ideal solution:
+Main thread creates a slint based Data Model containing
+Output Generators (Audio / Midi)
+
+- Tracks
+- Regions (can audio and midi be mixed?)
+  - Midi
+    - Sequence
+    - Pattern
+  - Audio
+    - Sequence
+    - Pattern
+- Busses
+- FX
+- Routing
+  - midi outputs to audio generators
+  - audio generators to busses
+  - audio generators to FX
+  - buss to stereo out
+  - (inputs to generators / recorders)
+- General / Settings
+
+Note, inputs/recording are too complicated right now. Ignore this and build a good tracker.
+
+The audio thread, on the other hand, will maintain a set of owned buffers containing audio data for each of these structures.
+TBD whether to trigger a rebuild of this structure on hitting play, or based on updates to the Structure definition. Probably the latter, managed with notifications to an audio side wiring manager
+In addition, each Buss will expose a metrics section containing atomic variables for metric values - initally left and right channel value.
+
+Visualisers can than calculate a display value from this by reading it on the graphics event loop. Additional metrics may be calculated by other threads.

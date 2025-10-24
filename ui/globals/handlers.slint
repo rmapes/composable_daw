@@ -3,8 +3,6 @@ import {Pattern, Song} from "../models/models.slint";
 export global Handlers {
     callback save-pattern(Pattern);
     callback pattern-changed();
-    in-out property<Pattern> cur_pattern;
-    in-out property<int> cur_pattern_num;
 }
 
 export global State {
