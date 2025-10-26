@@ -2,7 +2,7 @@ use iced::widget::{ row, column, Column, scrollable, container, text, horizontal
 use iced::{Color, Element, Length, Theme};
 use iced::widget::container::Style; 
 use crate::models::components::Track;
-use super::Message;
+use super::{Message, components};
 
 // Define styling
 pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
@@ -39,12 +39,14 @@ impl Component {
     pub fn update(&mut self, _msg: Message) {
 
     }
-    pub fn view(&self, tracks: &[Track], selected_track: usize) -> Column<'_, Message> {
-        column![
-            self.track_list(tracks, selected_track),
-        ]
-        .width(Length::Fixed(self.width))
-        .height(Length::Fixed(self.height))
+    pub fn view(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
+        components::module(
+            column![
+                self.track_list(tracks, selected_track),
+            ]
+            .width(Length::Fixed(self.width))
+            .height(Length::Fixed(self.height)).into()
+        ).into()
     }
     fn track_list(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
         let mut track_list = column![].spacing(10);

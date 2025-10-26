@@ -1,6 +1,8 @@
 use iced::widget::{ row, Row };
-use iced::Length;
+use iced::{Length, Element};
 use super::Message;
+
+use super::components;
 
 pub struct Component {
     width: f32,
@@ -18,10 +20,12 @@ impl Component {
     pub fn update(&mut self, _msg: Message) {
 
     }
-    pub fn view(&self) -> Row<'_, Message> {
-        row![
-        ]
-        .width(Length::Fixed(self.width))
-        .height(Length::Fixed(self.height))
+    pub fn view(&self) -> Element<'_, Message> {
+        components::module(
+            row![
+            ]
+            .width(Length::Fixed(self.width))
+            .height(Length::Fixed(self.height)).into()
+        ).into()
     }
 }

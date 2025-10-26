@@ -2,9 +2,12 @@ mod control_bar;
 mod composer_window;
 mod pattern_editor;
 mod track_settings;
+mod style;
+mod components;
 
-use iced::widget::{column, Column, row};
+use iced::widget::{column, Column, row, text};
 use iced::Length::Fixed;
+use iced::Element;
 use crate::models::shared::SongData;
 use crate::engine;
 
@@ -72,23 +75,32 @@ impl MainWindow {
     pub fn update(&mut self, _msg: Message) {
 
     }
-    pub fn view(&self) ->Column<'_, Message> {
-        if let Ok(song) = self.data.try_lock() {
-            let selected_track =  &song.tracks[self.selected_track];       
-            column![
-                self.control_bar.view(),
-                // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
-                row![
-                    self.track_settings.view(selected_track),
-                    column![
-                        self.composer_window.view(&song.tracks, self.selected_track),
-                        self.pattern_editor.view(),
+    pub fn view(&self) ->Element<'_, Message> {
+        let content: Column<'_, Message> = {
+            if let Ok(song) = self.data.try_lock() {
+                let selected_track =  &song.tracks[self.selected_track];       
+                column![
+                    self.control_bar.view(),
+                    // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
+                    row![
+                        components::module_slot(
+                            self.track_settings.view(selected_track)
+                        ),
+                        column![
+                            components::module_slot(
+                                self.composer_window.view(&song.tracks, self.selected_track),
+                            ),
+                            components::module_slot(
+                                self.pattern_editor.view(),
+                            )
+                        ]
                     ]
-                ]
-            ].width(Fixed(self.width)).height(Fixed(self.height))
-            } else {
-            column![] // TODO: store a local copy of the song data to deal with try_lock failing
-        }
+                ].width(Fixed(self.width)).height(Fixed(self.height))
+                } else {
+                column![] // TODO: store a local copy of the song data to deal with try_lock failing
+            }
+        };
+        components::rack(content.into()).into()
     }
 
     // Don't forget to stop engine on shutdown

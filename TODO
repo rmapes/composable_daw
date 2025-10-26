@@ -73,3 +73,28 @@ TBD whether to trigger a rebuild of this structure on hitting play, or based on 
 In addition, each Buss will expose a metrics section containing atomic variables for metric values - initally left and right channel value.
 
 Visualisers can than calculate a display value from this by reading it on the graphics event loop. Additional metrics may be calculated by other threads.
+
+What do we need for layout design kit:
+
+Palette:
+Rack colour: colour of components simulating raised metal framework, that panels are inset into
+Module colour: colour of a pluggable module (e.g. channel strip with embedded controls and display)
+Display colour: colour simulating a display screen (e.g. meters, or led displays)
+Control colour
+
+Rack
+
+- Top level container included Top command ribbon and transport control. Simulates a modular audio device that other modules can be mounted into.
+- Should look like a stamped metal case, with holes through which the modules can be seen. This can be achieved by setting the background colour of
+- the container to RACK and implementing all module slots to use RACK_RECESS to simulate an inset bevelled edge.
+- Note the illusion will be slightly broken by having resizable module slots. However, this is an acceptable trade off for the configurability.
+
+Module Slot:
+
+- A container for a module.
+- In the first instance, will be fixed to contain specific modules, but in the future new slots can be created, moved and resized, and different modules allocated to different slots.
+
+Module (channel strips, composer window, editor window)
+
+- Should look like a slightly recessed audio unit with casing. To help with the inset effect, the MODULE case colour should be slightly darker than RACK, although Module Slot can take care of the recessing itelf.
+- Modules can contain Controls, Labels and Displays
