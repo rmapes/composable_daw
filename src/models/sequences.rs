@@ -135,7 +135,7 @@ impl MidiEvent {
     }  
     pub fn clone_at(&self, new_tick: u32) -> Self {
         Self {
-            event: self.event.clone(),
+            event: self.event, // Uses clone
             ticks: new_tick,
         }
     }
@@ -222,7 +222,7 @@ impl SequenceContainer {
 impl EventStreamSource for SequenceContainer {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
         let mut event_stream = BaseEventStream::new(DEFAULT_PPQ);
-        self.sequences.iter().map(|(offset, sequence)| {
+        let _ = self.sequences.iter().map(|(offset, sequence)| {
             if let Some(sequence_events) = sequence.to_event_stream() {
                 // Check whether we need to resample due to different sample rates
                 // we want 1 second in source sequence = 1 second in target

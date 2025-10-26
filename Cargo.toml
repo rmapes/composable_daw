@@ -8,8 +8,6 @@ fluidsynth = "0.0.1"
 midir = "0.10.2"
 oxisynth = "0.1.0"
 cpal = "0.15"
-slint = "1.13.1"
 ringbuf = "0.4.8"
+iced = "0.13.1"
 
-[build-dependencies]
-slint-build = "1.13.1"

@@ -29,7 +29,7 @@ impl SongData {
         };
         // Always start with one track
         this.new_track();
-        return this
+        this
     }
 
     pub fn new_track(&mut self) {
