@@ -15,6 +15,7 @@ const GREEN_TEXT: Color = color!(0x39CC54);//Color::from_rgb8(57, 204, 84);
 const BLUE_TEXT: Color = color!(0x63D6CD);//Color::from_rgb8(99, 214, 205);
 
 
+
 pub fn rack(_: &Theme) -> Style {
     Style {
         // Set the background color
@@ -29,6 +30,7 @@ pub fn module_slot(_: &Theme) -> Style {
         // Set the background color
         background: Some(Background::Color(LIGHT_GRAY)),
         text_color: Some(WHITE_TEXT),
+        border: border::rounded(5).width(2).color(CASING_BLACK),
         ..Style::default()
     }
 }
@@ -38,6 +40,7 @@ pub fn module(_: &Theme) -> Style {
         // Set the background color
         background: Some(Background::Color(DARK_GRAY)),
         text_color: Some(WHITE_TEXT),
+        border: border::rounded(5).width(2).color(LIGHT_GRAY),
         ..Style::default()
     }
 }
@@ -61,6 +64,14 @@ pub fn control(_: &Theme) -> Style {
     }
 }
 
+pub fn border(_: &Theme) -> Style {
+    Style {
+        // Set the background color
+        background: Some(CONTROL_BLACK.into()),
+        border: border::width(2),
+        ..Style::default()
+    }
+}
 
 
 

@@ -5,7 +5,7 @@ mod track_settings;
 mod style;
 mod components;
 
-use iced::widget::{column, Column, row, text};
+use iced::widget::{column, Column, row};
 use iced::Length::Fixed;
 use iced::Element;
 use crate::models::shared::SongData;

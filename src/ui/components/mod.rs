@@ -15,6 +15,7 @@ pub fn module<Message> (content: Element<'_, Message>) -> Container<'_, Message>
 
 pub fn module_slot<Message> (content: Element<'_, Message>) -> Container<'_, Message>{
     container(content)
+    .padding(3)
     .style(style::module_slot)
 }
 
