@@ -8,6 +8,7 @@ mod components;
 use iced::widget::{column, Column, row};
 use iced::Length::Fixed;
 use iced::Element;
+use iced::{Subscription, window, Task};
 use crate::models::shared::SongData;
 use crate::engine;
 
@@ -67,13 +68,30 @@ impl Default for MainWindow {
         }
     }
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
-
+    // Window event messages...
+    WindowEvent(window::Event),
 }
 impl MainWindow {
-    pub fn update(&mut self, _msg: Message) {
-
+    pub fn update(&mut self, msg: Message) -> Task<Message> {
+        match msg {
+            Message::WindowEvent(event) => match event {
+                window::Event::CloseRequested => {
+                    // 🛑 Interception happens here!
+    
+                    // 1. Perform a save operation before quitting (optional)
+                    // return Command::perform(
+                    //     self.save_data(), 
+                    //     |result| Message::DataSaved(result)
+                    // );
+    
+                    self.shutdown();
+                    iced::exit()
+                }
+                _ => Task::none(),
+            },
+        }
     }
     pub fn view(&self) ->Element<'_, Message> {
         let content: Column<'_, Message> = {
@@ -103,10 +121,18 @@ impl MainWindow {
         components::rack(content.into()).into()
     }
 
+    fn subscription(&self) -> Subscription<Message> {
+        // Subscribe to all window events
+        window::events().map(|(_id, event)| Message::WindowEvent(event))
+    }
     // Don't forget to stop engine on shutdown
-    //     engine.quit();
+    fn shutdown(&self) {
+        self.engine.quit();
+    }
 }
 
 pub fn run() -> Result<(), iced::Error> {
-    iced::application(APP_TITLE, MainWindow::update, MainWindow::view).run()
+    iced::application(APP_TITLE, MainWindow::update, MainWindow::view)
+    .subscription(MainWindow::subscription)
+    .run()
 }

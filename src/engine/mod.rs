@@ -17,7 +17,8 @@ pub struct EngineController {
 }
 
 pub struct PlayerState {
-    pub is_playing: bool
+    pub is_playing: bool,
+    pub is_active: bool,
 }
 
 pub struct StateObserver<F> 
@@ -53,7 +54,7 @@ pub fn start<F>(observer_callback: F, shared_data: Arc<Mutex<SongData>>) -> Engi
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
     let (tx, rx) = mpsc::channel::<Actions>();
-    let player_state = Arc::new(Mutex::new(PlayerState { is_playing: false }));
+    let player_state = Arc::new(Mutex::new(PlayerState { is_playing: false, is_active: true }));
 
     let observer = StateObserver::new(observer_callback, Arc::clone(&player_state));
 
@@ -74,7 +75,12 @@ where
                 }
                 observer.notify();
             },
-            Actions::Quit => break,
+            Actions::Quit => {
+                if let Ok(mut state) = player_state.lock() {
+                    state.is_active = false;
+                }
+                break;
+            },
         }
        }
     });
