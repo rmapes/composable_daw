@@ -1,5 +1,5 @@
 use iced::{widget::{ row, Row }, Length};
-use super::Message;
+use super::actions::Message;
 
 pub struct Component {
     height: f32,

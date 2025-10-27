@@ -3,8 +3,7 @@ use iced::{Length, Element};
 use crate::models::components::Track;
 
 use super::components;
-
-use super::Message;
+use super::actions::Message;
 
 pub struct Component {
     width: f32,

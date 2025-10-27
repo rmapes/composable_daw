@@ -195,7 +195,7 @@ pub enum Sequence {
 
 impl EventStreamSource for Sequence {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
-        match(&self) {
+        match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
             Sequence::SequenceContainer(seq) => seq.to_event_stream()
         }

@@ -1,6 +1,6 @@
-use iced::widget::{ row, Row };
+use iced::widget::{ row };
 use iced::{Length, Element};
-use super::Message;
+use super::actions::Message;
 
 use super::components;
 

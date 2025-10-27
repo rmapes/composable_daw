@@ -1,8 +1,9 @@
-use iced::widget::{ row, column, Column, scrollable, container, text, horizontal_space};
+use iced::widget::{ row, column, scrollable, container, text, horizontal_space};
 use iced::{Color, Element, Length, Theme};
 use iced::widget::container::Style; 
 use crate::models::components::Track;
-use super::{Message, components};
+use super::components;
+use super::actions::Message;
 
 // Define styling
 pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
