@@ -6,12 +6,12 @@ use super::components;
 use super::actions::Message;
 
 pub struct Component {
-    width: f32,
-    height: f32,
+    width: Length,
+    height: Length,
 }
 
 impl Component {
-    pub fn new(width: f32, height: f32) -> Self {
+    pub fn new(width: Length, height: Length) -> Self {
         Self {
             width,
             height,
@@ -26,8 +26,8 @@ impl Component {
             row![
                 self.channel_strip(track),
             ]
-            .width(Length::Fill)//Length::Fixed(self.width))
-            .height(Length::Fill)//Length::Fixed(self.height))
+            .width(self.width)//Length::Fixed(self.width))
+            .height(self.height)//Length::Fixed(self.height))
             .into()
         ).into()
     }

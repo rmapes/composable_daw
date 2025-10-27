@@ -1,5 +1,5 @@
 use iced::widget::{column, Column, row};
-use iced::Length::Fixed;
+use iced::Length;
 use iced::Element;
 use iced::{Subscription, window, Task};
 use crate::models::shared::SongData;
@@ -27,8 +27,8 @@ pub struct MainWindow {
     // Mutable state
     selected_track: usize,
     // Preferences
-    width: f32,
-    height: f32,
+    width: Length,
+    height: Length,
 
     // UI subcomponents
     control_bar: control_bar::Component,
@@ -57,12 +57,12 @@ impl Default for MainWindow {
             engine,
             data,
             selected_track: 0,
-            width: 600_f32,
-            height: 400_f32,
-            control_bar: control_bar::Component::new(50_f32),
-            composer_window: composer_window::Component::new(500_f32, 200_f32),
-            pattern_editor: pattern_editor::Component::new(500_f32, 150_f32),
-            track_settings: track_settings::Component::new(100_f32, 500_f32),            
+            width: Length::Fill, //600_f32,
+            height: Length::Fill, //400_f32,
+            control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
+            composer_window: composer_window::Component::new(Length::Fill, Length::FillPortion(2)),
+            pattern_editor: pattern_editor::Component::new(Length::Fill, Length::FillPortion(1)),
+            track_settings: track_settings::Component::new(Length::Fixed(100_f32),Length::Fill),            
         }
     }
 }
@@ -72,14 +72,6 @@ impl MainWindow {
         match msg {
             Message::WindowEvent(event) => match event {
                 window::Event::CloseRequested => {
-                    // 🛑 Interception happens here!
-    
-                    // 1. Perform a save operation before quitting (optional)
-                    // return Command::perform(
-                    //     self.save_data(), 
-                    //     |result| Message::DataSaved(result)
-                    // );
-    
                     self.shutdown();
                     iced::exit()
                 }
@@ -97,7 +89,7 @@ impl MainWindow {
                     row![
                         components::module_slot(
                             self.track_settings.view(selected_track)
-                        ),
+                        ).width(Length::Shrink), // Shrink to fit channel strips
                         column![
                             components::module_slot(
                                 self.composer_window.view(&song.tracks, self.selected_track),
@@ -107,7 +99,7 @@ impl MainWindow {
                             )
                         ]
                     ]
-                ].width(Fixed(self.width)).height(Fixed(self.height))
+                ].width(self.width).height(self.height)
                 } else {
                 column![] // TODO: store a local copy of the song data to deal with try_lock failing
             }

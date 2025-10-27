@@ -5,12 +5,12 @@ use super::actions::Message;
 use super::components;
 
 pub struct Component {
-    width: f32,
-    height: f32,
+    width: Length,
+    height: Length,
 }
 
 impl Component {
-    pub fn new(width: f32, height: f32) -> Self {
+    pub fn new(width: Length, height: Length) -> Self {
         Self {
             width,
             height,
@@ -24,8 +24,8 @@ impl Component {
         components::module(
             row![
             ]
-            .width(Length::Fixed(self.width))
-            .height(Length::Fixed(self.height)).into()
+            .width(self.width)
+            .height(self.height).into()
         ).into()
     }
 }
