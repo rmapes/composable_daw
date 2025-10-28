@@ -5,6 +5,10 @@ Get Basic functionality working again
 - Allow patterns to be edited and saved
 - Add play button to control bar
 
+Bugs
+
+- Fix PPQ vs ticks per second discrepancy
+
 Multi track functionality
 
 - Add Track button in composer window
@@ -17,6 +21,7 @@ Tech Debt
 - Eliminate Box wherever possible
 - Minimize use of traits vs concrete types
 - Minimize use of into
+- Delete slint files
 
 Multi region
 

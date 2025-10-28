@@ -35,7 +35,9 @@ impl ProjectData {
     pub fn new_track(&mut self) {
         // Add a new track, defaulting to name Track # where # is current position
         let new_track_num = self.tracks.len() + 1;
-        let new_track = Track::new(format!("Track {new_track_num}"));
+        let mut new_track = Track::new(format!("Track {new_track_num}"));
+        // Temporary until we can add regions via UI. Add pattern at start
+        new_track.add_pattern_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);
     }
 }

@@ -96,6 +96,10 @@ impl EventStream for BaseEventStream {
 
 }
 
+// Define a sequence trait, to specify common functions for all sequences
+pub trait TSequence {
+    fn length_in_ticks(&self) -> Tick;
+}
 
 #[derive(Clone)]
 pub struct PatternSeq {
@@ -104,8 +108,37 @@ pub struct PatternSeq {
     pub num_beats: u8,
     pub bpm: u8,
     pub pattern: Vec<Vec<bool>>,
-    pub sample_rate: u32, /* ticks per second */
+    pub sample_rate: u32, /* ticks per quarter beat */
+    pub beats_per_quarter_note: u8,
 }
+
+impl Default for PatternSeq {
+    fn default() -> Self {
+        let note_values = vec![72,71,69,67,65,64,62,60];
+        let num_notes = note_values.len() as u8;
+        let num_beats = 16;
+        let pattern = (0..num_beats).map(|_| { (0..num_notes).map(|_| {false}).collect() }).collect();
+        let bpm= 120; // TODO: Get from Project
+        let sample_rate = DEFAULT_PPQ;
+        let beats_per_quarter_note = 4;
+        Self { 
+            note_values, 
+            num_notes, 
+            num_beats, 
+            bpm, 
+            pattern, 
+            sample_rate,
+            beats_per_quarter_note,
+        }
+    }
+}
+
+impl TSequence for PatternSeq {
+    fn length_in_ticks(&self) -> Tick {
+        (self.num_notes as u32 * self.sample_rate) / self.beats_per_quarter_note as u32
+    }
+}
+
 
 // TODO: stop using oxisynth midi event
 struct RawEventTime {
@@ -145,8 +178,7 @@ impl EventStreamSource for PatternSeq {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
         println!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
         println!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
-        let beats_per_quarter_note: u8 = 4; // Need to bake this into pattern
-        let beats_per_minute: u32 = beats_per_quarter_note as u32 * self.bpm as u32;
+        let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
         let ticks_per_beat = self.sample_rate * 60 / beats_per_minute; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
         let mut event_stream = BaseEventStream::new(self.sample_rate);
@@ -192,7 +224,7 @@ pub enum Sequence {
     Pattern(PatternSeq),
     SequenceContainer(SequenceContainer)
 }
-
+                                                                                               
 impl EventStreamSource for Sequence {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
         match &self {
@@ -202,10 +234,19 @@ impl EventStreamSource for Sequence {
     }
 }
 
+impl TSequence for Sequence {
+    fn length_in_ticks(&self) -> Tick {
+        match &self {
+            Sequence::Pattern(seq) => seq.length_in_ticks(),
+            Sequence::SequenceContainer(seq) => seq.length_in_ticks()
+        }
+    }
+}
+
 
 /// Sequence Container: one container to rule them all
 /// 
-type Tick = u32;
+pub type Tick = u32;
 
 pub struct SequenceContainer {
     pub sequences: HashMap<Tick, Sequence>,
@@ -216,6 +257,34 @@ impl SequenceContainer {
         Self {
             sequences: HashMap::new(),
         }
+    }
+
+    pub fn region_collides_with_existing(&self, start_tick: Tick, length: Tick) -> bool {
+        // Check start not in preceding region
+        for tick in 0..start_tick {
+            if self.sequences.contains_key(&tick) {
+                if self.sequences[&tick].length_in_ticks() > start_tick - tick {
+                    return true;
+                }
+            }
+        }
+        // Check no region starts in this region
+        let end_tick = start_tick + length;
+        for tick in start_tick..end_tick {
+            if self.sequences.contains_key(&tick) {
+                return true;
+            }
+        }
+        false
+    }
+
+}
+
+impl TSequence for SequenceContainer {
+    fn length_in_ticks(&self) -> Tick {
+        let last_sequence_start = self.sequences.keys().max().unwrap_or(&0);
+        let last_length = self.sequences[last_sequence_start].length_in_ticks();
+        last_sequence_start + last_length
     }
 }
 

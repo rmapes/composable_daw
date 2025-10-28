@@ -23,9 +23,10 @@ All of the components that make up the structure of a 'song'
 
 /*** Generators ****/
 
-use std::time::Duration;
+use std::{error::Error, time::Duration};
+use std::fmt;
 
-use crate::models::sequences::SequenceContainer;
+use crate::models::sequences::{PatternSeq, SequenceContainer, Tick, TSequence, Sequence};
 pub trait AudioGenerator {
 }
 
@@ -151,6 +152,22 @@ pub struct Track {
 
 }
 
+#[derive(Debug, Clone)]
+pub struct CollisionError;
+
+impl Error for CollisionError {
+   fn description(&self) -> &str {
+        "overlapping regions not allowed"
+    }
+}
+
+impl fmt::Display for CollisionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "overlapping regions not allowed")
+    }
+}
+
+
 impl Track {
     pub fn new(name: String) -> Self {
         Self {
@@ -167,6 +184,18 @@ impl Track {
         // 15000 * pattern.num_beats as u64 / pattern.bpm as u64;
         self.duration
     }
+
+    pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
+        let sequence = self.midi.get_or_insert(SequenceContainer::new());
+        let pattern = PatternSeq::default();
+        // Check for collisions
+        if sequence.region_collides_with_existing(tick, pattern.length_in_ticks()) {
+            return Err(CollisionError {});
+        }
+        sequence.sequences.insert(tick, Sequence::Pattern(pattern));
+        Ok(())
+    }
+
 }
 
 
