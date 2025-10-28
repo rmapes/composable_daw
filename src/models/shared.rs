@@ -16,13 +16,13 @@ use super::components::*;
 // the only problems this presents are:
 //    - do we need explici
 
-pub struct SongData {
+pub struct ProjectData {
     // Components
     pub tracks: Vec<Track>,
 
 }
 
-impl SongData {
+impl ProjectData {
     pub fn new() -> Self {
         let mut this = Self {
             tracks: Vec::new(),

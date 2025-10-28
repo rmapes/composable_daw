@@ -2,7 +2,7 @@ use iced::widget::{column, Column, row};
 use iced::Length;
 use iced::Element;
 use iced::{Subscription, window, Task};
-use crate::models::shared::SongData;
+use crate::models::shared::ProjectData;
 use crate::engine;
 
 use super::components;
@@ -22,7 +22,7 @@ use std::rc::Rc;
 pub struct MainWindow {
     // Core application data and engine
     engine: Rc<engine::EngineController>,
-    data: Arc<Mutex<SongData>>,
+    data: Arc<Mutex<ProjectData>>,
 
     // Mutable state
     selected_track: usize,
@@ -41,7 +41,7 @@ pub struct MainWindow {
 
 impl Default for MainWindow {
     fn default() -> Self {
-        let data = Arc::new(Mutex::new(SongData::new()));
+        let data = Arc::new(Mutex::new(ProjectData::new()));
         let engine = Rc::new(engine::start(
             {
                 move |_player_state: &engine::PlayerState| {

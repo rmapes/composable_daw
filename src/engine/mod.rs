@@ -9,7 +9,7 @@ use std::thread;
 
 use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
-use crate::models::shared::SongData;
+use crate::models::shared::ProjectData;
 use crate::models::components::{Track};
 
 pub struct EngineController {
@@ -50,7 +50,7 @@ enum Actions {
     Quit,
 }
 
-pub fn start<F>(observer_callback: F, shared_data: Arc<Mutex<SongData>>) -> EngineController 
+pub fn start<F>(observer_callback: F, shared_data: Arc<Mutex<ProjectData>>) -> EngineController 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
     let (tx, rx) = mpsc::channel::<Actions>();
@@ -99,7 +99,7 @@ impl EngineController {
 
 }
 
-fn play_structure(structure: &SongData) -> Result<(), Box<dyn Error>> {
+fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
 	let mut engine = audio::init_audio()?;
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len = std::time::Duration::from_millis(0);

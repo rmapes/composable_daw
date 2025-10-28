@@ -1,15 +1,40 @@
-x - Allow multiple files in slint
+Get Basic functionality working again
 
-- Set up redux like state and actions in slint
+- Start track with a default pattern added and selected
+- Show pattern editor if track has selected region
+- Allow patterns to be edited and saved
+- Add play button to control bar
+
+Multi track functionality
+
+- Add Track button in composer window
+- Allow track selection by clicking
+
+Tech Debt
+
+- Replace debug println with log framework
 - Add unit tests
 - Eliminate Box wherever possible
 - Minimize use of traits vs concrete types
+- Minimize use of into
+
+Multi region
+
+- Allow pattern regions to be added at any point on timeline
+- Allow midi regions to be added
+
+Design kit improvements
+
+- add icon library
+
+Prettify design
+
+Cleanup
 
 - Convert sample_rate from ticks per second to ticks per quarter note (PPQN) to minimise timing issues
 - Remove fixed beats per quarter note from pattern (provide a length for the pattern)
 - Minimise size of all ints (convert u32 into smallest size that covers the range)
 - Minimise unnecessary copies
-- Replace debug println with log framework
 
 Planning:
 
