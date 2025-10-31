@@ -114,6 +114,7 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     engine.start()?;
     std::thread::sleep(len);
     println!("Sequence complete");
+    engine.pause()?;
     Ok(())
  }
 

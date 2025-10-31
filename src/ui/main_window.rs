@@ -28,6 +28,7 @@ pub struct MainWindow {
     // Mutable state
     selected_track: usize,
     selected_pattern: Option<u32>,
+    is_playing: bool,
     // Preferences
     width: Length,
     height: Length,
@@ -60,6 +61,7 @@ impl Default for MainWindow {
             data,
             selected_track: 0,
             selected_pattern: Some(0), // Temporary: select pattern by default. Relies on track beging created with initial pattern
+            is_playing: false,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
@@ -90,6 +92,15 @@ impl MainWindow {
                 // No further task to do
                 Task::none()
             },
+            Message::Play => {
+                self.is_playing = true;                
+                self.engine.play_midi();
+                Task::done(Message::PlayStopped)
+            },
+            Message::PlayStopped => {
+                self.is_playing = false;
+                Task::none()
+            }
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
@@ -133,6 +144,7 @@ impl MainWindow {
     }
     // Don't forget to stop engine on shutdown
     fn shutdown(&self) {
+        print!("Shutting down");
         self.engine.quit();
     }
 }

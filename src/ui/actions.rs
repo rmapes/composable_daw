@@ -7,5 +7,7 @@ use crate::models::shared::PatternNoteIdentifier;
 pub enum Message {
     // Window event messages...
     WindowEvent(window::Event),
-    PatternClickNote(PatternNoteIdentifier)
+    PatternClickNote(PatternNoteIdentifier),
+    Play,
+    PlayStopped,
 }

@@ -19,6 +19,9 @@ impl AudioEngine {
     pub fn start(&mut self) -> Result<(), cpal::PlayStreamError>{
         self._stream.play()
     }
+    pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
+        self._stream.pause()
+    }
     pub fn add_input<O: Output + 'static>(&mut self, o: O) {
         if let Ok(mut guard) = self._input.lock() {
             guard.add_input(Box::new(o));
