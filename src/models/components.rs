@@ -27,6 +27,7 @@ use std::{error::Error, time::Duration};
 use std::fmt;
 
 use crate::models::sequences::{PatternSeq, SequenceContainer, Tick, TSequence, Sequence};
+use crate::models::shared::{PatternIdentifier, TrackIdentifier};
 pub trait AudioGenerator {
 }
 
@@ -147,6 +148,7 @@ pub struct Track {
     pub audio_output: AudioConnector,
 
     // Track Metadata
+    pub id: TrackIdentifier,
     pub name: String,
     duration: Duration,
 
@@ -169,8 +171,9 @@ impl fmt::Display for CollisionError {
 
 
 impl Track {
-    pub fn new(name: String) -> Self {
+    pub fn new(id: TrackIdentifier, name: String) -> Self {
         Self {
+            id,
             name,
             midi: Some(SequenceContainer::new()), // If track type == midi
             audio_input: AudioBuss {  },
@@ -187,12 +190,13 @@ impl Track {
 
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
         let sequence = self.midi.get_or_insert(SequenceContainer::new());
-        let pattern = PatternSeq::default();
+        let pattern = PatternSeq::new(PatternIdentifier{ track_id: self.id, pattern_id: tick });
         // Check for collisions
         if sequence.region_collides_with_existing(tick, pattern.length_in_ticks()) {
             return Err(CollisionError {});
         }
-        sequence.sequences.insert(tick, Sequence::Pattern(pattern));
+        let region = Sequence::Pattern(pattern);
+        sequence.sequences.insert(tick, region);
         Ok(())
     }
 

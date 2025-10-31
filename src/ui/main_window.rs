@@ -2,6 +2,7 @@ use iced::widget::{column, Column, row};
 use iced::Length;
 use iced::Element;
 use iced::{Subscription, window, Task};
+use crate::models::sequences::Sequence;
 use crate::models::shared::ProjectData;
 use crate::engine;
 
@@ -26,6 +27,7 @@ pub struct MainWindow {
 
     // Mutable state
     selected_track: usize,
+    selected_pattern: Option<u32>,
     // Preferences
     width: Length,
     height: Length,
@@ -57,6 +59,7 @@ impl Default for MainWindow {
             engine,
             data,
             selected_track: 0,
+            selected_pattern: Some(0), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
@@ -76,13 +79,24 @@ impl MainWindow {
                     iced::exit()
                 }
                 _ => Task::none(),
+            }
+            Message::PatternClickNote(note_identifier) => {
+                // TODO: toggle note on in pattern
+                Task::none()
             },
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
         let content: Column<'_, Message> = {
             if let Ok(song) = self.data.try_lock() {
-                let selected_track =  &song.tracks[self.selected_track];       
+                let selected_track =  &song.tracks[self.selected_track]; 
+                let selected_region: Option<&Sequence> = self.selected_pattern
+                    .and_then(|selection| selected_track.midi.as_ref()
+                        .and_then(|sequence| sequence.sequences.get(&selection)));
+                let selected_pattern = match selected_region {
+                    Some(Sequence::Pattern(p)) => Some(p),
+                    _ => None, // Fix this when we support other region types
+                };
                 column![
                     self.control_bar.view(),
                     // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
@@ -95,7 +109,7 @@ impl MainWindow {
                                 self.composer_window.view(&song.tracks, self.selected_track),
                             ),
                             components::module_slot(
-                                self.pattern_editor.view(),
+                                self.pattern_editor.view(selected_pattern),
                             )
                         ]
                     ]

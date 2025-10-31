@@ -28,3 +28,8 @@ pub fn control<Message> (content: Element<'_, Message>) -> Container<'_, Message
     container(content)
     .style(style::control)
 }
+
+pub fn label<Message> (content: Element<'_, Message>) -> Container<'_, Message>{
+    container(content)
+    .style(style::label)
+}

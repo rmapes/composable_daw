@@ -1,3 +1,5 @@
+use crate::models::sequences::{Sequence, Tick};
+
 /*
 Defines the shared data structure btween all threads
 */
@@ -16,9 +18,33 @@ use super::components::*;
 // the only problems this presents are:
 //    - do we need explici
 
+
+////////
+/// Value objects to identify structures stored within Project Data
+#[derive(Debug, Clone, Copy)]
+pub struct TrackIdentifier {
+    pub track_id: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PatternIdentifier {
+    pub track_id: TrackIdentifier,
+    pub pattern_id: Tick,
+}
+#[derive(Debug, Clone, Copy)]
+pub struct PatternNoteIdentifier {
+    pub pattern_id: PatternIdentifier,
+    pub note_num: u8,
+    pub beat_num: u8,
+}
+
+////////////
+/// Data that will be stored to file
 pub struct ProjectData {
     // Components
     pub tracks: Vec<Track>,
+    // Regionss
+    pub regions: Vec<Sequence>,
 
 }
 
@@ -26,6 +52,7 @@ impl ProjectData {
     pub fn new() -> Self {
         let mut this = Self {
             tracks: Vec::new(),
+            regions: Vec::new(),
         };
         // Always start with one track
         this.new_track();
@@ -35,7 +62,7 @@ impl ProjectData {
     pub fn new_track(&mut self) {
         // Add a new track, defaulting to name Track # where # is current position
         let new_track_num = self.tracks.len() + 1;
-        let mut new_track = Track::new(format!("Track {new_track_num}"));
+        let mut new_track = Track::new(TrackIdentifier {track_id: new_track_num - 1}, format!("Track {new_track_num}"));
         // Temporary until we can add regions via UI. Add pattern at start
         new_track.add_pattern_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);

@@ -2,6 +2,8 @@ use std::{collections::HashMap, cmp::max};
 use std::option::{Option};
 use std::slice::Iter;
 
+use crate::models::shared::PatternIdentifier;
+
 
 
 
@@ -103,6 +105,7 @@ pub trait TSequence {
 
 #[derive(Clone)]
 pub struct PatternSeq {
+    pub id: PatternIdentifier,
     pub note_values: Vec<u8>,
     pub num_notes: u8,
     pub num_beats: u8,
@@ -112,8 +115,13 @@ pub struct PatternSeq {
     pub beats_per_quarter_note: u8,
 }
 
-impl Default for PatternSeq {
-    fn default() -> Self {
+impl PatternSeq {
+    pub fn is_on(&self, beat_num: u8, note_num: u8) -> &bool {
+        self.pattern.get(beat_num as usize).and_then(|notes| {notes.get(note_num as usize)})
+        .expect("Attempt to access pattern out of range")
+    }
+
+    pub fn new(id: PatternIdentifier) -> Self {
         let note_values = vec![72,71,69,67,65,64,62,60];
         let num_notes = note_values.len() as u8;
         let num_beats = 16;
@@ -122,6 +130,7 @@ impl Default for PatternSeq {
         let sample_rate = DEFAULT_PPQ;
         let beats_per_quarter_note = 4;
         Self { 
+            id,
             note_values, 
             num_notes, 
             num_beats, 

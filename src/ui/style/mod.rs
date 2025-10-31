@@ -64,6 +64,15 @@ pub fn control(_: &Theme) -> Style {
     }
 }
 
+pub fn label(_: &Theme) -> Style {
+    Style {
+        // Set the background color
+        background: Some(CONTROL_BLACK.into()),
+        text_color: Some(BLUE_TEXT),
+        ..Style::default()
+    }
+}
+
 pub fn border(_: &Theme) -> Style {
     Style {
         // Set the background color
@@ -73,8 +82,24 @@ pub fn border(_: &Theme) -> Style {
     }
 }
 
+// Specific styles
+pub fn note_button_on(_: &Theme) -> Style {
+    Style {
+        // Set the background color
+        background: Some(Background::Color(color!(0x000050))),
+        border: border::width(1).color(DARK_GRAY),
+        ..Style::default()
+    }
+}
 
-
+pub fn note_button_off(_: &Theme) -> Style {
+    Style {
+        // Set the background color
+        background: Some(Background::Color(color!(0x000000))),
+        border: border::width(1).color(DARK_GRAY),
+        ..Style::default()
+    }
+}
 
 /* 
 Palette:
