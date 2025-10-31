@@ -26,7 +26,7 @@ All of the components that make up the structure of a 'song'
 use std::{error::Error, time::Duration};
 use std::fmt;
 
-use crate::models::sequences::{PatternSeq, SequenceContainer, Tick, TSequence, Sequence};
+use crate::models::sequences::{self, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{PatternIdentifier, TrackIdentifier};
 pub trait AudioGenerator {
 }
@@ -198,6 +198,19 @@ impl Track {
         let region = Sequence::Pattern(pattern);
         sequence.sequences.insert(tick, region);
         Ok(())
+    }
+
+    pub fn get_pattern_by_id(&mut self, id: &PatternIdentifier) -> &mut PatternSeq {
+        let container = &mut self.midi.as_mut().unwrap().sequences;
+        let region: &mut Sequence = container
+            .get_mut(&id.pattern_id)
+            .expect("Attempt to access pattern with invalid id");
+        // region
+        if let Sequence::Pattern(pattern) = region {
+            pattern
+        } else {
+            panic!("Attempt to access non-pattern region as pattern")
+        }
     }
 
 }

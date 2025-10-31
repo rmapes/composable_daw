@@ -121,6 +121,10 @@ impl PatternSeq {
         .expect("Attempt to access pattern out of range")
     }
 
+    pub fn toggle_on(&mut self, beat_num: u8, note_num: u8) {
+        self.pattern[(beat_num as usize)][note_num as usize] = !self.pattern[beat_num as usize][note_num as usize];
+    }
+
     pub fn new(id: PatternIdentifier) -> Self {
         let note_values = vec![72,71,69,67,65,64,62,60];
         let num_notes = note_values.len() as u8;

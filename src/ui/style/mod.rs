@@ -86,7 +86,7 @@ pub fn border(_: &Theme) -> Style {
 pub fn note_button_on(_: &Theme) -> Style {
     Style {
         // Set the background color
-        background: Some(Background::Color(color!(0x000050))),
+        background: Some(Background::Color(color!(0xff0050))),
         border: border::width(1).color(DARK_GRAY),
         ..Style::default()
     }
@@ -95,7 +95,7 @@ pub fn note_button_on(_: &Theme) -> Style {
 pub fn note_button_off(_: &Theme) -> Style {
     Style {
         // Set the background color
-        background: Some(Background::Color(color!(0x000000))),
+        background: Some(Background::Color(color!(0x00ff00))),
         border: border::width(1).color(DARK_GRAY),
         ..Style::default()
     }

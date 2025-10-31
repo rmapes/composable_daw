@@ -67,6 +67,10 @@ impl ProjectData {
         new_track.add_pattern_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);
     }
+
+    pub fn get_track_by_id(&mut self, id: &TrackIdentifier) -> &mut Track {
+        &mut self.tracks[id.track_id]
+    }
 }
 
 // impl Structure for SongData {

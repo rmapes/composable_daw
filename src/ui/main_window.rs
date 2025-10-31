@@ -81,7 +81,13 @@ impl MainWindow {
                 _ => Task::none(),
             }
             Message::PatternClickNote(note_identifier) => {
-                // TODO: toggle note on in pattern
+                // toggle note on in pattern
+                if let Ok(mut song) = self.data.try_lock() {
+                    song.get_track_by_id(&note_identifier.pattern_id.track_id)
+                    .get_pattern_by_id(&note_identifier.pattern_id)
+                    .toggle_on(note_identifier.beat_num, note_identifier.note_num);
+                }               
+                // No further task to do
                 Task::none()
             },
         }
