@@ -38,7 +38,7 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32 ) -> Result<
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
 	let mut output = BufferedOutput::new();
-	println!("Starting to play sequence");
+	println!("Preparing output for event source");
 	if event_stream.is_none() {
 		// Empty event stream, so exit without playing anything
 		println!("Nothing to play");

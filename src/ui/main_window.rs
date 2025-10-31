@@ -13,7 +13,7 @@ use super::track_settings;
 use super::control_bar;
 use super::actions::Message;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::rc::Rc;
 
 //////////////////////
@@ -23,7 +23,7 @@ use std::rc::Rc;
 pub struct MainWindow {
     // Core application data and engine
     engine: Rc<engine::EngineController>,
-    data: Arc<Mutex<ProjectData>>,
+    data: Arc<RwLock<ProjectData>>,
 
     // Mutable state
     selected_track: usize,
@@ -44,7 +44,7 @@ pub struct MainWindow {
 
 impl Default for MainWindow {
     fn default() -> Self {
-        let data = Arc::new(Mutex::new(ProjectData::new()));
+        let data = Arc::new(RwLock::new(ProjectData::new()));
         let engine = Rc::new(engine::start(
             {
                 move |_player_state: &engine::PlayerState| {
@@ -84,7 +84,7 @@ impl MainWindow {
             }
             Message::PatternClickNote(note_identifier) => {
                 // toggle note on in pattern
-                if let Ok(mut song) = self.data.try_lock() {
+                if let Ok(mut song) = self.data.try_write() {
                     song.get_track_by_id(&note_identifier.pattern_id.track_id)
                     .get_pattern_by_id(&note_identifier.pattern_id)
                     .toggle_on(note_identifier.beat_num, note_identifier.note_num);
@@ -105,7 +105,7 @@ impl MainWindow {
     }
     pub fn view(&self) ->Element<'_, Message> {
         let content: Column<'_, Message> = {
-            if let Ok(song) = self.data.try_lock() {
+            if let Ok(song) = self.data.try_read() {
                 let selected_track =  &song.tracks[self.selected_track]; 
                 let selected_region: Option<&Sequence> = self.selected_pattern
                     .and_then(|selection| selected_track.midi.as_ref()

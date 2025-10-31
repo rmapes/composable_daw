@@ -150,7 +150,6 @@ pub struct Track {
     // Track Metadata
     pub id: TrackIdentifier,
     pub name: String,
-    duration: Duration,
 
 }
 
@@ -178,14 +177,14 @@ impl Track {
             midi: Some(SequenceContainer::new()), // If track type == midi
             audio_input: AudioBuss {  },
             audio_output:  AudioConnector { },
-            duration: Duration::new(0, 0),
         }
     }
 
-    pub fn duration(&self) -> Duration {
+    pub fn duration(&self, ticks_per_second: u32) -> Duration {
         // Find last sequence
         // 15000 * pattern.num_beats as u64 / pattern.bpm as u64;
-        self.duration
+        let length_in_ticks = self.midi.as_ref().map(|s| s.length_in_ticks()).unwrap_or(0) as f32;
+        Duration::from_secs_f32(length_in_ticks / ticks_per_second as f32)
     }
 
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {

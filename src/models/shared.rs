@@ -43,8 +43,9 @@ pub struct PatternNoteIdentifier {
 pub struct ProjectData {
     // Components
     pub tracks: Vec<Track>,
-    // Regionss
-    pub regions: Vec<Sequence>,
+    // Tempo and Measures
+    bpm: u8,
+    ppq: u32,
 
 }
 
@@ -52,11 +53,16 @@ impl ProjectData {
     pub fn new() -> Self {
         let mut this = Self {
             tracks: Vec::new(),
-            regions: Vec::new(),
+            bpm: 120,
+            ppq: 960,
         };
         // Always start with one track
         this.new_track();
         this
+    }
+
+    pub fn ticks_per_second(&self) -> u32 {
+        self.ppq * self.bpm as u32/ 60
     }
 
     pub fn new_track(&mut self) {

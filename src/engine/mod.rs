@@ -4,7 +4,7 @@ mod audio;
 
 use std::cmp::max;
 use std::error::Error;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
 use crate::engine::buss::BufferedOutput;
@@ -26,21 +26,21 @@ where
     F: Fn(&PlayerState) + Send + Sync + 'static,
 {
     on_change: F,
-    player_state: Arc<Mutex<PlayerState>>,
+    player_state: Arc<RwLock<PlayerState>>,
 }
 
 impl<F> StateObserver<F> 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static,
 {
-    fn new(callback: F, player_state: Arc<Mutex<PlayerState>>) -> StateObserver<F> {
+    fn new(callback: F, player_state: Arc<RwLock<PlayerState>>) -> StateObserver<F> {
         StateObserver {
             on_change: callback,
             player_state,
         }
     }
     pub fn notify(&self) {
-        if let Ok(state) = self.player_state.lock() {
+        if let Ok(state) = self.player_state.read() {
             (self.on_change)(&state);
         }
     }
@@ -50,11 +50,11 @@ enum Actions {
     Quit,
 }
 
-pub fn start<F>(observer_callback: F, shared_data: Arc<Mutex<ProjectData>>) -> EngineController 
+pub fn start<F>(observer_callback: F, shared_data: Arc<RwLock<ProjectData>>) -> EngineController 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
     let (tx, rx) = mpsc::channel::<Actions>();
-    let player_state = Arc::new(Mutex::new(PlayerState { is_playing: false, is_active: true }));
+    let player_state = Arc::new(RwLock::new(PlayerState { is_playing: false, is_active: true }));
 
     let observer = StateObserver::new(observer_callback, Arc::clone(&player_state));
 
@@ -63,20 +63,20 @@ where
         let received = rx.recv().unwrap();
         match received {
             Actions::PlayMidi => {
-                if let Ok(mut state) = player_state.lock() {
+                if let Ok(mut state) = player_state.write() {
                     state.is_playing = true;
                 }
                 observer.notify();
-                if let Ok(song) = shared_data.lock() {
+                if let Ok(song) = shared_data.read() {
                     play_structure(&song).unwrap();
                 }
-                if let Ok(mut state) = player_state.lock() {
+                if let Ok(mut state) = player_state.write() {
                     state.is_playing = false;
                 }
                 observer.notify();
             },
             Actions::Quit => {
-                if let Ok(mut state) = player_state.lock() {
+                if let Ok(mut state) = player_state.write() {
                     state.is_active = false;
                 }
                 break;
@@ -104,7 +104,7 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len = std::time::Duration::from_millis(0);
     let outputs: Vec<BufferedOutput> = structure.tracks.iter().map(|track| {
-        len = max(len, track.duration());
+        len = max(len, track.duration(structure.ticks_per_second()));
         get_buffered_output_for_track(track, engine.sample_rate as u32)
     }).collect();
     let _ = outputs.into_iter().map(|output | {
@@ -112,7 +112,7 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     } ).count();
     println!("Playing for {} ms", len.as_millis());
     engine.start()?;
-    std::thread::sleep(len);
+    std::thread::sleep(len*2);
     println!("Sequence complete");
     engine.pause()?;
     Ok(())

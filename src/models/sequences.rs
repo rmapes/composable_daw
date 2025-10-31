@@ -56,11 +56,11 @@ struct BaseEventStream{
 }
 
 impl BaseEventStream{
-    pub fn new(sample_rate: u32) -> BaseEventStream {
+    pub fn new(sample_rate: u32, length_in_ticks: u32) -> BaseEventStream {
         BaseEventStream {
             sample_rate,
             events: HashMap::new(),
-            length_in_ticks: 0,
+            length_in_ticks: length_in_ticks,
             no_events: Vec::new(),
         }
     }
@@ -74,7 +74,6 @@ impl EventStream for BaseEventStream {
         let tick_block = self.events.entry(event_tick).or_default();
         let tick_priority_block = tick_block.entry(event.get_priority()).or_default();
         tick_priority_block.push(event);
-        self.length_in_ticks = max(self.length_in_ticks, event_tick);
     }
     // Return list of events at tick and priority
     fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent> {
@@ -122,7 +121,7 @@ impl PatternSeq {
     }
 
     pub fn toggle_on(&mut self, beat_num: u8, note_num: u8) {
-        self.pattern[(beat_num as usize)][note_num as usize] = !self.pattern[beat_num as usize][note_num as usize];
+        self.pattern[beat_num as usize][note_num as usize] = !self.pattern[beat_num as usize][note_num as usize];
     }
 
     pub fn new(id: PatternIdentifier) -> Self {
@@ -194,7 +193,7 @@ impl EventStreamSource for PatternSeq {
         let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
         let ticks_per_beat = self.sample_rate * 60 / beats_per_minute; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
-        let mut event_stream = BaseEventStream::new(self.sample_rate);
+        let mut event_stream = BaseEventStream::new(self.sample_rate, self.length_in_ticks());
         for beat in 0..self.num_beats {
             let current_tick = (beat as u32) * ticks_per_beat;
             // Add events for note off
@@ -240,6 +239,7 @@ pub enum Sequence {
                                                                                                
 impl EventStreamSource for Sequence {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+        println!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
             Sequence::SequenceContainer(seq) => seq.to_event_stream()
@@ -303,9 +303,12 @@ impl TSequence for SequenceContainer {
 
 impl EventStreamSource for SequenceContainer {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
-        let mut event_stream = BaseEventStream::new(DEFAULT_PPQ);
-        let _ = self.sequences.iter().map(|(offset, sequence)| {
+        let mut event_stream = BaseEventStream::new(DEFAULT_PPQ, self.length_in_ticks());
+        println!("Converting {} sequences into events", self.sequences.len());
+        let _ = self.sequences.iter().for_each(|(offset, sequence)| {
+            println!("Operating on sequence at {}", offset);
             if let Some(sequence_events) = sequence.to_event_stream() {
+                println!("Processing substream events");
                 // Check whether we need to resample due to different sample rates
                 // we want 1 second in source sequence = 1 second in target
                 // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
@@ -315,6 +318,7 @@ impl EventStreamSource for SequenceContainer {
                     for priority in EventPriority::iter() {
                         let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
                         for event in sequence_events.get_events(tick, *priority) {
+                            println!("Event at {}", tick);
                             let new_event = event.clone_at(new_tick);
                             event_stream.store_event(new_event);
                         }                        
