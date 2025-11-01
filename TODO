@@ -7,7 +7,7 @@ x- Add play button to control bar
 
 Bugs
 
-- Fix PPQ vs ticks per second discrepancy
+x - Fix PPQ vs ticks per second discrepancy
 
 Multi track functionality
 
@@ -22,6 +22,7 @@ Tech Debt
 - Minimize use of traits vs concrete types
 - Minimize use of into
 - Delete slint files
+- Move ppq into a shared settings object
 
 Multi region
 

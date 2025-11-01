@@ -10,4 +10,5 @@ pub enum Message {
     PatternClickNote(PatternNoteIdentifier),
     Play,
     PlayStopped,
+    AddTrack,
 }

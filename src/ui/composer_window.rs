@@ -1,4 +1,4 @@
-use iced::widget::{ row, column, scrollable, container, text, horizontal_space};
+use iced::widget::{ button, column, container, horizontal_space, row, scrollable, text};
 use iced::{Color, Element, Length, Theme};
 use iced::widget::container::Style; 
 use crate::models::components::Track;
@@ -43,11 +43,17 @@ impl Component {
     pub fn view(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
         components::module(
             column![
+                self.controls(),
                 self.track_list(tracks, selected_track),
             ]
             .width(self.width)
             .height(self.height).into()
         ).into()
+    }
+    fn controls(&self) -> Element<'_, Message> {
+        row![
+            button("+").on_press(Message::AddTrack),
+        ].into()
     }
     fn track_list(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
         let mut track_list = column![].spacing(10);

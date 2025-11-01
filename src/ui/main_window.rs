@@ -100,7 +100,13 @@ impl MainWindow {
             Message::PlayStopped => {
                 self.is_playing = false;
                 Task::none()
-            }
+            },
+            Message::AddTrack => {
+                if let Ok(mut song) = self.data.try_write() {
+                    song.new_track();
+                }               
+                Task::none()
+            },
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
