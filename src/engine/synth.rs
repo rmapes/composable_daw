@@ -1,3 +1,4 @@
+use log::debug;
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
@@ -38,10 +39,10 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8 ) -
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
 	let mut output = BufferedOutput::new();
-	println!("Preparing output for event source");
+	debug!("Preparing output for event source");
 	if event_stream.is_none() {
 		// Empty event stream, so exit without playing anything
-		println!("Nothing to play");
+		debug!("Nothing to play");
 		return Ok(output);
 	}
 	let event_stream = event_stream.unwrap();

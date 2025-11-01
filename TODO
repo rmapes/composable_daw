@@ -11,8 +11,8 @@ x - Fix PPQ vs ticks per second discrepancy
 
 Multi track functionality
 
-- Add Track button in composer window
-- Allow track selection by clicking
+x - Add Track button in composer window
+x - Allow track selection by clicking
 
 Tech Debt
 
@@ -23,6 +23,12 @@ Tech Debt
 - Minimize use of into
 - Delete slint files
 - Move ppq into a shared settings object
+
+Make functional
+
+- Save and load
+- Allow bpm to be changed
+- Allow instrument to be selected
 
 Multi region
 
@@ -37,7 +43,6 @@ Prettify design
 
 Cleanup
 
-- Convert sample_rate from ticks per second to ticks per quarter note (PPQN) to minimise timing issues
 - Remove fixed beats per quarter note from pattern (provide a length for the pattern)
 - Minimise size of all ints (convert u32 into smallest size that covers the range)
 - Minimise unnecessary copies

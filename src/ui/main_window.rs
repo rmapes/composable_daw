@@ -2,6 +2,7 @@ use iced::widget::{column, Column, row};
 use iced::Length;
 use iced::Element;
 use iced::{Subscription, window, Task};
+use log::info;
 use crate::models::sequences::Sequence;
 use crate::models::shared::ProjectData;
 use crate::engine;
@@ -154,7 +155,7 @@ impl MainWindow {
     }
     // Don't forget to stop engine on shutdown
     fn shutdown(&self) {
-        print!("Shutting down");
+        info!("Shutting down");
         self.engine.quit();
     }
 }

@@ -2,6 +2,8 @@ use std::{collections::HashMap};
 use std::option::{Option};
 use std::slice::Iter;
 
+use log::debug;
+
 use crate::models::shared::PatternIdentifier;
 
 
@@ -186,8 +188,8 @@ impl MidiEvent {
 
 impl EventStreamSource for PatternSeq {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
-        println!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
-        println!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
+        debug!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
+        debug!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
         let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
         let ticks_per_beat = self.ppq * 60 / beats_per_minute; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
@@ -204,7 +206,7 @@ impl EventStreamSource for PatternSeq {
             playing_notes.clear();
             // Now add new notes to play
             for note_num in 0..self.num_notes {
-                // println!("Note {note_num}, beat {beat}");
+                // debug!("Note {note_num}, beat {beat}");
                 let note = self.note_values[note_num as usize];
                 if self.pattern[beat as usize][note_num as usize] {
                     event_stream.store_event(MidiEvent {
@@ -237,7 +239,7 @@ pub enum Sequence {
                                                                                                
 impl EventStreamSource for Sequence {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
-        println!("Picking Sequence to convert to event stream");
+        debug!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
             Sequence::SequenceContainer(seq) => seq.to_event_stream()
@@ -304,11 +306,11 @@ impl TSequence for SequenceContainer {
 impl EventStreamSource for SequenceContainer {
     fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
         let mut event_stream = BaseEventStream::new(self.ppq, self.length_in_ticks());
-        println!("Converting {} sequences into events", self.sequences.len());
+        debug!("Converting {} sequences into events", self.sequences.len());
         let _ = self.sequences.iter().for_each(|(offset, sequence)| {
-            println!("Operating on sequence at {}", offset);
+            debug!("Operating on sequence at {}", offset);
             if let Some(sequence_events) = sequence.to_event_stream() {
-                println!("Processing substream events");
+                debug!("Processing substream events");
                 // Check whether we need to resample due to different sample rates
                 // we want 1 second in source sequence = 1 second in target
                 // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
@@ -317,7 +319,7 @@ impl EventStreamSource for SequenceContainer {
                     for priority in EventPriority::iter() {
                         let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
                         for event in sequence_events.get_events(tick, *priority) {
-                            // println!("Event at {}", tick);
+                            // debug!("Event at {}", tick);
                             let new_event = event.clone_at(new_tick);
                             event_stream.store_event(new_event);
                         }                        

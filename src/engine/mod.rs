@@ -7,6 +7,8 @@ use std::error::Error;
 use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
 
+use log::info;
+
 use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
 use crate::models::shared::ProjectData;
@@ -110,10 +112,10 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     let _ = outputs.into_iter().map(|output | {
         engine.add_input(output);       
     } ).count();
-    println!("Playing for {} ms", len.as_millis());
+    info!("Playing for {} ms", len.as_millis());
     engine.start()?;
     std::thread::sleep(len);
-    println!("Sequence complete");
+    info!("Sequence complete");
     engine.pause()?;
     Ok(())
  }

@@ -610,6 +610,7 @@ dependencies = [
  "cpal",
  "fluidsynth",
  "iced",
+ "log",
  "midir",
  "oxisynth",
  "ringbuf",

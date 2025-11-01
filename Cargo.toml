@@ -10,4 +10,5 @@ oxisynth = "0.1.0"
 cpal = "0.15"
 ringbuf = "0.4.8"
 iced = "0.13.1"
+log = "0.4.28"
 
