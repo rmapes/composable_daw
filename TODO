@@ -1,9 +1,9 @@
 Get Basic functionality working again
 
-- Start track with a default pattern added and selected
-- Show pattern editor if track has selected region
-- Allow patterns to be edited and saved
-- Add play button to control bar
+x- Start track with a default pattern added and selected
+x- Show pattern editor if track has selected region
+x- Allow patterns to be edited and saved
+x- Add play button to control bar
 
 Bugs
 

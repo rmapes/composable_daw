@@ -26,7 +26,7 @@ All of the components that make up the structure of a 'song'
 use std::{error::Error, time::Duration};
 use std::fmt;
 
-use crate::models::sequences::{self, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
+use crate::models::sequences::{PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{PatternIdentifier, TrackIdentifier};
 pub trait AudioGenerator {
 }
@@ -150,6 +150,7 @@ pub struct Track {
     // Track Metadata
     pub id: TrackIdentifier,
     pub name: String,
+    ppq: u32, // TODO: Pass this in as a global settings object
 
 }
 
@@ -170,13 +171,14 @@ impl fmt::Display for CollisionError {
 
 
 impl Track {
-    pub fn new(id: TrackIdentifier, name: String) -> Self {
+    pub fn new(id: TrackIdentifier, name: String, ppq: u32) -> Self {
         Self {
             id,
             name,
-            midi: Some(SequenceContainer::new()), // If track type == midi
+            midi: Some(SequenceContainer::new(ppq)), // If track type == midi
             audio_input: AudioBuss {  },
             audio_output:  AudioConnector { },
+            ppq,
         }
     }
 
@@ -188,8 +190,8 @@ impl Track {
     }
 
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
-        let sequence = self.midi.get_or_insert(SequenceContainer::new());
-        let pattern = PatternSeq::new(PatternIdentifier{ track_id: self.id, pattern_id: tick });
+        let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
+        let pattern = PatternSeq::new(PatternIdentifier{ track_id: self.id, pattern_id: tick }, self.ppq);
         // Check for collisions
         if sequence.region_collides_with_existing(tick, pattern.length_in_ticks()) {
             return Err(CollisionError {});

@@ -1,4 +1,4 @@
-use crate::models::sequences::{Sequence, Tick};
+use crate::models::sequences::Tick;
 
 /*
 Defines the shared data structure btween all threads
@@ -40,11 +40,13 @@ pub struct PatternNoteIdentifier {
 
 ////////////
 /// Data that will be stored to file
+
+const DEFAULT_PPQ: u32 = 960;
 pub struct ProjectData {
     // Components
     pub tracks: Vec<Track>,
     // Tempo and Measures
-    bpm: u8,
+    pub bpm: u8,
     ppq: u32,
 
 }
@@ -54,7 +56,7 @@ impl ProjectData {
         let mut this = Self {
             tracks: Vec::new(),
             bpm: 120,
-            ppq: 960,
+            ppq: DEFAULT_PPQ,
         };
         // Always start with one track
         this.new_track();
@@ -68,7 +70,7 @@ impl ProjectData {
     pub fn new_track(&mut self) {
         // Add a new track, defaulting to name Track # where # is current position
         let new_track_num = self.tracks.len() + 1;
-        let mut new_track = Track::new(TrackIdentifier {track_id: new_track_num - 1}, format!("Track {new_track_num}"));
+        let mut new_track = Track::new(TrackIdentifier {track_id: new_track_num - 1}, format!("Track {new_track_num}"), self.ppq);
         // Temporary until we can add regions via UI. Add pattern at start
         new_track.add_pattern_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);

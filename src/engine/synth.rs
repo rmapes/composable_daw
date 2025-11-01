@@ -33,7 +33,7 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32 ) -> Result<BufferedOutput, Box<dyn Error>> {
+pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
 	let mut synth = create_synth();
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
@@ -54,7 +54,7 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32 ) -> Result<
 			}
 		}
 		// Wait for next tick
-		output.read_f32((event_stream.get_tick_duration().as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth);
+		output.read_f32((event_stream.get_tick_duration(bpm).as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth);
 	}
 	Ok(output)
 }

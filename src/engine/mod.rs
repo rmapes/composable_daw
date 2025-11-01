@@ -105,24 +105,24 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     let mut len = std::time::Duration::from_millis(0);
     let outputs: Vec<BufferedOutput> = structure.tracks.iter().map(|track| {
         len = max(len, track.duration(structure.ticks_per_second()));
-        get_buffered_output_for_track(track, engine.sample_rate as u32)
+        get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm)
     }).collect();
     let _ = outputs.into_iter().map(|output | {
         engine.add_input(output);       
     } ).count();
     println!("Playing for {} ms", len.as_millis());
     engine.start()?;
-    std::thread::sleep(len*2);
+    std::thread::sleep(len);
     println!("Sequence complete");
     engine.pause()?;
     Ok(())
  }
 
- fn get_buffered_output_for_track(track: &Track, sample_rate: u32) -> BufferedOutput {
+ fn get_buffered_output_for_track(track: &Track, sample_rate: u32, bpm: u8) -> BufferedOutput {
     // Get the midi event stream
     if let Some(event_stream) = &track.midi {
     // For the moment, just pipe into synth. Eventually, we'll want to determine the audio generator from the track config
-        prepare_output(event_stream, sample_rate).unwrap()
+        prepare_output(event_stream, sample_rate, bpm).unwrap()
     } else {
         BufferedOutput::new()
     }
