@@ -107,6 +107,10 @@ impl MainWindow {
                 }               
                 Task::none()
             },
+            Message::SelectTrack(id) => {
+                self.selected_track = id.track_id;
+                Task::none()
+            }
         }
     }
     pub fn view(&self) ->Element<'_, Message> {

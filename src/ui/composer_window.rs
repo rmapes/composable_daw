@@ -1,4 +1,4 @@
-use iced::widget::{ button, column, container, horizontal_space, row, scrollable, text};
+use iced::widget::{ button, column, container, horizontal_space, row, scrollable, text, MouseArea};
 use iced::{Color, Element, Length, Theme};
 use iced::widget::container::Style; 
 use crate::models::components::Track;
@@ -83,7 +83,7 @@ impl Component {
     }
 
     fn track(&self, track: &Track, is_selected: bool) -> Element<'_, Message> {
-        container(row![
+        let track_bar = container(row![
             // self.track_settings()
             column![
                 text(track.name.clone())
@@ -91,9 +91,8 @@ impl Component {
             // Timeline view
             horizontal_space(),
         ])
-        .style(track_style(is_selected))
-        .into()
-
+        .style(track_style(is_selected));
+        MouseArea::new(track_bar).on_press(Message::SelectTrack(track.id)).into()
     }
 }
 

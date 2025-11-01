@@ -1,6 +1,6 @@
 use iced::window;
 
-use crate::models::shared::PatternNoteIdentifier;
+use crate::models::shared::{PatternNoteIdentifier, TrackIdentifier};
 
 
 #[derive(Debug, Clone)]
@@ -11,4 +11,5 @@ pub enum Message {
     Play,
     PlayStopped,
     AddTrack,
+    SelectTrack(TrackIdentifier),
 }
