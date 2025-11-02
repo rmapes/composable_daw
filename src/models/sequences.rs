@@ -32,41 +32,26 @@ pub trait EventTime {
 
 // Event Stream actually consists of a hashmap of ticks to events, 
 // where each tick is mapped to a further hashmap of events by priority
-pub trait EventStream {
-    fn store_event(&mut self, event: MidiEvent);
-    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent>;
-    fn get_length_in_ticks(&self) -> u32;
-    fn get_tick_duration(&self, bpm: u8) -> std::time::Duration;
-}
-
 pub trait EventStreamSource {
-    fn to_event_stream(&self) -> Box<dyn EventStream>;
+    fn to_event_stream(&self) -> EventStream;
 }
 
-///////////////////////
-/// Concrete implementations
-/// 
-// Event Stream actually consists of a hashmap of ticks to events, 
-// where each tick is mapped to a further hashmap of events by priority
-struct BaseEventStream{
+pub struct EventStream{
     ppq: u32, //ppq = pulses per quarter = pulses per quarter beat = ticks per beat. 
     events: HashMap<u32, HashMap<EventPriority, Vec<MidiEvent>>>,
     length_in_ticks: u32,
     no_events: Vec<MidiEvent>,
 }
 
-impl BaseEventStream{
-    pub fn new(sample_rate: u32, length_in_ticks: u32) -> BaseEventStream {
-        BaseEventStream {
+impl EventStream{
+    fn new(sample_rate: u32, length_in_ticks: u32) -> EventStream {
+        EventStream {
             ppq: sample_rate,
             events: HashMap::new(),
             length_in_ticks: length_in_ticks,
             no_events: Vec::new(),
         }
     }
-}
-
-impl EventStream for BaseEventStream {
     /* Take ownership of event and add to event list */
     fn store_event(&mut self, event: MidiEvent) {
         // Add event at its tick and priority
@@ -76,7 +61,7 @@ impl EventStream for BaseEventStream {
         tick_priority_block.push(event);
     }
     // Return list of events at tick and priority
-    fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent> {
+    pub fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEvent> {
         if self.events.contains_key(&tick) {
             let tick_block = self.events.get(&tick).expect("Tick {tick} not found in events");
             if tick_block.contains_key(&priority) {
@@ -87,11 +72,11 @@ impl EventStream for BaseEventStream {
         &self.no_events
     }
     // Return length in ticks
-    fn get_length_in_ticks(&self) -> u32 {
+    pub fn get_length_in_ticks(&self) -> u32 {
         self.length_in_ticks
     }
     // Return length of ticks
-    fn get_tick_duration(&self, bpm: u8) -> std::time::Duration {
+    pub fn get_tick_duration(&self, bpm: u8) -> std::time::Duration {
         std::time::Duration::from_secs_f32(60.0_f32/(bpm as u32 * self.ppq) as f32)
     }
 }
@@ -185,13 +170,13 @@ impl MidiEvent {
 }
 
 impl EventStreamSource for PatternSeq {
-    fn to_event_stream(&self) -> Box<dyn EventStream> {
+    fn to_event_stream(&self) -> EventStream {
         debug!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
         debug!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
         let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
         let ticks_per_beat = self.ppq * 60 / beats_per_minute; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
-        let mut event_stream = BaseEventStream::new(self.ppq, self.length_in_ticks());
+        let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
         for beat in 0..self.num_beats {
             let current_tick = (beat as u32) * ticks_per_beat;
             // Add events for note off
@@ -224,7 +209,7 @@ impl EventStreamSource for PatternSeq {
                 ticks: current_tick
             });
         }
-        Box::new(event_stream)
+        event_stream
     }    
 }
 
@@ -236,7 +221,7 @@ pub enum Sequence {
 }
                                                                                                
 impl EventStreamSource for Sequence {
-    fn to_event_stream(&self) -> Box<dyn EventStream> {
+    fn to_event_stream(&self) -> EventStream {
         debug!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
@@ -302,8 +287,8 @@ impl TSequence for SequenceContainer {
 }
 
 impl EventStreamSource for SequenceContainer {
-    fn to_event_stream(&self) -> Box<dyn EventStream> {
-        let mut event_stream = BaseEventStream::new(self.ppq, self.length_in_ticks());
+    fn to_event_stream(&self) -> EventStream {
+        let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
         debug!("Converting {} sequences into events", self.sequences.len());
         let _ = self.sequences.iter().for_each(|(offset, sequence)| {
             debug!("Operating on sequence at {}", offset);
@@ -323,7 +308,7 @@ impl EventStreamSource for SequenceContainer {
                 }
             }
         });
-        Box::new(event_stream)
+        event_stream
     }
 }
 
@@ -349,7 +334,7 @@ mod tests {
     #[test]
     fn event_stream_can_be_created() {
         let length_in_ticks = 960*4;
-        let event_stream = BaseEventStream::new(24000, length_in_ticks);
+        let event_stream = EventStream::new(24000, length_in_ticks);
         assert_eq!(event_stream.get_length_in_ticks(), length_in_ticks)
     }
 
