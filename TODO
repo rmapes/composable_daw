@@ -26,6 +26,7 @@ x- Replace debug println with log framework
   x- Delete slint files
 - Move ppq into a shared settings object
 - Rationalise naming of length_in_ticks vs get_length_in_ticks
+- Rationalise EventTime and Tick
 
 Make functional
 

@@ -22,20 +22,22 @@ impl EventPriority {
     }
 }
 
-// Event time allows different representations of when an event should occur
-// Ultimately, we will want to convert this to ticks based on a given sample rate of ticks per second
-// In some implementations, we will already have converted u32o the final tick, for efficiency
-// and sample_rate may be ignored. It is up to the system to ensure this never results in a sample_rate mismatch
-pub trait EventTime {
-    fn as_ticks(&self, sample_rate: u32) -> u32;
-}
-
 // Event Stream actually consists of a hashmap of ticks to events, 
 // where each tick is mapped to a further hashmap of events by priority
 pub trait EventStreamSource {
     fn to_event_stream(&self) -> EventStream;
 }
 
+// Event time represents when an event will occur as a number of ticks or pulses from an origin time
+struct EventTime {
+    ticks: u32
+}
+
+impl EventTime {
+    fn as_ticks(&self, _sample_rate: u32) -> u32 {
+        self.ticks
+    }
+}
 pub struct EventStream{
     ppq: u32, //ppq = pulses per quarter = pulses per quarter beat = ticks per beat. 
     events: HashMap<u32, HashMap<EventPriority, Vec<MidiEvent>>>,
@@ -136,15 +138,6 @@ impl TSequence for PatternSeq {
 
 
 // TODO: stop using oxisynth midi event
-struct RawEventTime {
-    ticks: u32
-}
-
-impl EventTime for RawEventTime {
-    fn as_ticks(&self, _sample_rate: u32) -> u32 {
-        self.ticks
-    }
-}
 
 pub struct MidiEvent {
     event: oxisynth::MidiEvent,
@@ -155,8 +148,8 @@ impl MidiEvent {
     pub fn get_priority(&self) -> EventPriority {
         EventPriority::Audio
     }
-    pub fn get_event_time(&self) -> Box<dyn EventTime> {
-        Box::new(RawEventTime{ ticks: self.ticks })
+    pub fn get_event_time(&self) ->  EventTime {
+        EventTime{ ticks: self.ticks }
     }  
     pub fn to_midi(&self) -> oxisynth::MidiEvent {
         self.event
