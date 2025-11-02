@@ -147,7 +147,7 @@ impl PatternSeq {
 
 impl TSequence for PatternSeq {
     fn length_in_ticks(&self) -> Tick {
-        (self.num_notes as u32 * self.ppq) / self.beats_per_quarter_note as u32
+        self.num_beats as u32 * self.ppq / self.beats_per_quarter_note as u32
     }
 }
 
@@ -328,5 +328,83 @@ impl EventStreamSource for SequenceContainer {
             }
         });
         Some(Box::new(event_stream))
+    }
+}
+
+
+
+
+/////////////////////////
+///  Tests
+/// 
+
+#[cfg(test)]
+mod tests {
+    use crate::models::shared::TrackIdentifier;
+
+    use super::*;
+
+    // Sequences
+    #[test]
+    fn event_priority_has_iterator() {
+        assert!(EventPriority::iter().len() > 0);
+    }
+
+    #[test]
+    fn event_stream_can_be_created() {
+        let length_in_ticks = 960*4;
+        let event_stream = BaseEventStream::new(24000, length_in_ticks);
+        assert_eq!(event_stream.get_length_in_ticks(), length_in_ticks)
+    }
+
+
+    #[test]
+    fn pattern_seq_can_be_created() {
+        let length_in_ticks = 960*4;
+        let pattern = PatternSeq::new(
+            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            960);
+        assert_eq!(pattern.ppq, 960);
+        assert_eq!(pattern.beats_per_quarter_note, 4);
+        assert_eq!(pattern.num_beats, 16);
+        assert_eq!(960*16/4, length_in_ticks);
+        assert_eq!(pattern.length_in_ticks(), length_in_ticks);
+    }
+
+    #[test]
+    fn pattern_seq_all_beats_are_initially_off() {
+        let pattern = PatternSeq::new(
+            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            960);
+        for note in 0..pattern.num_notes {
+            for beat in 0..pattern.num_beats {
+                assert_eq!(pattern.is_on(beat, note), &false)
+            }
+        }
+    }
+
+    #[test]
+    fn pattern_seq_can_turn_beats_on_and_off() {
+        let mut pattern = PatternSeq::new(
+            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            960);
+        let beat=3;
+        let note = 5;
+        assert_eq!(pattern.is_on(beat, note), &false);
+        pattern.toggle_on(beat, note);
+        assert_eq!(pattern.is_on(beat, note), &true);
+        pattern.toggle_on(beat, note);
+        assert_eq!(pattern.is_on(beat, note), &false);
+    }
+
+    #[test]
+    fn pattern_seq_can_create_event_stream() {
+        let pattern = PatternSeq::new(
+            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            960);
+        let event_stream = pattern.to_event_stream();
+        assert!(event_stream.is_some()); // TODO: Get rid of Option wrapper. Not needed
+        let event_stream = event_stream.unwrap(); // Shouldn't panic here due to test above
+        assert_eq!(event_stream.get_length_in_ticks(), pattern.length_in_ticks()); // We should rationalise naming here.
     }
 }

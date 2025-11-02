@@ -16,13 +16,16 @@ x - Allow track selection by clicking
 
 Tech Debt
 
-- Replace debug println with log framework
+x- Replace debug println with log framework
+
 - Add unit tests
-- Eliminate Box wherever possible
 - Minimize use of traits vs concrete types
+- Eliminate Box wherever possible
+- Eliminate Option
 - Minimize use of into
-- Delete slint files
+  x- Delete slint files
 - Move ppq into a shared settings object
+- Rationalise naming of length_in_ticks vs get_length_in_ticks
 
 Make functional
 
