@@ -1,5 +1,4 @@
-use std::{collections::HashMap};
-use std::option::{Option};
+use std::collections::HashMap;
 use std::slice::Iter;
 
 use log::debug;
@@ -41,7 +40,7 @@ pub trait EventStream {
 }
 
 pub trait EventStreamSource {
-    fn to_event_stream(&self) -> Option<Box<dyn EventStream>>;
+    fn to_event_stream(&self) -> Box<dyn EventStream>;
 }
 
 ///////////////////////
@@ -95,7 +94,6 @@ impl EventStream for BaseEventStream {
     fn get_tick_duration(&self, bpm: u8) -> std::time::Duration {
         std::time::Duration::from_secs_f32(60.0_f32/(bpm as u32 * self.ppq) as f32)
     }
-
 }
 
 // Define a sequence trait, to specify common functions for all sequences
@@ -187,7 +185,7 @@ impl MidiEvent {
 }
 
 impl EventStreamSource for PatternSeq {
-    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+    fn to_event_stream(&self) -> Box<dyn EventStream> {
         debug!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
         debug!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
         let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
@@ -226,7 +224,7 @@ impl EventStreamSource for PatternSeq {
                 ticks: current_tick
             });
         }
-        Some(Box::new(event_stream))
+        Box::new(event_stream)
     }    
 }
 
@@ -238,7 +236,7 @@ pub enum Sequence {
 }
                                                                                                
 impl EventStreamSource for Sequence {
-    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+    fn to_event_stream(&self) -> Box<dyn EventStream> {
         debug!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
@@ -304,30 +302,28 @@ impl TSequence for SequenceContainer {
 }
 
 impl EventStreamSource for SequenceContainer {
-    fn to_event_stream(&self) -> Option<Box<dyn EventStream>> {
+    fn to_event_stream(&self) -> Box<dyn EventStream> {
         let mut event_stream = BaseEventStream::new(self.ppq, self.length_in_ticks());
         debug!("Converting {} sequences into events", self.sequences.len());
         let _ = self.sequences.iter().for_each(|(offset, sequence)| {
             debug!("Operating on sequence at {}", offset);
-            if let Some(sequence_events) = sequence.to_event_stream() {
-                debug!("Processing substream events");
-                // Check whether we need to resample due to different sample rates
-                // we want 1 second in source sequence = 1 second in target
-                // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
-                let tick_ratio = if event_stream.ppq == self.ppq { 1.0 } else { event_stream.ppq as f64 / self.ppq as f64 };
-                for tick in 0..sequence_events.get_length_in_ticks() {
-                    for priority in EventPriority::iter() {
-                        let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
-                        for event in sequence_events.get_events(tick, *priority) {
-                            // debug!("Event at {}", tick);
-                            let new_event = event.clone_at(new_tick);
-                            event_stream.store_event(new_event);
-                        }                        
-                    }
+            let sequence_events = sequence.to_event_stream();
+            // Check whether we need to resample due to different sample rates
+            // we want 1 second in source sequence = 1 second in target
+            // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
+            let tick_ratio = if event_stream.ppq == self.ppq { 1.0 } else { event_stream.ppq as f64 / self.ppq as f64 };
+            for tick in 0..sequence_events.get_length_in_ticks() {
+                for priority in EventPriority::iter() {
+                    let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
+                    for event in sequence_events.get_events(tick, *priority) {
+                        // debug!("Event at {}", tick);
+                        let new_event = event.clone_at(new_tick);
+                        event_stream.store_event(new_event);
+                    }                        
                 }
             }
         });
-        Some(Box::new(event_stream))
+        Box::new(event_stream)
     }
 }
 
@@ -403,8 +399,6 @@ mod tests {
             PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
             960);
         let event_stream = pattern.to_event_stream();
-        assert!(event_stream.is_some()); // TODO: Get rid of Option wrapper. Not needed
-        let event_stream = event_stream.unwrap(); // Shouldn't panic here due to test above
         assert_eq!(event_stream.get_length_in_ticks(), pattern.length_in_ticks()); // We should rationalise naming here.
     }
 }

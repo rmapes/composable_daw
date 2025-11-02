@@ -40,12 +40,6 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8 ) -
 	let event_stream = seq.to_event_stream();
 	let mut output = BufferedOutput::new();
 	debug!("Preparing output for event source");
-	if event_stream.is_none() {
-		// Empty event stream, so exit without playing anything
-		debug!("Nothing to play");
-		return Ok(output);
-	}
-	let event_stream = event_stream.unwrap();
 	for tick in 0..event_stream.get_length_in_ticks() {
 		// println!("Tick {tick}");
 		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {

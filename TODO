@@ -21,7 +21,7 @@ x- Replace debug println with log framework
 - Add unit tests
 - Minimize use of traits vs concrete types
 - Eliminate Box wherever possible
-- Eliminate Option
+  x- Eliminate Option for Event Stream
 - Minimize use of into
   x- Delete slint files
 - Move ppq into a shared settings object
