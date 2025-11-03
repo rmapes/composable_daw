@@ -34,8 +34,8 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
-	let mut synth = create_synth();
+pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &str, bank: u32, program: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
+	let mut synth = create_synth(soundfont, bank, program)?;
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
 	let mut output = BufferedOutput::new();
@@ -55,13 +55,14 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8 ) -
 }
 
 
-fn create_synth() -> Synth {
+fn create_synth(soundfont: &str, bank: u32, program: u8) ->  Result<Synth, Box<dyn Error>> {
+	debug!("Loading font from {soundfont}");
 	let mut synth = Synth::default();
-	let mut file = File::open("./soundfonts/airfont_340.sf2").unwrap();
-	let font = SoundFont::load(&mut file).unwrap();
-	synth.add_font(font, true);
-	// If needed, select a default program: bank 0, program 0 on channel 0
-	// let _ = synth.program_select(0, 0, 0, 0);
-	synth
+	let mut file = File::open(soundfont)?; 
+	let font = SoundFont::load(&mut file)?; // TODO: handle
+	let font_id = synth.add_font(font, true);
+	// Now select specifed bank and program (limit to channel 0, since only one midi stream per instrument)
+	let _ = synth.select_program(0, font_id, bank, program);
+	Ok(synth)
 }
 

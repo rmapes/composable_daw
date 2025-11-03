@@ -11,8 +11,9 @@ use log::info;
 
 use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
+use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::shared::ProjectData;
-use crate::models::components::{Track};
+use crate::models::components::{Track, VirtualInstrument};
 
 pub struct EngineController {
     tx: mpsc::Sender<Actions>,
@@ -105,10 +106,14 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
 	let mut engine = audio::init_audio()?;
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len = std::time::Duration::from_millis(0);
-    let outputs: Vec<BufferedOutput> = structure.tracks.iter().map(|track| {
+    let outputs: Result<Vec<BufferedOutput>, _> = structure.tracks.iter().map(|track| {
         len = max(len, track.duration(structure.ticks_per_second()));
-        get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm)
+        match &track.instrument.kind {
+            Instrument::Synth(instrument) => get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm, instrument)
+        }
+        
     }).collect();
+    let outputs = outputs?;
     let _ = outputs.into_iter().map(|output | {
         engine.add_input(output);       
     } ).count();
@@ -120,13 +125,13 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     Ok(())
  }
 
- fn get_buffered_output_for_track(track: &Track, sample_rate: u32, bpm: u8) -> BufferedOutput {
+ fn get_buffered_output_for_track(track: &Track, sample_rate: u32, bpm: u8, instrument: &SimpleSynth) -> Result<BufferedOutput, Box<dyn Error>> {
     // Get the midi event stream
     if let Some(event_stream) = &track.midi {
     // For the moment, just pipe into synth. Eventually, we'll want to determine the audio generator from the track config
-        prepare_output(event_stream, sample_rate, bpm).unwrap()
+        prepare_output(event_stream, sample_rate, bpm, &instrument.soundfont, instrument. bank, instrument.program)
     } else {
-        BufferedOutput::new()
+        Ok(BufferedOutput::new())
     }
  }
  

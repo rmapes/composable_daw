@@ -26,6 +26,7 @@ All of the components that make up the structure of a 'song'
 use std::{error::Error, time::Duration};
 use std::fmt;
 
+use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::sequences::{PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{PatternIdentifier, TrackIdentifier};
 pub trait AudioGenerator {
@@ -44,6 +45,22 @@ pub trait AudioConsumer {
 }
 
 pub struct VirtualInstrument {
+    pub kind: Instrument,
+}
+
+impl Default for VirtualInstrument {
+    fn default() -> Self {
+        Self {
+            kind: Instrument::Synth(SimpleSynth::default()),
+        }
+    }
+}
+
+impl MidiConsumer for VirtualInstrument {
+
+}
+
+impl AudioGenerator for VirtualInstrument {
 
 }
 
@@ -139,6 +156,7 @@ pub struct Track {
 
     // Generator pipelines
     pub midi: Option<SequenceContainer>,
+    pub instrument: VirtualInstrument,
 
     // Outputs
     /// Sends + Returns
@@ -176,6 +194,7 @@ impl Track {
             id,
             name,
             midi: Some(SequenceContainer::new(ppq)), // If track type == midi
+            instrument: VirtualInstrument::default(),
             audio_input: AudioBuss {  },
             audio_output:  AudioConnector { },
             ppq,
