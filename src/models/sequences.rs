@@ -28,16 +28,6 @@ pub trait EventStreamSource {
     fn to_event_stream(&self) -> EventStream;
 }
 
-// Event time represents when an event will occur as a number of ticks or pulses from an origin time
-struct EventTime {
-    ticks: u32
-}
-
-impl EventTime {
-    fn as_ticks(&self, _sample_rate: u32) -> u32 {
-        self.ticks
-    }
-}
 pub struct EventStream{
     ppq: u32, //ppq = pulses per quarter = pulses per quarter beat = ticks per beat. 
     events: HashMap<u32, HashMap<EventPriority, Vec<MidiEvent>>>,
@@ -57,7 +47,7 @@ impl EventStream{
     /* Take ownership of event and add to event list */
     fn store_event(&mut self, event: MidiEvent) {
         // Add event at its tick and priority
-        let event_tick = event.get_event_time().as_ticks(self.ppq);
+        let event_tick = event.get_event_time();
         let tick_block = self.events.entry(event_tick).or_default();
         let tick_priority_block = tick_block.entry(event.get_priority()).or_default();
         tick_priority_block.push(event);
@@ -141,15 +131,15 @@ impl TSequence for PatternSeq {
 
 pub struct MidiEvent {
     event: oxisynth::MidiEvent,
-    ticks: u32
+    ticks: Tick,
 }
 
 impl MidiEvent {
     pub fn get_priority(&self) -> EventPriority {
         EventPriority::Audio
     }
-    pub fn get_event_time(&self) ->  EventTime {
-        EventTime{ ticks: self.ticks }
+    pub fn get_event_time(&self) ->  Tick {
+        self.ticks
     }  
     pub fn to_midi(&self) -> oxisynth::MidiEvent {
         self.event
