@@ -3,9 +3,11 @@ use iced::Length;
 use iced::Element;
 use iced::{Subscription, window, Task};
 use log::info;
+use crate::models::instuments::Instrument;
 use crate::models::sequences::Sequence;
 use crate::models::shared::ProjectData;
 use crate::engine;
+use crate::ui::actions::SynthMessage;
 
 use super::components;
 use super::composer_window;
@@ -112,6 +114,25 @@ impl MainWindow {
                 self.selected_track = id.track_id;
                 Task::none()
             }
+            Message::Synth(synth_message) => match synth_message {
+                SynthMessage::SelectSoundFont(_track_id) => Task::none(), // TODO: open dialog box
+                SynthMessage::SetBank(track_id, bank) => {
+                    if let Ok(mut project) = self.data.write() {
+                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                        let Instrument::Synth(synth) = instrument;
+                        synth.bank = bank;
+                    }
+                    Task::none()
+                },
+                SynthMessage::SetProgram(track_id, program) => {
+                    if let Ok(mut project) = self.data.write() {
+                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                        let Instrument::Synth(synth) = instrument;
+                            synth.program = program;
+                        }
+                    Task::none()
+                }
+            },
         }
     }
     pub fn view(&self) ->Element<'_, Message> {

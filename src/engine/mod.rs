@@ -13,7 +13,7 @@ use crate::engine::buss::BufferedOutput;
 use crate::engine::synth::prepare_output;
 use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::shared::ProjectData;
-use crate::models::components::{Track, VirtualInstrument};
+use crate::models::components::Track;
 
 pub struct EngineController {
     tx: mpsc::Sender<Actions>,
@@ -129,7 +129,7 @@ fn play_structure(structure: &ProjectData) -> Result<(), Box<dyn Error>> {
     // Get the midi event stream
     if let Some(event_stream) = &track.midi {
     // For the moment, just pipe into synth. Eventually, we'll want to determine the audio generator from the track config
-        prepare_output(event_stream, sample_rate, bpm, &instrument.soundfont, instrument. bank, instrument.program)
+        prepare_output(event_stream, sample_rate, bpm, &instrument.get_soundfont_path(), instrument. bank, instrument.program)
     } else {
         Ok(BufferedOutput::new())
     }

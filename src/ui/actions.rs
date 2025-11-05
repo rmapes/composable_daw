@@ -12,4 +12,12 @@ pub enum Message {
     PlayStopped,
     AddTrack,
     SelectTrack(TrackIdentifier),
+    Synth(SynthMessage),
+}
+
+#[derive(Debug, Clone)]
+pub enum SynthMessage {
+    SelectSoundFont(TrackIdentifier),
+    SetBank(TrackIdentifier, u32),
+    SetProgram(TrackIdentifier, u8),
 }
