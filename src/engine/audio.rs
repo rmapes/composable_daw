@@ -94,3 +94,118 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>
 	}
     // sprintln!("{:#?}", data);
 }
+
+
+/////////////////////////
+///  Tests
+/// 
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+
+    // Audio Engine
+    #[test]
+    fn audio_engine_start() {
+        // Smoke test to make sure everything works
+        let engine = init_audio();
+        assert!(engine.is_ok());
+    }
+
+    // Test transferring data from Buss to audio output
+    const MOCK_INPUT_LEN: usize = 10; 
+    struct MockInput {
+        lbuff: [f32;MOCK_INPUT_LEN],
+        rbuff: [f32;MOCK_INPUT_LEN],
+    }
+    impl MockInput {
+        fn new() -> Self {
+            Self {
+                lbuff: [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09],
+                rbuff: [0.10, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19],
+            }
+        }
+    }
+    impl Output for MockInput {
+        fn write_f32(&mut self, 
+            len: usize, 
+            left_out: &mut [f32], 
+            _loff: usize, 
+            _lincr: usize, 
+            right_out: &mut [f32], 
+            _roff: usize, 
+            _rincr: usize,
+        ) {
+            assert!(len == MOCK_INPUT_LEN); // Fixing the size for test purposes
+            for i in 0..len {
+                left_out[i] = self.lbuff[i];
+                right_out[i] = self.rbuff[i];
+            }
+        }
+    }
+    macro_rules! assert_approx_eq {
+        ($x:expr, $y:expr, $d:expr) => {
+            if !($x - $y < $d || $y - $x < $d) { panic!(); }
+        }
+    }
+
+    fn assert_approx_eq_array(ary: &[f32], expected:&[f32]) {
+        assert_eq!(ary.len(), expected.len());
+        for i in 0..ary.len() {
+            assert_approx_eq!(ary[i], expected[i], 0.0001);
+        }
+    }
+
+    #[test]
+    fn fill_data_buffer_should_combine_stereo_for_mono_output() {
+        // Set up
+        let mut raw_buss = Buss::new();
+        let input = Box::new(MockInput::new()); 
+        raw_buss.add_input(input);
+        let buss = Arc::new(Mutex::new(raw_buss));
+        // Test
+        let mut data = [0.0_f32; MOCK_INPUT_LEN];
+        fill_output_buffer(&mut data, 1, &buss);
+        assert_approx_eq_array(&data, &[0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.14])
+    }
+
+    #[test]
+    fn fill_data_buffer_should_interleave_stereo_for_stereo_output() {
+        // Set up
+        let mut raw_buss = Buss::new();
+        let input = Box::new(MockInput::new()); 
+        raw_buss.add_input(input);
+        let buss = Arc::new(Mutex::new(raw_buss));
+        // Test
+        let mut data = [0.0_f32; 2*MOCK_INPUT_LEN];
+        fill_output_buffer(&mut data, 2, &buss);
+        assert_approx_eq_array(&data, &[0.0, 0.1, 0.01, 0.11, 0.02, 0.12, 0.03, 0.13, 0.04, 0.14, 0.05, 0.15, 0.06, 0.16, 0.07, 0.17, 0.08, 0.18, 0.09, 0.19])
+    }
+
+    #[test]
+    fn fill_data_buffer_should_interleave_stereo_for_multichannel_output() {
+        // Set up
+        let mut raw_buss = Buss::new();
+        let input = Box::new(MockInput::new()); 
+        raw_buss.add_input(input);
+        let buss = Arc::new(Mutex::new(raw_buss));
+        // Test
+        let mut data = [0.0_f32; 3*MOCK_INPUT_LEN];
+        fill_output_buffer(&mut data, 3, &buss);
+        // Interleave, but fill channels above 2 with 0.0
+        assert_approx_eq_array(&data, &[
+            0.0, 0.1, 0.0, 
+            0.01, 0.11, 0.0,
+            0.02, 0.12, 0.0,
+            0.03, 0.13, 0.0,
+            0.04, 0.14, 0.0,
+            0.05, 0.15, 0.0,
+            0.06, 0.16, 0.0,
+            0.07, 0.17, 0.0,
+            0.08, 0.18, 0.0,
+            0.09, 0.19, 0.0,
+        ])
+    }
+}
