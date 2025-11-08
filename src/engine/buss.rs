@@ -128,3 +128,59 @@ impl Output for BufferedOutput {
         self.right_read_start += len;
     }
 }
+
+/////////////////////////
+///  Tests
+/// 
+
+#[cfg(test)]
+mod tests {
+ 
+    use super::*;
+
+    const MOCK_INPUT_LEN: usize = 10; 
+    struct MockInput {
+        lbuff: [f32;MOCK_INPUT_LEN],
+        rbuff: [f32;MOCK_INPUT_LEN],
+    }
+    impl MockInput {
+        fn new() -> Self {
+            Self {
+                lbuff: [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09],
+                rbuff: [0.10, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19],
+            }
+        }
+    }
+    impl Output for MockInput {
+        fn write_f32(&mut self, len: usize, left_out: &mut [f32], loff: usize, lincr: usize, right_out: &mut [f32], roff: usize, rincr: usize) {
+            for i in 0..len {
+                left_out[loff + lincr*i] = self.lbuff[i];
+                right_out[roff + rincr*i] = self.rbuff[i];
+            }
+        }
+    }
+
+
+    // Buss
+
+    #[test]
+    fn buss_can_add_input() {
+        let mut buss = Buss::new();
+        buss.add_input(Box::new(MockInput::new()));
+        assert_eq!(buss.inputs.len(), 1);
+    }
+
+    #[test]
+    fn buss_can_write_f32() {
+        let mut buss = Buss::new();
+        let input = MockInput::new();
+        let expected_left_out = input.lbuff.clone();
+        let expected_right_out = input.rbuff.clone();
+        buss.add_input(Box::new(input));
+        let mut left_out = [0.0_f32; 10];
+        let mut right_out = [0.0_f32; 10];
+        buss.write_f32(10, &mut left_out, 0, 1, &mut right_out, 0, 1);
+        assert_eq!(left_out, expected_left_out);
+        assert_eq!(right_out, expected_right_out);
+    }
+}
