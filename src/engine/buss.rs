@@ -183,4 +183,22 @@ mod tests {
         assert_eq!(left_out, expected_left_out);
         assert_eq!(right_out, expected_right_out);
     }
+
+    // BufferedOutput
+
+    #[test]
+    fn buffered_output_can_be_created() {
+        let buffered_output = BufferedOutput::new();
+        assert_eq!(buffered_output.left_buf.len(), 0);
+        assert_eq!(buffered_output.right_buf.len(), 0);
+    }
+
+    #[test]
+    fn buffered_output_can_read_f32() {
+        let mut buffered_output = BufferedOutput::new();
+        let mut input = MockInput::new();
+        buffered_output.read_f32(10, &mut input);
+        assert_eq!(buffered_output.left_buf, input.lbuff);
+        assert_eq!(buffered_output.right_buf, input.rbuff);
+    }
 }
