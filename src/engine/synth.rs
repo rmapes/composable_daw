@@ -2,6 +2,7 @@ use log::debug;
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
+use std::path::Path;
 
 
 use crate::engine::buss::BufferedOutput;
@@ -34,7 +35,7 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &str, bank: u32, program: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
+pub fn prepare_output<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &P, bank: u32, program: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
 	let mut synth = create_synth(soundfont, bank, program)?;
 	synth.set_sample_rate(sample_rate as f32);
 	let event_stream = seq.to_event_stream();
@@ -55,8 +56,8 @@ pub fn prepare_output(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, so
 }
 
 
-fn create_synth(soundfont: &str, bank: u32, program: u8) ->  Result<Synth, Box<dyn Error>> {
-	debug!("Loading font from {soundfont}");
+fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, program: u8) ->  Result<Synth, Box<dyn Error>> {
+	debug!("Loading font from {}", ToString::to_string(soundfont));
 	let mut synth = Synth::default();
 	let mut file = File::open(soundfont)?; 
 	let font = SoundFont::load(&mut file)?; // TODO: handle

@@ -6,6 +6,7 @@ mod style;
 mod components;
 mod main_window;
 mod actions;
+mod file_picker;
 
 use main_window::MainWindow;
 

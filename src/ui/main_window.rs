@@ -15,6 +15,7 @@ use super::pattern_editor;
 use super::track_settings;
 use super::control_bar;
 use super::actions::Message;
+use super::file_picker::pick_file;
 
 use std::sync::{Arc, RwLock};
 use std::rc::Rc;
@@ -115,7 +116,22 @@ impl MainWindow {
                 Task::none()
             }
             Message::Synth(synth_message) => match synth_message {
-                SynthMessage::SelectSoundFont(_track_id) => Task::none(), // TODO: open dialog box
+                SynthMessage::SelectSoundFont(track_id) => {
+                    Task::perform(
+                        pick_file(track_id, "./soundfonts"), 
+                        |(track_id, path)| { Message::Synth(SynthMessage::SetSoundFont(track_id, path)) } 
+                    ) 
+                }
+                SynthMessage::SetSoundFont(track_id, soundfont_path) => {
+                    if let Some(path) = soundfont_path { 
+                        if let Ok(mut project) = self.data.write() {
+                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                            let Instrument::Synth(synth) = instrument;
+                            synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+                        }
+                    }
+                        Task::none()
+                }
                 SynthMessage::SetBank(track_id, bank) => {
                     if let Ok(mut project) = self.data.write() {
                         let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
