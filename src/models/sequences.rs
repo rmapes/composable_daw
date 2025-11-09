@@ -231,8 +231,7 @@ impl EventStreamSource for PatternSeq {
     fn to_event_stream(&self) -> EventStream {
         debug!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
         debug!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
-        let beats_per_minute: u32 = self.beats_per_quarter_note as u32 * self.bpm as u32;
-        let ticks_per_beat = self.ppq * 60 / beats_per_minute; // sample rate = ticks per second
+        let ticks_per_beat = self.ppq / self.beats_per_quarter_note as u32; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
         let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
         for beat in 0..self.num_beats {
