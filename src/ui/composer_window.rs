@@ -58,7 +58,7 @@ impl Component {
         ].into()
     }
     fn track_list(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
-        let mut track_list = column![].spacing(10);
+        let mut track_list = column![].spacing(1);
 
         // Iterate over our tasks and create a widget for each one
         for (id, track) in tracks.iter().enumerate() {
@@ -146,14 +146,12 @@ impl canvas::Program<Message, Theme> for TrackTimeline {
             let width = frame.width();
             let height = frame.height();
 
-            println!("Width: {width}");
 
             let length_per_bar = width / total_bars as f32;
-            println!("length_per_bar: {length_per_bar}");
 
             // Define stroke style for the wave
             let bar_line_stroke = Stroke {
-                style: canvas::Style::Solid(Color::from_rgb8(0x30, 0x90, 0xF0)),
+                style: canvas::Style::Solid(Color::from_rgb8(0x30, 0x30, 0x30)),
                 width: 1.0,
                 line_cap: LineCap::Square,
                 ..Stroke::default()
