@@ -168,7 +168,7 @@ pub struct Track {
     // Track Metadata
     pub id: TrackIdentifier,
     pub name: String,
-    ppq: u32, // TODO: Pass this in as a global settings object
+    pub ppq: u32, // TODO: Pass this in as a global settings object
 
 }
 
@@ -201,10 +201,14 @@ impl Track {
         }
     }
 
+    pub fn length_in_ticks(&self) -> Tick {
+        self.midi.as_ref().map(|s| s.length_in_ticks()).unwrap_or(0)
+    }
+
     pub fn duration(&self, ticks_per_second: u32) -> Duration {
         // Find last sequence
         // 15000 * pattern.num_beats as u64 / pattern.bpm as u64;
-        let length_in_ticks = self.midi.as_ref().map(|s| s.length_in_ticks()).unwrap_or(0) as f32;
+        let length_in_ticks = self.length_in_ticks() as f32;
         Duration::from_secs_f32(length_in_ticks / ticks_per_second as f32)
     }
 
