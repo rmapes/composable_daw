@@ -47,7 +47,7 @@ pub struct ProjectData {
     pub tracks: Vec<Track>,
     // Tempo and Measures
     pub bpm: u8,
-    ppq: u32,
+    pub ppq: u32,
 
 }
 

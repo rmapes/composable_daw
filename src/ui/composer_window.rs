@@ -27,6 +27,7 @@ pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
     }
 }
 
+const TIMELINE_WIDTH: f32 = 950.0;
 
 // Define components
 pub struct Component {
@@ -42,14 +43,26 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
+    pub fn view(&self, tracks: &[Track], selected_track: usize, ppq: u32) -> Element<'_, Message> {
+        const BARS_IN_TIMELINE: u32 = 16;
+        let length_in_ticks = ppq * 4 * BARS_IN_TIMELINE;
+        let length_per_tick = TIMELINE_WIDTH / length_in_ticks as f32;
+
+        let ruler_layer = row![
+            horizontal_space().width(Length::Fixed(100.0)),
+            iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE)).width(Length::Fixed(TIMELINE_WIDTH))                
+        ].height(Length::Fixed(10.0));
+
         components::module(
             column![
                 self.controls(),
-                self.track_list(tracks, selected_track),
+                ruler_layer,
+                self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE),
             ]
+            .spacing(0)
             .width(self.width)
-            .height(self.height).into()
+            .height(self.height)
+            .into()
         ).into()
     }
     fn controls(&self) -> Element<'_, Message> {
@@ -57,7 +70,7 @@ impl Component {
             button("+").on_press(Message::AddTrack),
         ].into()
     }
-    fn track_list(&self, tracks: &[Track], selected_track: usize) -> Element<'_, Message> {
+    fn track_list(&self, tracks: &[Track], selected_track: usize, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Element<'_, Message> {
         let mut track_list = column![].spacing(1);
 
         // Iterate over our tasks and create a widget for each one
@@ -66,7 +79,7 @@ impl Component {
             // `task` is a &Task
 
             let selected = id == selected_track;
-            let track_view = self.track(track, selected);
+            let track_view = self.track(track, selected, length_per_tick, ppq, beats_per_bar, bars_in_timeline);
 
             // Add the track
             track_list = track_list.push(track_view);
@@ -79,16 +92,18 @@ impl Component {
         // and limit its height.
         container(scrollable_list)
             .center_x(Length::Fill)
-            .center_y(Length::Fill) // You can also set a fixed height, e.g., `Length::Fixed(400.0)`
+            .align_y(iced::alignment::Vertical::Top) // You can also set a fixed height, e.g., `Length::Fixed(400.0)`
+            .padding(0)
             .into()       
     }
 
-    fn track(&self, track: &Track, is_selected: bool) -> Element<'_, Message> {
+    fn track(&self, track: &Track, is_selected: bool, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Element<'_, Message> {
         container(row![
             self.track_settings(track),
             // Timeline view
-            self.timeline_view(track).width(Length::Fill),
+            self.timeline_view(track, length_per_tick, ppq, beats_per_bar, bars_in_timeline).width(Length::Fill),
         ]).height(Length::Fixed(50.0))
+        .align_y(iced::alignment::Vertical::Top) // You can also set a fixed height, e.g., `Length::Fixed(400.0)`
         .style(track_style(is_selected))
         .into()
     }
@@ -103,14 +118,10 @@ impl Component {
         MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
     }
 
-    fn timeline_view(&self, track: &Track) -> Container<'_, Message> {
+    fn timeline_view(&self, track: &Track, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Container<'_, Message> {
         // Total width of the stack
-        const TIMELINE_WIDTH: f32 = 950.0;
-        const BARS_IN_TIMELINE: u32 = 16;
-        let length_in_ticks = track.ppq * 4 * BARS_IN_TIMELINE;
-        let length_per_tick = TIMELINE_WIDTH / length_in_ticks as f32;
         // 1. Timeline Canvas (Background Layer)
-        let timeline_layer = iced::widget::canvas(timeline(length_per_tick, track.ppq, 4, BARS_IN_TIMELINE))
+        let timeline_layer = iced::widget::canvas(timeline(length_per_tick, ppq, beats_per_bar, bars_in_timeline))
         .width(Length::Fixed(TIMELINE_WIDTH))
         .height(Length::Fill);
 
@@ -250,6 +261,84 @@ impl canvas::Program<Message, Theme> for TrackTimeline {
         vec![geometry]
     }
 }
+
+pub struct TickRuler {
+    length_per_tick: f32,
+    ppq: u32,
+    beats_per_bar: u8,
+    total_bars: u32,
+    cache: canvas::Cache,
+}
+
+impl TickRuler {
+    pub fn new(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars: u32) -> Self {
+        Self {length_per_tick, ppq, beats_per_bar, total_bars, cache: canvas::Cache::new()}
+    }
+}
+
+pub fn tick_ruler(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars: u32) -> TickRuler {
+    TickRuler::new(length_per_tick, ppq, beats_per_bar, total_bars)
+}
+
+impl canvas::Program<Message, Theme> for TickRuler {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: Cursor,
+    ) -> Vec<Geometry> {
+        // Use the cache; if the canvas size hasn't changed, this avoids re-drawing.
+        let geometry = self.cache.draw(renderer, bounds.size(), |frame: &mut Frame| {
+            
+            // --- Custom Drawing Logic ---
+            
+            // Background color
+            frame.fill(&Path::rectangle(Point::ORIGIN, bounds.size()), Color::from_rgb8(0x00, 0x00, 0x00));
+
+            let length_per_division = self.length_per_tick * self.ppq as f32;
+
+            // Define stroke style for the wave
+            let bar_line_stroke = Stroke {
+                style: canvas::Style::Solid(Color::from_rgb8(0x90, 0x90, 0x90)),
+                width: 1.0,
+                line_cap: LineCap::Square,
+                ..Stroke::default()
+            };
+
+            // Define stroke style for the wave
+            let division_line_stroke = Stroke {
+                style: canvas::Style::Solid(Color::from_rgb8(0x60, 0x60, 0x60)),
+                width: 1.0,
+                line_cap: LineCap::Square,
+                ..Stroke::default()
+            };
+
+            // Draw the wave
+            let total_divisions = self.total_bars * self.beats_per_bar as u32;
+            for division in 0..total_divisions {
+                let xpos = division as f32 * length_per_division;
+                if xpos < bounds.width {
+                    let stroke = {if division % self.beats_per_bar as u32 == 0 {bar_line_stroke} else {division_line_stroke}};
+                    let height = {if division % self.beats_per_bar as u32 == 0 {bounds.height} else {bounds.height / 2.0}};
+                    frame.stroke(&Path::line(
+                        Point { x: xpos, y: 0.0 },
+                        Point { x: xpos, y: height },
+                    ), stroke);
+                }
+            }
+
+            // --- End Drawing Logic ---
+        });
+
+        vec![geometry]
+    }
+}
+
+
 
 
 

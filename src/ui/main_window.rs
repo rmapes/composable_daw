@@ -4,7 +4,7 @@ use iced::Element;
 use iced::{Subscription, window, Task};
 use log::info;
 use crate::models::instuments::Instrument;
-use crate::models::sequences::Sequence;
+use crate::models::sequences::{Sequence, Tick};
 use crate::models::shared::{PatternIdentifier, ProjectData, TrackIdentifier};
 use crate::engine;
 
@@ -34,6 +34,7 @@ pub struct MainWindow {
     selected_track: usize,
     selected_pattern: Option<PatternIdentifier>,
     is_playing: bool,
+    playhead: Tick,
     // Preferences
     width: Length,
     height: Length,
@@ -68,6 +69,7 @@ impl Default for MainWindow {
             selected_track: selected_track.track_id,
             selected_pattern: Some(PatternIdentifier { track_id: selected_track, pattern_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             is_playing: false,
+            playhead: 0,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
@@ -202,7 +204,7 @@ impl MainWindow {
                         ).width(Length::Shrink), // Shrink to fit channel strips
                         column![
                             components::module_slot(
-                                self.composer_window.view(&song.tracks, self.selected_track),
+                                self.composer_window.view(&song.tracks, self.selected_track, song.ppq),
                             ),
                             components::module_slot(
                                 self.pattern_editor.view(selected_pattern),
