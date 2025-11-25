@@ -170,7 +170,13 @@ impl MainWindow {
                 }
                 Task::none()
             },
-            Message::NewFile => todo!(),
+            Message::NewFile => {
+                // Once we implement save, we should ask the user if they want to save before closing the current file
+                if let Ok(mut project) = self.data.write() {
+                    project.reset();
+                }
+                Task::none()
+            },
             Message::OpenFile => todo!(),
             Message::ShowHelp => todo!(),
         }

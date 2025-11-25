@@ -63,6 +63,12 @@ impl ProjectData {
         this
     }
 
+    pub fn reset(&mut self) {
+        // should mirror new
+        self.tracks = Vec::new();
+        self.new_track();
+    }
+
     pub fn ticks_per_second(&self) -> u32 {
         self.ppq * self.bpm as u32/ 60
     }
