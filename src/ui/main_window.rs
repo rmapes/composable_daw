@@ -5,16 +5,17 @@ use iced::{Subscription, window, Task};
 use log::info;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::Sequence;
-use crate::models::shared::ProjectData;
+use crate::models::shared::{PatternIdentifier, ProjectData, TrackIdentifier};
 use crate::engine;
-use crate::ui::actions::SynthMessage;
 
+use super::actions::Message;
+use super::actions::SynthMessage;
 use super::components;
 use super::composer_window;
-use super::pattern_editor;
-use super::track_settings;
 use super::control_bar;
-use super::actions::Message;
+use super::pattern_editor;
+use super::main_menu::top_menu_view;
+use super::track_settings;
 use super::file_picker::pick_file;
 
 use std::sync::{Arc, RwLock};
@@ -31,7 +32,7 @@ pub struct MainWindow {
 
     // Mutable state
     selected_track: usize,
-    selected_pattern: Option<u32>,
+    selected_pattern: Option<PatternIdentifier>,
     is_playing: bool,
     // Preferences
     width: Length,
@@ -59,12 +60,13 @@ impl Default for MainWindow {
             Arc::clone(&data),)
             
         );
+        let selected_track = TrackIdentifier{ track_id: 0 };
     
         Self {
             engine,
             data,
-            selected_track: 0,
-            selected_pattern: Some(0), // Temporary: select pattern by default. Relies on track beging created with initial pattern
+            selected_track: selected_track.track_id,
+            selected_pattern: Some(PatternIdentifier { track_id: selected_track, pattern_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             is_playing: false,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
@@ -115,6 +117,10 @@ impl MainWindow {
                 self.selected_track = id.track_id;
                 Task::none()
             }
+            Message::SelectPattern(id, _is_multi_select) => {
+                self.selected_pattern = Some(id);
+                Task::none()
+            }
             Message::Synth(synth_message) => match synth_message {
                 SynthMessage::SelectSoundFont(track_id) => {
                     Task::perform(
@@ -149,6 +155,24 @@ impl MainWindow {
                     Task::none()
                 }
             },
+            Message::DeselectAllPatterns() => {
+                self.selected_pattern = None;
+                Task::none()
+            },
+            Message::DeleteSelectedPattern() => {
+                if let Some(pattern) =self.selected_pattern {
+                if let Ok(mut project) = self.data.write() {
+                    let track = &mut project.tracks[pattern.track_id.track_id];
+                    track.delete_pattern(&pattern);
+                }
+
+                self.selected_pattern = None;
+                }
+                Task::none()
+            },
+            Message::NewFile => todo!(),
+            Message::OpenFile => todo!(),
+            Message::ShowHelp => todo!(),
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
@@ -156,13 +180,14 @@ impl MainWindow {
             if let Ok(song) = self.data.try_read() {
                 let selected_track =  &song.tracks[self.selected_track]; 
                 let selected_region: Option<&Sequence> = self.selected_pattern
-                    .and_then(|selection| selected_track.midi.as_ref()
-                        .and_then(|sequence| sequence.sequences.get(&selection)));
+                    .and_then(|selection| song.tracks[selection.track_id.track_id].midi.as_ref()
+                        .and_then(|sequence| sequence.sequences.get(&selection.pattern_id)));
                 let selected_pattern = match selected_region {
                     Some(Sequence::Pattern(p)) => Some(p),
                     _ => None, // Fix this when we support other region types
                 };
                 column![
+                    top_menu_view(),
                     self.control_bar.view(),
                     // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
                     row![

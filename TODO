@@ -1,3 +1,11 @@
+x 1. Select and deselect patterns 2. Add Menu with File/New and Edit/Delete Pattern
+. Implement file new
+. Implement Edit delete pattern 3. Allow deletion of pattern via delete key
+. Use context to determine what should be deleted? 3. Allow multi pattern select
+
+VVVVVVVV
+ARCHIVE
+
 Get Basic functionality working again
 
 x- Start track with a default pattern added and selected

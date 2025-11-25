@@ -237,6 +237,12 @@ impl Track {
         }
     }
 
+    pub fn delete_pattern(&mut self, id: &PatternIdentifier) {
+        let container = &mut self.midi.as_mut().unwrap().sequences;
+        let _ = container
+            .remove(&id.pattern_id)
+            .expect("Attempt to access pattern with invalid id");
+    }
 }
 
 

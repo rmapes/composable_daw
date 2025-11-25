@@ -5,6 +5,7 @@ mod track_settings;
 mod style;
 mod components;
 mod main_window;
+mod main_menu;
 mod actions;
 mod file_picker;
 

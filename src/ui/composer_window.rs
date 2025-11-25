@@ -84,16 +84,23 @@ impl Component {
     }
 
     fn track(&self, track: &Track, is_selected: bool) -> Element<'_, Message> {
-        let track_bar = container(row![
-            // self.track_settings()
-            column![
-                text(track.name.clone())
-            ].width(Length::Fixed(100.0)),
+        container(row![
+            self.track_settings(track),
             // Timeline view
             self.timeline_view(track).width(Length::Fill),
         ]).height(Length::Fixed(50.0))
-        .style(track_style(is_selected));
-        MouseArea::new(track_bar).on_press(Message::SelectTrack(track.id)).into()
+        .style(track_style(is_selected))
+        .into()
+    }
+
+    fn track_settings(&self, track: &Track) -> Element<'_, Message> {
+        let content = column![
+                text(track.name.clone())
+            ]
+            .width(Length::Fixed(100.0))
+            .height(Length::Fill)
+            ;
+        MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
     }
 
     fn timeline_view(&self, track: &Track) -> Container<'_, Message> {
@@ -133,11 +140,13 @@ impl Component {
         let content = Stack::with_children(layers)
             .width(Length::Fixed(TIMELINE_WIDTH))
             .height(Length::Fixed(50.0)) // Assuming track height is 50px
-            .into();
+            ;
 
-        components::display(
+        let clickable_content: MouseArea<'_, Message, _, _> = MouseArea::new(
             content
-        )    
+        ).on_press(Message::DeselectAllPatterns());
+
+        components::display(clickable_content.into())
     }
 
     fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<PatternIdentifier>)> {
@@ -152,10 +161,10 @@ impl Component {
         }).unwrap_or_default()
     }
 
-    fn region<'a>(&self, width: f32, marker_id: PatternIdentifier) -> Element<'a, Message> {
+    fn region<'a>(&self, width: f32, region_id: PatternIdentifier) -> Element<'a, Message> {
     
         // 1. Visual Element (The thin, tall "rectangle")
-        let marker_line = container(text(""))
+        let region_marker = container(text(""))
             .width(iced::Length::Fixed(width)) 
             .height(iced::Length::Fill)    
             .style(|_theme: &Theme| container::Style {
@@ -166,10 +175,11 @@ impl Component {
     
         // 2. Interactive Element
         // Wrap it in a button and handle the press action
-        // button(marker_line)
-        //     // .on_press(Message::MarkerPressed(marker_id)) // Your custom message
-        //     .padding(0) // Remove padding so the clickable area matches the 2px width
-        marker_line.into()
+        button(region_marker)
+            .on_press(Message::SelectPattern(region_id, false)) // Your custom message
+            .padding(0) // Remove padding so the clickable area matches the 2px width
+            .into()
+        // marker_line.into()
     }
 }
 
