@@ -1,6 +1,6 @@
 use iced::mouse::Cursor;
-use iced::widget::{ Container, MouseArea, Stack, button, column, container, horizontal_space, row, scrollable, text};
-use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke};
+use iced::widget::{ Container, MouseArea, Stack, stack, button, column, container, horizontal_space, row, scrollable, text};
+use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
 use crate::models::components::Track;
@@ -43,21 +43,31 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, tracks: &[Track], selected_track: usize, ppq: u32) -> Element<'_, Message> {
+    pub fn view(&self, tracks: &[Track], selected_track: usize, ppq: u32, playhead: Tick) -> Element<'_, Message> {
         const BARS_IN_TIMELINE: u32 = 16;
         let length_in_ticks = ppq * 4 * BARS_IN_TIMELINE;
         let length_per_tick = TIMELINE_WIDTH / length_in_ticks as f32;
+        const RULER_HEIGHT: f32 = 10.0;
 
         let ruler_layer = row![
             horizontal_space().width(Length::Fixed(100.0)),
             iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE)).width(Length::Fixed(TIMELINE_WIDTH))                
-        ].height(Length::Fixed(10.0));
+        ].height(Length::Fixed(RULER_HEIGHT));
 
         components::module(
             column![
                 self.controls(),
-                ruler_layer,
-                self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE),
+                stack![
+                    column![
+                    ruler_layer,
+                    self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE),
+                    ],
+                    row![
+                        horizontal_space().width(Length::Fixed(100.0)),
+                        iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill)
+                    ]         
+                ]
+                
             ]
             .spacing(0)
             .width(self.width)
@@ -338,6 +348,106 @@ impl canvas::Program<Message, Theme> for TickRuler {
     }
 }
 
+pub struct PlayheadMarker {
+    length_per_tick: f32,
+    playhead: Tick,
+    rule_height: f32,
+    cache: canvas::Cache,
+}
+
+impl PlayheadMarker {
+    pub fn new(playhead: Tick, length_per_tick: f32, rule_height: f32) -> Self {
+        Self {length_per_tick, playhead, rule_height, cache: canvas::Cache::new()}
+    }
+}
+
+pub fn playhead_marker(playhead: Tick, length_per_tick: f32, rule_height: f32) -> PlayheadMarker {
+    PlayheadMarker::new(playhead, length_per_tick, rule_height)
+}
+
+impl canvas::Program<Message, Theme> for PlayheadMarker {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: Cursor,
+    ) -> Vec<Geometry> {
+        // Use the cache; if the canvas size hasn't changed, this avoids re-drawing.
+        let geometry = self.cache.draw(renderer, bounds.size(), |frame: &mut Frame| {
+            
+            // --- Custom Drawing Logic ---
+            
+            // Background color
+            frame.fill(&Path::rectangle(Point::ORIGIN, bounds.size()), Color::TRANSPARENT);
+
+            // Draw the marker
+            let xpos = self.playhead as f32 * self.length_per_tick;
+            // Draw head
+            draw_playhead(xpos, 0.0, bounds, self.rule_height, frame);
+
+            // --- End Drawing Logic ---
+        });
+
+        vec![geometry]
+    }
+}
+fn draw_playhead(x: f32, y_top: f32, bounds: Rectangle, head_height: f32, frame: &mut Frame) {
+    let head_width = head_height;
+    // The point where the rectangle part stops and the triangle part begins
+    let shoulder_height = head_height * 0.5; 
+    
+    // Logic Pro-ish Color (Light Gray/Whiteish)
+    let playhead_color = Color::from_rgb8(220, 220, 220); 
+
+    // 2. DRAW THE VERTICAL LINE (The "String")
+    // We draw this first so it appears behind the head if they overlap slightly
+    let line_path = Path::line(
+        Point::new(x, y_top + head_height),
+        Point::new(x, bounds.height),
+    );
+
+    frame.stroke(
+        &line_path,
+        Stroke::default()
+            .with_color(playhead_color)
+            .with_width(1.0),
+    );
+
+    // 3. DRAW THE HEAD (The "Cap")
+    // Shape: Inverted House / Pentagon
+    let head_path = Path::new(|p| {
+        // Start at top-left corner
+        p.move_to(Point::new(x - head_width / 2.0, y_top));
+        
+        // Draw to top-right corner
+        p.line_to(Point::new(x + head_width / 2.0, y_top));
+        
+        // Draw down to the "shoulder" (right side)
+        p.line_to(Point::new(x + head_width / 2.0, y_top + shoulder_height));
+        
+        // Draw to the tip (center bottom)
+        p.line_to(Point::new(x, y_top + head_height));
+        
+        // Draw up to the "shoulder" (left side)
+        p.line_to(Point::new(x - head_width / 2.0, y_top + shoulder_height));
+        
+        // Close the shape back to start
+        p.close();
+    });
+
+    // Fill the head
+    frame.fill(&head_path, Fill::from(playhead_color));
+    
+    // Optional: Add a slight darker stroke around the head for contrast
+    frame.stroke(
+        &head_path, 
+        Stroke::default().with_color(Color::BLACK).with_width(1.0)
+    );
+}
 
 
 

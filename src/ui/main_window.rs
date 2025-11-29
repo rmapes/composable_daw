@@ -204,7 +204,7 @@ impl MainWindow {
                         ).width(Length::Shrink), // Shrink to fit channel strips
                         column![
                             components::module_slot(
-                                self.composer_window.view(&song.tracks, self.selected_track, song.ppq),
+                                self.composer_window.view(&song.tracks, self.selected_track, song.ppq, self.playhead),
                             ),
                             components::module_slot(
                                 self.pattern_editor.view(selected_pattern),
