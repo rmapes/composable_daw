@@ -1,4 +1,4 @@
-use iced::mouse::Cursor;
+use iced::mouse::{Button, Cursor, Event};
 use iced::widget::{ Container, MouseArea, Stack, stack, button, column, container, horizontal_space, row, scrollable, text};
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
@@ -64,8 +64,8 @@ impl Component {
                     ],
                     row![
                         horizontal_space().width(Length::Fixed(100.0)),
-                        iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill)
-                    ]         
+                        iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill).width(Length::Fill)
+                    ].width(Length::Fill)         
                 ]
                 
             ]
@@ -292,6 +292,27 @@ pub fn tick_ruler(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars:
 
 impl canvas::Program<Message, Theme> for TickRuler {
     type State = ();
+
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        event: iced::widget::canvas::Event,
+        bounds: Rectangle,
+        cursor: Cursor,
+    ) -> (iced::event::Status, Option<Message>) {
+        if let iced::widget::canvas::Event::Mouse(mouse_event) = event {
+            if let Some(cursor_position) = cursor.position_in(bounds) {
+                // Check for a mouse button press event (e.g., left click)
+                if matches!(mouse_event, Event::ButtonPressed(Button::Left)) {
+                    // convert cursor position to tick
+                    let tick_position = cursor_position.x / self.length_per_tick;
+                    // cursor_position is relative to the canvas bounds
+                    return (iced::event::Status::Captured, Some(Message::SetPlayhead(tick_position as u32)));
+                }
+            }
+        }
+        (iced::event::Status::Ignored, None)
+    }
 
     fn draw(
         &self,

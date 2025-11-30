@@ -7,14 +7,16 @@ x 2. Add Menu with File/New and Edit/Delete Pattern
 3. Allow creation of pattern at play head
    . implement play head
 
-- display across all tracks, initialised to zero
-- allow add pattern to create at pattern at play head or next available space (need to make this logic configuirable)
-- implement track tick ruler
+x - display across all tracks, initialised to zero
+x - implement track tick ruler
+
 - allow playhead location to be selected by clicking on tick ruler
 - allow playhead to follow along while playing. stays where it is when stopped
 - add stop button
 - clicking on stop while stopped should move playhead to start
 - If track continues outside display area, playhead reaching a predefined point (mid point of tick ruler?) should start scrolling track rather than moving playhead
+- allow add pattern to create at pattern at play head or next available space (need to make this logic configuirable)
+- add bar number to tick ruler
 
 3. Allow deletion of pattern via delete key
    . Use context to determine what should be deleted?

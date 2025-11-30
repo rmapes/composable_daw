@@ -181,6 +181,11 @@ impl MainWindow {
             },
             Message::OpenFile => todo!(),
             Message::ShowHelp => todo!(),
+            // Playhead actions
+            Message::SetPlayhead(tick_position) => {
+                self.playhead = tick_position;
+                Task::none()
+            },
         }
     }
     pub fn view(&self) ->Element<'_, Message> {

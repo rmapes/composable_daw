@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use iced::window;
 
-use crate::models::shared::{PatternIdentifier, PatternNoteIdentifier, TrackIdentifier};
+use crate::models::{sequences::Tick, shared::{PatternIdentifier, PatternNoteIdentifier, TrackIdentifier}};
 
 
 #[derive(Debug, Clone)]
@@ -18,6 +18,8 @@ pub enum Message {
     DeselectAllPatterns(),
     DeleteSelectedPattern(),
     Synth(SynthMessage),
+    // Playhead
+    SetPlayhead(Tick),
     // Menu
     NewFile,
     OpenFile,
