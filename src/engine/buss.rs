@@ -184,6 +184,30 @@ mod tests {
         assert_eq!(right_out, expected_right_out);
     }
 
+    #[test]
+    fn multiple_inputs_are_merged() {
+        let mut buss = Buss::new();
+        let mut input = MockInput::new();
+        for _ in 0..10 {
+            let mut buffered_output = BufferedOutput::new();
+            buffered_output.read_f32(10, &mut input);
+            buss.add_input(Box::new(buffered_output))
+        }
+        let input = MockInput::new();
+        let expected_left_out = input.lbuff.clone().map(|i| {10.0*i});
+        let expected_right_out = input.rbuff.clone().map(|i| {(10.0*i).min(1.0)});
+        // Get outputs
+        let mut left_out = [0.0_f32; 10];
+        let mut right_out = [0.0_f32; 10];
+        buss.write_f32(10, &mut left_out, 0, 1, &mut right_out, 0, 1);
+        for i in 0..expected_left_out.len() {
+            assert!((left_out[i] - expected_left_out[i]).abs() < 0.011, "Left:  {} != {}", left_out[i], expected_left_out[i]);
+            // Should saturate at 1
+            assert!((right_out[i] - expected_right_out[i]).abs() < 0.11, "Right:  {} != {}", right_out[i], expected_right_out[i]);
+        }
+    }
+
+
     // BufferedOutput
 
     #[test]

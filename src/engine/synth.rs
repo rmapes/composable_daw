@@ -46,6 +46,7 @@ pub fn prepare_output<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamS
 		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
 			// println!("Tick: {tick}");
 			for event in event_stream.get_events(tick, priority) {
+				// println!("Event at {tick}");
 				synth.send_event(event.to_midi())?;
 			}
 		}
