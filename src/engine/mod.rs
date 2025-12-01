@@ -113,6 +113,9 @@ where
                             if let Ok(song) = shared_data.read() {
                                 state.playhead = song.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
                                 // println!("Player: {}", state.playhead);
+                                // println!("Ticks per second: {}, Samples Played: {}, sample rate: {}", song.ticks_per_second(), state.samples_played, state.sample_rate);
+                                // println!("Player: {}", state.playhead);
+                                // println!("Beats: {}", state.playhead / song.ppq);
                             }
             
                         }                                

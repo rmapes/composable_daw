@@ -96,8 +96,8 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>
 			}
 		}
 	}
-    // Tell the system to move the playhead
-    let _ = tx.send(Actions::Internal(SystemActions::SamplesPlayed(data.len())));
+    // Tell the system to move the playhead. Send samples per channel, not total samples
+    let _ = tx.send(Actions::Internal(SystemActions::SamplesPlayed(data.len()/channels)));
 }
 
 
