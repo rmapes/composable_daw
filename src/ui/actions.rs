@@ -20,6 +20,7 @@ pub enum Message {
     Synth(SynthMessage),
     // Playhead
     SetPlayhead(Tick),
+    Tick,
     // Menu
     NewFile,
     OpenFile,

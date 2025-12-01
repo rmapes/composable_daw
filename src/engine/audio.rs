@@ -4,10 +4,12 @@ use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 use cpal::traits::StreamTrait;
 
+use super::actions::{Actions, SystemActions};
 use super::buss::{Buss, Output};
 use std::sync::Mutex;
 use std::sync::Arc;
 use std::error::Error;
+use std::sync::mpsc;
 
 pub struct AudioEngine {
 	_stream: cpal::Stream,
@@ -30,7 +32,7 @@ impl AudioEngine {
 }
 
 
-pub(crate) fn init_audio() -> Result<AudioEngine, Box<dyn Error>> {
+pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<dyn Error>> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -48,9 +50,11 @@ pub(crate) fn init_audio() -> Result<AudioEngine, Box<dyn Error>> {
         cpal::SampleFormat::F32 => {
             let buss_for_cb = buss.clone();
             let config: cpal::StreamConfig = supported.clone().into();
+            let tx = tx.clone();
+            let _ = tx.send(Actions::Internal(SystemActions::SetSampleRate(config.sample_rate.0)));
             device.build_output_stream(
                 &config,
-                move |data: &mut [f32], _| fill_output_buffer(data, channels, &buss_for_cb),
+                move |data: &mut [f32], _| fill_output_buffer(data, channels, &buss_for_cb, &tx),
                 err_fn,
                 None,
             )?
@@ -62,7 +66,7 @@ pub(crate) fn init_audio() -> Result<AudioEngine, Box<dyn Error>> {
     Ok(AudioEngine { _stream: stream , _input: buss, sample_rate: supported.sample_rate().0})
 }
 
-fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>) {
+fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>, tx: &mpsc::Sender<Actions>) {
 	let frames = data.len() / channels;
 	// Render exactly 'frames' samples per channel using write_f32 as per docs
 	let mut left = vec![0.0_f32; frames];
@@ -92,7 +96,8 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>
 			}
 		}
 	}
-    // sprintln!("{:#?}", data);
+    // Tell the system to move the playhead
+    let _ = tx.send(Actions::Internal(SystemActions::SamplesPlayed(data.len())));
 }
 
 
@@ -110,7 +115,8 @@ mod tests {
     #[test]
     fn audio_engine_start() {
         // Smoke test to make sure everything works
-        let engine = init_audio();
+        let (tx, _) = mpsc::channel::<Actions>();
+        let engine = init_audio(&tx);
         assert!(engine.is_ok());
     }
 
@@ -167,7 +173,8 @@ mod tests {
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test
         let mut data = [0.0_f32; MOCK_INPUT_LEN];
-        fill_output_buffer(&mut data, 1, &buss);
+        let (tx, _) = mpsc::channel::<Actions>();
+        fill_output_buffer(&mut data, 1, &buss, &tx);
         assert_approx_eq_array(&data, &[0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.14])
     }
 
@@ -180,7 +187,8 @@ mod tests {
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test
         let mut data = [0.0_f32; 2*MOCK_INPUT_LEN];
-        fill_output_buffer(&mut data, 2, &buss);
+        let (tx, _) = mpsc::channel::<Actions>();
+        fill_output_buffer(&mut data, 2, &buss, &tx);
         assert_approx_eq_array(&data, &[0.0, 0.1, 0.01, 0.11, 0.02, 0.12, 0.03, 0.13, 0.04, 0.14, 0.05, 0.15, 0.06, 0.16, 0.07, 0.17, 0.08, 0.18, 0.09, 0.19])
     }
 
@@ -193,7 +201,8 @@ mod tests {
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test
         let mut data = [0.0_f32; 3*MOCK_INPUT_LEN];
-        fill_output_buffer(&mut data, 3, &buss);
+        let (tx, _) = mpsc::channel::<Actions>();
+        fill_output_buffer(&mut data, 3, &buss, &tx);
         // Interleave, but fill channels above 2 with 0.0
         assert_approx_eq_array(&data, &[
             0.0, 0.1, 0.0, 

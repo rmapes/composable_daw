@@ -1,12 +1,13 @@
 use iced::widget::{column, Column, row};
 use iced::Length;
 use iced::Element;
+use iced::time;
 use iced::{Subscription, window, Task};
 use log::info;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::{Sequence, Tick};
 use crate::models::shared::{PatternIdentifier, ProjectData, TrackIdentifier};
-use crate::engine;
+use crate::engine::{self, PlayerState};
 
 use super::actions::Message;
 use super::actions::SynthMessage;
@@ -28,6 +29,7 @@ use std::rc::Rc;
 pub struct MainWindow {
     // Core application data and engine
     engine: Rc<engine::EngineController>,
+    player_state: Arc<RwLock<PlayerState>>,
     data: Arc<RwLock<ProjectData>>,
 
     // Mutable state
@@ -51,20 +53,22 @@ pub struct MainWindow {
 impl Default for MainWindow {
     fn default() -> Self {
         let data = Arc::new(RwLock::new(ProjectData::new()));
-        let engine = Rc::new(engine::start(
+        let (engine, player_state) = {
+            let (engine, player_state) = engine::start(
             {
                 move |_player_state: &engine::PlayerState| {
                     // Ignore this for the moment.
                     // Eventually, I'll need to work out how to handle internal state updates
                 }
             },
-            Arc::clone(&data),)
-            
-        );
+            Arc::clone(&data),);
+            (Rc::new(engine), player_state)
+        };
         let selected_track = TrackIdentifier{ track_id: 0 };
     
         Self {
             engine,
+            player_state,
             data,
             selected_track: selected_track.track_id,
             selected_pattern: Some(PatternIdentifier { track_id: selected_track, pattern_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
@@ -181,9 +185,17 @@ impl MainWindow {
             },
             Message::OpenFile => todo!(),
             Message::ShowHelp => todo!(),
-            // Playhead actions
             Message::SetPlayhead(tick_position) => {
                 self.playhead = tick_position;
+                Task::none()
+            },
+            Message::Tick => {
+                if let Ok(state) = self.player_state.try_read() {
+                    if state.is_playing {
+                        self.playhead = state.playhead;
+                        // println!("Tick: {}", state.playhead);
+                    }
+                }
                 Task::none()
             },
         }
@@ -225,9 +237,17 @@ impl MainWindow {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        // Subscribe to all window events
-        window::events().map(|(_id, event)| Message::WindowEvent(event))
+        // 1. Subscription for Window Events
+        let window_events = iced::window::events().map(|(_id, event)| Message::WindowEvent(event));
+    
+        // 2. Subscription for the Millisecond Tick
+        // Every 1 millisecond, send a Message::Tick
+        let tick = time::every(time::Duration::from_millis(1)).map(|_| Message::Tick);
+    
+        // 3. Combine both subscriptions
+        Subscription::batch(vec![window_events, tick])
     }
+    
     // Don't forget to stop engine on shutdown
     fn shutdown(&self) {
         info!("Shutting down");
