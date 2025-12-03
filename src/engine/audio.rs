@@ -9,6 +9,7 @@ use super::buss::{Buss, Output};
 use std::sync::Mutex;
 use std::sync::Arc;
 use std::error::Error;
+use std::sync::RwLock;
 use std::sync::mpsc;
 
 pub struct AudioEngine {
@@ -24,9 +25,9 @@ impl AudioEngine {
     pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
         self._stream.pause()
     }
-    pub fn add_input<O: Output + 'static>(&mut self, o: O) {
+    pub fn add_input(&mut self, o: Arc<RwLock<Box<dyn Output>>>) {
         if let Ok(mut guard) = self._input.lock() {
-            guard.add_input(Box::new(o));
+            guard.add_input(o);
         }
     }
 }
@@ -168,7 +169,7 @@ mod tests {
     fn fill_data_buffer_should_combine_stereo_for_mono_output() {
         // Set up
         let mut raw_buss = Buss::new();
-        let input = Box::new(MockInput::new()); 
+        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
         raw_buss.add_input(input);
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test
@@ -182,7 +183,7 @@ mod tests {
     fn fill_data_buffer_should_interleave_stereo_for_stereo_output() {
         // Set up
         let mut raw_buss = Buss::new();
-        let input = Box::new(MockInput::new()); 
+        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
         raw_buss.add_input(input);
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test
@@ -196,7 +197,7 @@ mod tests {
     fn fill_data_buffer_should_interleave_stereo_for_multichannel_output() {
         // Set up
         let mut raw_buss = Buss::new();
-        let input = Box::new(MockInput::new()); 
+        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
         raw_buss.add_input(input);
         let buss = Arc::new(Mutex::new(raw_buss));
         // Test

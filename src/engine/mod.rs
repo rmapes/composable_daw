@@ -10,7 +10,7 @@ use std::thread;
 
 use log::info;
 
-use crate::engine::buss::BufferedOutput;
+use crate::engine::buss::{BufferedOutput, Output};
 use crate::engine::synth::prepare_output;
 use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::shared::ProjectData;
@@ -156,10 +156,13 @@ fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>) 
     let _ = engine.pause(); // Engine starts with stream running. Stop it.
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len = std::time::Duration::from_millis(0);
-    let outputs: Result<Vec<BufferedOutput>, _> = structure.tracks.iter().map(|track| {
+    let outputs: Result<Vec<Arc<RwLock<Box<dyn Output>>>>, _> = structure.tracks.iter().map(|track| {
         len = max(len, track.duration(structure.ticks_per_second()));
         match &track.instrument.kind {
-            Instrument::Synth(instrument) => get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm, instrument)
+            Instrument::Synth(instrument) => get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm, instrument).map(|r| {
+                let output: Box<dyn Output> = Box::new(r);
+                Arc::new(RwLock::new(output))
+            })
         }
         
     }).collect();

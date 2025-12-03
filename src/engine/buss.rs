@@ -3,9 +3,11 @@ BUSS is a mechanism to take multiple audio inputs and combine into a single outp
 */
 
 use std::cmp::min;
+use std::sync::{Arc, RwLock};
 
 pub trait Output: Send + Sync {
     // fn write<S: IsSamples>(&mut self, samples: S);
+    // Needs to be mutable to allow buffer usage and storage of state
     fn write_f32(&mut self, 
         len: usize, 
         left_out: &mut [f32], 
@@ -30,7 +32,7 @@ pub trait Output: Send + Sync {
 const BUF_SIZE: usize = 512;
 
 pub struct Buss {
-    inputs: Vec<Box<dyn Output>>,
+    inputs: Vec<Arc<RwLock<Box<dyn Output>>>>,
     // Maintain static buffers to avoid allocating memory during playback
     buf_size: usize, // Fix in new. Cannot be altered, as tied to statically allocated buffers
     left_buf: [f32; BUF_SIZE],
@@ -48,7 +50,7 @@ impl Buss {
         }
     }
     // Note Buss should not own inputs, only borrow them
-    pub fn add_input(&mut self, input: Box<dyn Output>) {
+    pub fn add_input(&mut self, input: Arc<RwLock<Box<dyn Output>>>) {
         self.inputs.push(input);
     }
 }
@@ -63,21 +65,22 @@ impl Output for Buss {
         roff: usize, 
         rincr: usize,
     ) {
-
-        for input in self.inputs.iter_mut() {
-            let buf_size = min(len, self.buf_size);
-            let mut loff_local = loff;
-            let mut roff_local = roff;
-            let mut bytes_left = len;
-            while bytes_left > 0 {
-                let bytes_to_read = min(buf_size, bytes_left);
-                input.write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
-                bytes_left -= bytes_to_read;
-                for i in 0..bytes_to_read {
-                    left_out[loff_local] = 1.0_f32.min(left_out[loff_local] + self.left_buf[i]);
-                    loff_local += lincr;
-                    right_out[roff_local] = 1.0_f32.min(right_out[roff_local] + self.right_buf[i]);
-                    roff_local += rincr
+        for input_lock in self.inputs.iter() {
+            if let Ok(mut input) = input_lock.try_write() {
+                let buf_size = min(len, self.buf_size);
+                let mut loff_local = loff;
+                let mut roff_local = roff;
+                let mut bytes_left = len;
+                while bytes_left > 0 {
+                    let bytes_to_read = min(buf_size, bytes_left);
+                    input.write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
+                    bytes_left -= bytes_to_read;
+                    for i in 0..bytes_to_read {
+                        left_out[loff_local] = 1.0_f32.min(left_out[loff_local] + self.left_buf[i]);
+                        loff_local += lincr;
+                        right_out[roff_local] = 1.0_f32.min(right_out[roff_local] + self.right_buf[i]);
+                        roff_local += rincr
+                    }
                 }
             }
         }
@@ -166,17 +169,19 @@ mod tests {
     #[test]
     fn buss_can_add_input() {
         let mut buss = Buss::new();
-        buss.add_input(Box::new(MockInput::new()));
+        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new())));
+        buss.add_input(input);
         assert_eq!(buss.inputs.len(), 1);
     }
 
     #[test]
     fn buss_can_write_f32() {
         let mut buss = Buss::new();
-        let input = MockInput::new();
+        let input = Box::new(MockInput::new());
         let expected_left_out = input.lbuff.clone();
         let expected_right_out = input.rbuff.clone();
-        buss.add_input(Box::new(input));
+        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(input));
+        buss.add_input(input);
         let mut left_out = [0.0_f32; 10];
         let mut right_out = [0.0_f32; 10];
         buss.write_f32(10, &mut left_out, 0, 1, &mut right_out, 0, 1);
@@ -191,7 +196,7 @@ mod tests {
         for _ in 0..10 {
             let mut buffered_output = BufferedOutput::new();
             buffered_output.read_f32(10, &mut input);
-            buss.add_input(Box::new(buffered_output))
+            buss.add_input(Arc::new(RwLock::new(Box::new(buffered_output))))
         }
         let input = MockInput::new();
         let expected_left_out = input.lbuff.clone().map(|i| {10.0*i});
