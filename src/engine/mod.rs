@@ -65,6 +65,7 @@ where
     }
 }
 
+const ALWAYS_PLAY_FROM_START: bool  = false;
 pub fn start<F>(observer_callback: F, shared_data: Arc<RwLock<ProjectData>>) -> (EngineController, Arc<RwLock<PlayerState>>) 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
@@ -84,8 +85,15 @@ where
             actions::Actions::PlayMidi => {
                 if let Ok(mut state) = player_state.write() {
                     state.is_preparing_to_play = true;
-                    state.playhead = 0;
-                    state.samples_played = 0;
+                    if ALWAYS_PLAY_FROM_START {
+                        state.playhead = 0;
+                        state.sample_rate = 0;
+                    } else {
+                        if let Ok(song) = shared_data.read() {
+                            state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
+                            // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
+                        }
+                    }
                     
                 }
                 observer.notify();
@@ -127,7 +135,7 @@ where
                                 if let Ok(song) = shared_data.read() {
                                     let new_playhead = song.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
                                     if new_playhead != state.playhead {
-                                        // debug!("Playhead moved to {new_playhead}");
+                                        // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
                                         for tick in state.playhead..new_playhead {
                                             let _ = tick_sender.send(tick);
                                         }

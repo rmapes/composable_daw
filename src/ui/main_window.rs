@@ -187,6 +187,9 @@ impl MainWindow {
             Message::ShowHelp => todo!(),
             Message::SetPlayhead(tick_position) => {
                 self.playhead = tick_position;
+                if let Ok(mut state) = self.player_state.try_write() {
+                    state.playhead = self.playhead;
+                }
                 Task::none()
             },
             Message::Tick => {
