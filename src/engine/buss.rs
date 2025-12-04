@@ -2,10 +2,11 @@
 BUSS is a mechanism to take multiple audio inputs and combine into a single output
 */
 
+use std::any::Any;
 use std::cmp::min;
 use std::sync::{Arc, RwLock};
 
-pub trait Output: Send + Sync {
+pub trait Output: Any + Send + Sync {
     // fn write<S: IsSamples>(&mut self, samples: S);
     // Needs to be mutable to allow buffer usage and storage of state
     fn write_f32(&mut self, 
@@ -27,6 +28,16 @@ pub trait Output: Send + Sync {
     //         roff: usize,
     //         rincr: usize,
     // );      
+}
+
+// Enabled outputs to be downcast to original type
+impl dyn Output {
+    pub fn as_any(&self) -> &dyn Any {
+        self
+    }
+    pub fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 const BUF_SIZE: usize = 512;

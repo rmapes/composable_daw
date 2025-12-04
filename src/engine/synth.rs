@@ -1,12 +1,15 @@
-use log::debug;
+use crossbeam_channel::Receiver;
+use log::{debug, error};
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
+use std::thread::{self, JoinHandle};
 
 
 use crate::engine::buss::BufferedOutput;
-use crate::models::sequences::{EventStreamSource, EventPriority};
+use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use super::buss::Output;
 
 
@@ -42,18 +45,44 @@ pub fn prepare_output<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamS
 	let mut output = BufferedOutput::new();
 	debug!("Preparing output for event source");
 	for tick in 0..event_stream.get_length_in_ticks() {
-		// println!("Tick {tick}");
-		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
-			// println!("Tick: {tick}");
-			for event in event_stream.get_events(tick, priority) {
-				// println!("Event at {tick}");
-				synth.send_event(event.to_midi())?;
-			}
-		}
+		on_tick_unsafe(tick, &mut synth, &event_stream)?;
 		// Wait for next tick
 		output.read_f32((event_stream.get_tick_duration(bpm).as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth);
 	}
 	Ok(output)
+}
+
+fn on_tick_unsafe(tick: Tick, synth: &mut Synth, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
+	// println!("Tick {tick}");
+	for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
+		// println!("Tick: {tick}");
+		for event in event_stream.get_events(tick, priority) {
+			// println!("Event at {tick}");
+			synth.send_event(event.to_midi())?;
+		}
+	};
+	Ok(())
+}
+
+
+fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
+		// println!("Tick: {tick}");
+		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
+		for event in event_stream.get_events(tick, priority) {
+			// println!("Event at {tick}");
+			if let Ok(mut boxed_output_guard) = synth.try_write() {
+				// Get a mutable reference to the Box<dyn Output>
+				let boxed_output_ref: &mut Box<dyn Output> = &mut *boxed_output_guard;
+
+				// Attempt to downcast the trait object reference (&mut dyn Output)
+				if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
+					// println!("Playing event at {tick}");
+					s.send_event(event.to_midi())?;
+				}
+			}
+		}
+	};
+	Ok(())
 }
 
 
@@ -67,4 +96,46 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	let _ = synth.select_program(0, font_id, bank, program);
 	Ok(synth)
 }
+
+pub struct TrackThread {
+    pub synth: Arc<RwLock<Box<dyn Output>>>, // This will actually be a Synth type which we downcast later
+    event_stream: EventStream,
+}
+
+impl TrackThread {
+	pub fn new<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &P, bank: u32, program: u8) -> Self {
+		let synth: Arc<RwLock<Box<dyn Output>>> = {
+			let mut synth = create_synth(soundfont, bank, program).expect("Couldn't create synth");
+			synth.set_sample_rate(sample_rate as f32);
+			Arc::new(RwLock::new(Box::new(synth)))
+		};
+		let event_stream = seq.to_event_stream();
+		Self { synth, event_stream }
+	}
+	pub fn run(self, tick_source: Receiver<Tick>) -> JoinHandle<()> {
+		debug!("Spawning track thread");
+		thread::spawn(move || {
+			debug!("Starting track thread");
+            let event_stream = self.event_stream;
+			loop {
+				if let Ok(tick) = tick_source.recv() {
+					// println!("Receiving tick at {tick}");
+					if tick > event_stream.get_length_in_ticks() {
+						break;
+					}
+					if let Err(e) = on_tick(tick, self.synth.clone(), &event_stream) {
+						error!("Problem processing tick in track thread: {}", e);
+						break;
+					}
+				} else {
+					// Failed to receive tick
+					error!("Tick source pipeline broken in track thread");
+					break;
+				}
+			}
+			println!("Ending track thread");
+		})
+	}
+}
+
 
