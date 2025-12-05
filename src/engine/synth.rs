@@ -118,19 +118,22 @@ impl TrackThread {
 			debug!("Starting track thread");
             let event_stream = self.event_stream;
 			loop {
-				if let Ok(tick) = tick_source.recv() {
-					// println!("Receiving tick at {tick}");
-					if tick > event_stream.get_length_in_ticks() {
+				match tick_source.recv() {
+					Ok(tick) => {
+						// println!("Receiving tick at {tick}");
+						if tick > event_stream.get_length_in_ticks() {
+							break;
+						}
+						if let Err(e) = on_tick(tick, self.synth.clone(), &event_stream) {
+							error!("Problem processing tick in track thread: {}", e);
+							break;
+						}
+					}
+					Err(e) => {
+						// Failed to receive tick
+						error!("Tick source pipeline broken in track thread: {}", e);
 						break;
 					}
-					if let Err(e) = on_tick(tick, self.synth.clone(), &event_stream) {
-						error!("Problem processing tick in track thread: {}", e);
-						break;
-					}
-				} else {
-					// Failed to receive tick
-					error!("Tick source pipeline broken in track thread");
-					break;
 				}
 			}
 			println!("Ending track thread");

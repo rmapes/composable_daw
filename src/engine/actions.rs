@@ -1,5 +1,6 @@
 pub enum Actions {
     PlayMidi,
+    Pause,
     Quit,
     Internal(SystemActions),
 }

@@ -26,8 +26,10 @@ pub struct PlayerState {
     pub is_preparing_to_play: bool,
     pub is_playing: bool,
     pub is_active: bool,
+    pub is_audio_initialized: bool, // Only for use in this file
     // State for tracking audio output
     pub playhead: u32,
+
 
     // Internal system tracking
     samples_played: usize,
@@ -36,7 +38,14 @@ pub struct PlayerState {
 
 impl PlayerState {
     pub fn new() -> Self {
-        Self { is_preparing_to_play: false, is_playing: false, is_active: true, playhead: 0, samples_played: 0, sample_rate: 1 }
+        Self { 
+            is_preparing_to_play: false, 
+            is_playing: false, 
+            is_active: true, 
+            is_audio_initialized: false,
+            playhead: 0, 
+            samples_played: 0, 
+            sample_rate: 1 }
     }
 }
 
@@ -83,6 +92,24 @@ where
         let received = rx.recv().unwrap();
         match received {
             actions::Actions::PlayMidi => {
+                // First check to see if the audio system is already active
+                if let Ok(mut state) = player_state.write() {
+                    if state.is_preparing_to_play {
+                        // Pressed play again before the last play has taken effect.
+                        // Just wait for initialization to complete
+                        info!("Play pressed while preparing to play");
+                        return
+                    }
+                    if state.is_audio_initialized {
+                        // Audio is initialized, so either we pressed play while its already playinh
+                        // or we pressed play to while it was paused. Either way, set playing to true
+                        state.is_playing = true;
+                        info!("Play pressed. Audio already initialized");
+                        return
+                    }
+                }
+                // If we got here, we need to initialize the audio
+                info!("Initializing audio");
                 if let Ok(mut state) = player_state.write() {
                     state.is_preparing_to_play = true;
                     if ALWAYS_PLAY_FROM_START {
@@ -118,6 +145,13 @@ where
                     ));
                 });
             },
+            actions::Actions::Pause => {
+                if let Ok(mut state) = player_state.write() {
+                    if state.is_active && state.is_audio_initialized {
+                        state.is_playing = false;
+                    }
+                }
+            }
             actions::Actions::Quit => {
                 if let Ok(mut state) = player_state.write() {
                     state.is_active = false;
@@ -153,22 +187,27 @@ where
                     actions::SystemActions::PlaybackStarted => {
                         if let Ok(mut state) = player_state.write() {
                             state.is_playing = true;
+                            state.is_audio_initialized = true;
                             state.is_preparing_to_play = false;
-                            debug!("Starting to play");
+                            info!("Starting to play");
                         }
                         observer.notify();
                     },
                     actions::SystemActions::PlaybackFinished => {
                         if let Ok(mut state) = player_state.write() {
                             state.is_playing = false;
+                            state.is_audio_initialized = false;
+                            info!("Audio should have been dropped at end of play");
+
                         }
-                        debug!("Playback finished");
+                        info!("Playback finished");
                         observer.notify();
                     },
                 }
             }
         }
        }
+       info!("Exiting loop. Assuming Quit was pressed");
     }});
 
     
@@ -181,6 +220,9 @@ impl EngineController {
     }
     pub fn quit(&self) {
         let _ = self.tx.send(actions::Actions::Quit);
+    }
+    pub fn pause(&self) {
+        let _ = self.tx.send(actions::Actions::Pause);
     }
 
 }

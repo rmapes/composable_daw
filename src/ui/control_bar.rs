@@ -15,6 +15,8 @@ impl Component {
 
     pub fn view(&self) -> Row<'_, Message> {
         row![
+            icon_button( Icon::RewindToStart).on_press(Message::GoToStart),
+            icon_button( Icon::Stop ).on_press(Message::Stop),
             icon_button( Icon::Play ).on_press(Message::Play)
         ]
         .width(self.width)

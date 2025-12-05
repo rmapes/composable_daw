@@ -35,7 +35,6 @@ pub struct MainWindow {
     // Mutable state
     selected_track: usize,
     selected_pattern: Option<PatternIdentifier>,
-    is_playing: bool,
     playhead: Tick,
     // Preferences
     width: Length,
@@ -72,7 +71,6 @@ impl Default for MainWindow {
             data,
             selected_track: selected_track.track_id,
             selected_pattern: Some(PatternIdentifier { track_id: selected_track, pattern_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
-            is_playing: false,
             playhead: 0,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
@@ -105,12 +103,29 @@ impl MainWindow {
                 Task::none()
             },
             Message::Play => {
-                self.is_playing = true;                
+                if let Ok(mut state) = self.player_state.try_write() {
+                    if state.is_audio_initialized {
+                        state.is_playing = true;
+                        return Task::none()
+                    }
+                }
                 self.engine.play_midi();
-                Task::done(Message::PlayStopped)
+                Task::none()
             },
-            Message::PlayStopped => {
-                self.is_playing = false;
+            Message::Stop => {
+                // self.engine.pause();
+                if let Ok(mut state) = self.player_state.try_write() {
+                    if state.is_audio_initialized {
+                        state.is_playing = false;
+                    }
+                }
+                Task::none()
+            }
+            Message::GoToStart => {
+                if let Ok(mut state) = self.player_state.try_write() {
+                    state.playhead = 0;
+                    self.playhead = 0;
+                }
                 Task::none()
             },
             Message::AddTrack => {
