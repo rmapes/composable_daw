@@ -1,5 +1,6 @@
-use iced::{widget::{ button, text, row, Row }, Length};
+use iced::{widget::{ row, Row }, Length};
 use super::actions::Message;
+use super::components::icons::{icon_button, Icon};
 
 pub struct Component {
     width: Length,
@@ -14,7 +15,7 @@ impl Component {
 
     pub fn view(&self) -> Row<'_, Message> {
         row![
-            button( text("Play")).on_press(Message::Play)
+            icon_button( Icon::Play ).on_press(Message::Play)
         ]
         .width(self.width)
         .height(self.height)

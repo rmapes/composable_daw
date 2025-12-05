@@ -1,3 +1,5 @@
+pub mod icons;
+
 use iced::widget::{ container, Container};
 use iced::Element;
 use super::style;
