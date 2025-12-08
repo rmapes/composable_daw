@@ -346,7 +346,7 @@ impl EventStreamSource for SequenceContainer {
     fn to_event_stream(&self) -> EventStream {
         let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
         debug!("Converting {} sequences into events", self.sequences.len());
-        let _ = self.sequences.iter().for_each(|(offset, sequence)| {
+        for (offset, sequence) in  self.sequences.iter() {
             debug!("Operating on sequence at {}", offset);
             let sequence_events = sequence.to_event_stream();
             // Check whether we need to resample due to different sample rates
@@ -363,7 +363,7 @@ impl EventStreamSource for SequenceContainer {
                     }                        
                 }
             }
-        });
+        }
         event_stream
     }
 }
