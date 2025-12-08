@@ -1,1 +1,4 @@
+# Build artifacts
 /target
+# Mac artifacts
+.DS_Store
