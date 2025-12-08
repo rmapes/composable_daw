@@ -224,7 +224,7 @@ impl EngineController {
 }
 
 fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, tick_rx: crossbeam_channel::Receiver<Tick>) -> Result<(), Box<dyn Error>> {
-	let mut engine = audio::init_audio(&tx)?;
+	let mut engine = audio::init_audio(tx)?;
     let _ = engine.pause(); // Engine starts with stream running. Stop it.
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let tracks: Result<Vec<TrackThread>, _> = structure.tracks.iter().map(|track| {
@@ -257,7 +257,7 @@ fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, 
  }
 
  fn play_structure_buffered(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>) -> Result<(), Box<dyn Error>> {
-	let mut engine = audio::init_audio(&tx)?;
+	let mut engine = audio::init_audio(tx)?;
     let _ = engine.pause(); // Engine starts with stream running. Stop it.
     // Match synth sample rate to the device sample rate so pitch/timing are correct
     let mut len = std::time::Duration::from_millis(0);

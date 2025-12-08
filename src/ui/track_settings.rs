@@ -38,14 +38,13 @@ impl Component {
             components::control(
                 column![
                     text(track.name.clone()),
-                    self.instrument_config(&track.instrument.kind, &track.id),
+                    self.instrument_config(&track.instrument.kind, track.id),
                 ].into(),
             ),
         ]
     }
 
-    fn instrument_config(&self, instrument: &Instrument, track_id: &TrackIdentifier) -> Column<'_, Message> {
-        let track_id = track_id.clone();
+    fn instrument_config(&self, instrument: &Instrument, track_id: TrackIdentifier) -> Column<'_, Message> {
         match instrument {
             Instrument::Synth(synth) => {
                 column![

@@ -24,7 +24,7 @@ impl Component {
     pub fn view(&self, maybe_pattern: Option<&PatternSeq>) -> Element<'_, Message> {
         let content: Vec<Element<Message>> = if let Some(pattern) = maybe_pattern {
             (0..pattern.num_notes)
-                .map(|note_num| pattern_editor_row(&pattern, note_num).into())
+                .map(|note_num| pattern_editor_row(pattern, note_num).into())
                 .collect() // Collect into a temporary Vec
         } else {
             vec![] // An empty vec if no pattern

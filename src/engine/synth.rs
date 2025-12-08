@@ -72,7 +72,7 @@ fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &Event
 			// println!("Event at {tick}");
 			if let Ok(mut boxed_output_guard) = synth.try_write() {
 				// Get a mutable reference to the Box<dyn Output>
-				let boxed_output_ref: &mut Box<dyn Output> = &mut *boxed_output_guard;
+				let boxed_output_ref: &mut Box<dyn Output> = &mut boxed_output_guard;
 
 				// Attempt to downcast the trait object reference (&mut dyn Output)
 				if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
