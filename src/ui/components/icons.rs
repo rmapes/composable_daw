@@ -54,8 +54,6 @@ fn image_button<'a>(
             .width(Length::Fixed(20.0)) // Adjust size as needed
             .height(Length::Fixed(20.0))
     )
-    // Apply a custom style here to make it look like an icon button
-    .into()
 }
 
 pub fn icon_button<'a>(

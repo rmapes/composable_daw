@@ -103,21 +103,19 @@ impl MainWindow {
                 Task::none()
             },
             Message::Play => {
-                if let Ok(mut state) = self.player_state.try_write() {
-                    if state.is_audio_initialized {
+                if let Ok(mut state) = self.player_state.try_write() 
+                    && state.is_audio_initialized {
                         state.is_playing = true;
                         return Task::none()
-                    }
                 }
                 self.engine.play_midi();
                 Task::none()
             },
             Message::Stop => {
                 // self.engine.pause();
-                if let Ok(mut state) = self.player_state.try_write() {
-                    if state.is_audio_initialized {
+                if let Ok(mut state) = self.player_state.try_write() 
+                    && state.is_audio_initialized {
                         state.is_playing = false;
-                    }
                 }
                 Task::none()
             }
@@ -150,12 +148,11 @@ impl MainWindow {
                     ) 
                 }
                 SynthMessage::SetSoundFont(track_id, soundfont_path) => {
-                    if let Some(path) = soundfont_path { 
-                        if let Ok(mut project) = self.data.write() {
+                    if let Some(path) = soundfont_path  
+                        && let Ok(mut project) = self.data.write() {
                             let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                             let Instrument::Synth(synth) = instrument;
                             synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
-                        }
                     }
                         Task::none()
                 }
@@ -208,11 +205,10 @@ impl MainWindow {
                 Task::none()
             },
             Message::Tick => {
-                if let Ok(state) = self.player_state.try_read() {
-                    if state.is_playing {
-                        self.playhead = state.playhead;
-                        // println!("Tick: {}", state.playhead);
-                    }
+                if let Ok(state) = self.player_state.try_read() 
+                    && state.is_playing {
+                    self.playhead = state.playhead;
+                    // println!("Tick: {}", state.playhead);
                 }
                 Task::none()
             },

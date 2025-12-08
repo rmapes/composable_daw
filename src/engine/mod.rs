@@ -115,11 +115,9 @@ where
                     if ALWAYS_PLAY_FROM_START {
                         state.playhead = 0;
                         state.sample_rate = 0;
-                    } else {
-                        if let Ok(song) = shared_data.read() {
-                            state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
+                    } else if let Ok(song) = shared_data.read() {
+                        state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
                             // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
-                        }
                     }
                     
                 }
@@ -128,7 +126,7 @@ where
                 let tick_receiver = tick_receiver.clone();
                 // Ensure receiver is empty before we start
                 loop {
-                    if let Err(_) = tick_receiver.recv_timeout(Duration::from_millis(1)) {
+                    if tick_receiver.recv_timeout(Duration::from_millis(1)).is_err() {
                         break;
                     }
                 }
@@ -146,10 +144,9 @@ where
                 });
             },
             actions::Actions::Pause => {
-                if let Ok(mut state) = player_state.write() {
-                    if state.is_active && state.is_audio_initialized {
+                if let Ok(mut state) = player_state.write()
+                    && state.is_active && state.is_audio_initialized {
                         state.is_playing = false;
-                    }
                 }
             }
             actions::Actions::Quit => {
@@ -162,8 +159,8 @@ where
                 match sys_ev {
                     actions::SystemActions::SamplesPlayed(num_samples) => {
                         // debug!("Samples played");
-                        if let Ok(mut state) = player_state.write() {
-                            if state.is_playing {
+                        if let Ok(mut state) = player_state.write() 
+                            && state.is_playing {
                                 state.samples_played += num_samples;
                                 // Convert to playhead location
                                 if let Ok(song) = shared_data.read() {
@@ -176,7 +173,6 @@ where
                                         state.playhead = new_playhead;
                                     }
                                 }
-                            }
                         }                                
                     }
                     actions::SystemActions::SetSampleRate(sample_rate) => {

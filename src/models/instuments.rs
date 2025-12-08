@@ -10,7 +10,7 @@ pub struct SimpleSynth {
 impl Default for SimpleSynth {
     fn default() -> Self {
         Self {
-            soundfont: format!("airfont_340.sf2"),
+            soundfont: "airfont_340.sf2".to_string(),
             bank: 0,
             program: 0,
         }

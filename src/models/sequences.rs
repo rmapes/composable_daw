@@ -317,10 +317,9 @@ impl SequenceContainer {
     pub fn region_collides_with_existing(&self, start_tick: Tick, length: Tick) -> bool {
         // Check start not in preceding region
         for tick in 0..start_tick {
-            if self.sequences.contains_key(&tick) {
-                if self.sequences[&tick].length_in_ticks() > start_tick - tick {
+            if self.sequences.contains_key(&tick) 
+                && self.sequences[&tick].length_in_ticks() > start_tick - tick {
                     return true;
-                }
             }
         }
         // Check no region starts in this region

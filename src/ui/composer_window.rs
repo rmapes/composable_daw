@@ -300,8 +300,8 @@ impl canvas::Program<Message, Theme> for TickRuler {
         bounds: Rectangle,
         cursor: Cursor,
     ) -> (iced::event::Status, Option<Message>) {
-        if let iced::widget::canvas::Event::Mouse(mouse_event) = event {
-            if let Some(cursor_position) = cursor.position_in(bounds) {
+        if let iced::widget::canvas::Event::Mouse(mouse_event) = event 
+            && let Some(cursor_position) = cursor.position_in(bounds) {
                 // Check for a mouse button press event (e.g., left click)
                 if matches!(mouse_event, Event::ButtonPressed(Button::Left)) {
                     // convert cursor position to tick
@@ -309,7 +309,6 @@ impl canvas::Program<Message, Theme> for TickRuler {
                     // cursor_position is relative to the canvas bounds
                     return (iced::event::Status::Captured, Some(Message::SetPlayhead(tick_position as u32)));
                 }
-            }
         }
         (iced::event::Status::Ignored, None)
     }
