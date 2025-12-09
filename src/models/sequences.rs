@@ -131,6 +131,7 @@ impl TSequence for PatternSeq {
 type U7 = u8; // From oxisynth
 type U14 = u16; // From oxisynth
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[allow(dead_code)] // We should implement the full spec now, despite not needing all of it yet
 pub enum MidiEvent {
     /// Send a noteon message.
     NoteOn {
@@ -272,6 +273,7 @@ impl EventStreamSource for PatternSeq {
 
 // Implement Sequence Polymorphism
 
+#[allow(dead_code)] // Possibly a YAGN, but we're anticipating needing SequenceContainer.
 pub enum Sequence {
     Pattern(PatternSeq),
     SequenceContainer(SequenceContainer)

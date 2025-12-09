@@ -20,7 +20,6 @@ All of the components that make up the structure of a 'song'
 - General / Settings
 */
 
-
 /*** Generators ****/
 
 use std::{error::Error, time::Duration};
