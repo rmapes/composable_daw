@@ -173,6 +173,31 @@ impl MainWindow {
                     Task::none()
                 }
             },
+            Message::AddPatternAtPlayhead() => {
+                let player_state = self.player_state.clone();
+                let selected_track = self.selected_track;
+                Task::perform(async move {
+                    if let Ok(state) = player_state.read() {
+                        let track_id = TrackIdentifier { track_id: selected_track};
+                        let tick = state.playhead;
+                        return (Some(track_id), tick)
+                    }
+                    ( None, 0)
+                }, |(maybe_track_id, tick)| { 
+                    if let Some(track_id) = maybe_track_id {
+                        Message::AddPatternAt(track_id, tick) 
+                    } else {
+                        Message::Ignore
+                    }
+                })
+            },
+            Message::AddPatternAt(track_id, tick) => {
+                if let Ok(mut project) = self.data.write() {
+                    let track = &mut project.tracks[track_id.track_id];
+                    let _ = track.add_pattern_at(tick);
+                }
+                Task::none()
+            },
             Message::DeselectAllPatterns() => {
                 self.selected_pattern = None;
                 Task::none()
@@ -196,7 +221,6 @@ impl MainWindow {
                 Task::none()
             },
             Message::OpenFile => todo!(),
-            Message::ShowHelp => todo!(),
             Message::SetPlayhead(tick_position) => {
                 self.playhead = tick_position;
                 if let Ok(mut state) = self.player_state.try_write() {
@@ -212,6 +236,7 @@ impl MainWindow {
                 }
                 Task::none()
             },
+            Message::Ignore => Task::none(),
         }
     }
     pub fn view(&self) ->Element<'_, Message> {

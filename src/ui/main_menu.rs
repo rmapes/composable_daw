@@ -1,7 +1,7 @@
 use iced::widget::{button, text};
 use iced::Element;
 use iced_aw::menu::Item;
-use iced_aw::{Menu, MenuBar, menu_bar, menu_items};
+use iced_aw::{Menu, menu_bar, menu_items};
 
 use super::actions::Message;
 
@@ -40,6 +40,7 @@ pub fn top_menu_view() -> Element<'static, Message>
             menu_tpl_1(menu_items!(
                 // (text("New"))
                 // (text("Open"))
+                (button(text("Add Pattern")).on_press(Message::AddPatternAtPlayhead()))
                 (button(text("Delete Pattern")).on_press(Message::DeleteSelectedPattern()))
             )
         ))

@@ -17,6 +17,8 @@ pub enum Message {
     SelectTrack(TrackIdentifier),
     SelectPattern(PatternIdentifier, bool), 
     DeselectAllPatterns(),
+    AddPatternAtPlayhead(),
+    AddPatternAt(TrackIdentifier, Tick),
     DeleteSelectedPattern(),
     Synth(SynthMessage),
     // Playhead
@@ -25,7 +27,8 @@ pub enum Message {
     // Menu
     NewFile,
     OpenFile,
-    ShowHelp,
+    // For abandoning task chains
+    Ignore,
 }
 
 #[derive(Debug, Clone)]
