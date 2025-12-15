@@ -3,6 +3,8 @@ use iced::Element;
 use iced_aw::menu::Item;
 use iced_aw::{Menu, menu_bar, menu_items};
 
+use crate::models::shared::RegionType;
+
 use super::actions::Message;
 
 pub fn top_menu_view() -> Element<'static, Message>
@@ -40,8 +42,9 @@ pub fn top_menu_view() -> Element<'static, Message>
             menu_tpl_1(menu_items!(
                 // (text("New"))
                 // (text("Open"))
-                (button(text("Add Pattern")).on_press(Message::AddPatternAtPlayhead()))
-                (button(text("Delete Pattern")).on_press(Message::DeleteSelectedPattern()))
+                (button(text("Add Pattern")).on_press(Message::AddRegionAtPlayhead(RegionType::Pattern)))
+                (button(text("Add Midi")).on_press(Message::AddRegionAtPlayhead(RegionType::Midi)))
+                (button(text("Delete Region")).on_press(Message::DeleteSelectedRegion()))
             )
         ))
     ).into()

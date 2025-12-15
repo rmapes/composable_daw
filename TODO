@@ -1,3 +1,24 @@
+Features to get us fully functional:
+
+1. Regions
+   1.1 Midi Sequence
+   1.2 Audio
+2. Region Length
+   2.1 Draggable
+   2.2 Movable
+   2.3 Repeat
+3. Track length
+   3.1 Scrollable
+4. Project
+   4.1 Edit bpm / tempo
+5. Save
+6. Additional instruments
+
+- Drums
+- Synthesizer
+
+7. Effects
+
 x 1. Select and deselect patterns
 
 x 2. Add Menu with File/New and Edit/Delete Pattern

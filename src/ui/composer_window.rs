@@ -3,9 +3,10 @@ use iced::widget::{ Container, MouseArea, Stack, stack, button, column, containe
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
+use log::info;
 use crate::models::components::Track;
 use crate::models::sequences::{TSequence, Tick};
-use crate::models::shared::PatternIdentifier;
+use crate::models::shared::RegionIdentifier;
 use super::components;
 use super::actions::Message;
 
@@ -165,24 +166,25 @@ impl Component {
 
         let clickable_content: MouseArea<'_, Message, _, _> = MouseArea::new(
             content
-        ).on_press(Message::DeselectAllPatterns());
+        ).on_press(Message::DeselectAllRegions());
 
         components::display(clickable_content.into())
     }
 
-    fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<PatternIdentifier>)> {
+    fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<RegionIdentifier>)> {
         track.midi.as_ref().map(|m| {
             m.sequences.iter().map(|(tick, region)| {
                 let identifier = match region {
                     crate::models::sequences::Sequence::Pattern(pattern_seq) => Some(pattern_seq.id),
                     crate::models::sequences::Sequence::SequenceContainer(_sequence_container) => None,
+                    crate::models::sequences::Sequence::Midi(midi_seq) =>  Some(midi_seq.id),
                 };
                 (*tick, region.length_in_ticks(), identifier)
             }).collect()
         }).unwrap_or_default()
     }
 
-    fn region<'a>(&self, width: f32, region_id: PatternIdentifier) -> Element<'a, Message> {
+    fn region<'a>(&self, width: f32, region_id: RegionIdentifier) -> Element<'a, Message> {
     
         // 1. Visual Element (The thin, tall "rectangle")
         let region_marker = container(text(""))
@@ -197,7 +199,7 @@ impl Component {
         // 2. Interactive Element
         // Wrap it in a button and handle the press action
         button(region_marker)
-            .on_press(Message::SelectPattern(region_id, false)) // Your custom message
+            .on_press(Message::SelectRegion(region_id, false)) // Your custom message
             .padding(0) // Remove padding so the clickable area matches the 2px width
             .into()
         // marker_line.into()

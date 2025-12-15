@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::slice::Iter;
 
 use log::debug;
 
-use crate::models::shared::PatternIdentifier;
+use crate::models::shared::RegionIdentifier;
 
 
 
@@ -80,7 +80,7 @@ pub trait TSequence {
 
 #[derive(Clone)]
 pub struct PatternSeq {
-    pub id: PatternIdentifier,
+    pub id: RegionIdentifier,
     pub note_values: Vec<u8>,
     pub num_notes: u8,
     pub num_beats: u8,
@@ -100,7 +100,7 @@ impl PatternSeq {
         self.pattern[beat_num as usize][note_num as usize] = !self.pattern[beat_num as usize][note_num as usize];
     }
 
-    pub fn new(id: PatternIdentifier, ppq: u32) -> Self {
+    pub fn new(id: RegionIdentifier, ppq: u32) -> Self {
         let note_values = vec![72,71,69,67,65,64,62,60];
         let num_notes = note_values.len() as u8;
         let num_beats = 16;
@@ -271,11 +271,67 @@ impl EventStreamSource for PatternSeq {
     }    
 }
 
+// Implement midi seq 
+#[derive(Debug, Copy, Clone)]
+pub struct MidiNote {
+    pub channel: u8,
+    pub key: u8,
+    pub velocity: u8,
+    pub length: Tick,
+}
+
+#[derive(Clone)]
+pub struct MidiSeq {
+    pub id: RegionIdentifier,
+    pub notes: BTreeMap<Tick, Vec<MidiNote>>,
+    pub length: Tick,
+    pub ppq: u32, /* ticks per quarter note */
+}
+
+impl MidiSeq {
+    pub fn new(id: RegionIdentifier, ppq: u32) -> Self {
+        Self { 
+            id,
+            notes: BTreeMap::new(), 
+            length: ppq * 4,
+            ppq,
+        }
+    }
+}
+
+impl TSequence for MidiSeq {
+    fn length_in_ticks(&self) -> Tick {
+        self.length
+    }
+}
+
+impl EventStreamSource for MidiSeq {
+    fn to_event_stream(&self) -> EventStream {
+        let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
+        for current_tick in self.notes.keys() {
+            for note in self.notes[current_tick].as_slice() {
+                // Add event for note on
+                event_stream.store_event(MidiEventAt {
+                    event: MidiEvent::NoteOn { channel: note.channel, key: note.key, vel: note.velocity }, 
+                    ticks: *current_tick,
+                });
+                // Add event for note off
+                event_stream.store_event(MidiEventAt {
+                    event: MidiEvent::NoteOff { channel: note.channel, key: note.key }, 
+                    ticks: *current_tick + note.length
+                });
+            }
+        }
+        event_stream
+    }    
+}
+
 // Implement Sequence Polymorphism
 
 #[allow(dead_code)] // Possibly a YAGN, but we're anticipating needing SequenceContainer.
 pub enum Sequence {
     Pattern(PatternSeq),
+    Midi(MidiSeq),
     SequenceContainer(SequenceContainer)
 }
                                                                                                
@@ -284,6 +340,7 @@ impl EventStreamSource for Sequence {
         debug!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
+            Sequence::Midi(seq) => seq.to_event_stream(),
             Sequence::SequenceContainer(seq) => seq.to_event_stream()
         }
     }
@@ -293,7 +350,8 @@ impl TSequence for Sequence {
     fn length_in_ticks(&self) -> Tick {
         match &self {
             Sequence::Pattern(seq) => seq.length_in_ticks(),
-            Sequence::SequenceContainer(seq) => seq.length_in_ticks()
+            Sequence::SequenceContainer(seq) => seq.length_in_ticks(),
+            Sequence::Midi(seq) => seq.length_in_ticks(),
         }
     }
 }
@@ -424,7 +482,7 @@ mod tests {
     fn pattern_seq_can_be_created() {
         let length_in_ticks = 960*4;
         let pattern = PatternSeq::new(
-            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
             960);
         assert_eq!(pattern.ppq, 960);
         assert_eq!(pattern.beats_per_quarter_note, 4);
@@ -436,7 +494,7 @@ mod tests {
     #[test]
     fn pattern_seq_all_beats_are_initially_off() {
         let pattern = PatternSeq::new(
-            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
             960);
         for note in 0..pattern.num_notes {
             for beat in 0..pattern.num_beats {
@@ -448,7 +506,7 @@ mod tests {
     #[test]
     fn pattern_seq_can_turn_beats_on_and_off() {
         let mut pattern = PatternSeq::new(
-            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
             960);
         let beat=3;
         let note = 5;
@@ -462,7 +520,7 @@ mod tests {
     #[test]
     fn pattern_seq_can_create_event_stream() {
         let pattern = PatternSeq::new(
-            PatternIdentifier { track_id: TrackIdentifier { track_id: 1 }, pattern_id: 1 }, 
+            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
             960);
         let event_stream = pattern.to_event_stream();
         assert_eq!(event_stream.get_length_in_ticks(), pattern.length_in_ticks()); // We should rationalise naming here.

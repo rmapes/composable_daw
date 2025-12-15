@@ -27,15 +27,22 @@ pub struct TrackIdentifier {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct PatternIdentifier {
+pub struct RegionIdentifier {
     pub track_id: TrackIdentifier,
-    pub pattern_id: Tick,
+    pub region_id: Tick,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct PatternNoteIdentifier {
-    pub pattern_id: PatternIdentifier,
+    pub region_id: RegionIdentifier,
     pub note_num: u8,
     pub beat_num: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RegionType {
+    Pattern,
+    Midi,
+    //Audio
 }
 
 ////////////

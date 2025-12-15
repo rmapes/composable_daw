@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use iced::window;
 
-use crate::models::{sequences::Tick, shared::{PatternIdentifier, PatternNoteIdentifier, TrackIdentifier}};
+use crate::models::{sequences::Tick, shared::{RegionIdentifier, PatternNoteIdentifier, RegionType, TrackIdentifier}};
 
 
 #[derive(Debug, Clone)]
@@ -15,11 +15,11 @@ pub enum Message {
     GoToStart,
     AddTrack,
     SelectTrack(TrackIdentifier),
-    SelectPattern(PatternIdentifier, bool), 
-    DeselectAllPatterns(),
-    AddPatternAtPlayhead(),
-    AddPatternAt(TrackIdentifier, Tick),
-    DeleteSelectedPattern(),
+    SelectRegion(RegionIdentifier, bool), 
+    DeselectAllRegions(),
+    AddRegionAtPlayhead(RegionType),
+    AddRegionAt(TrackIdentifier, Tick, RegionType),
+    DeleteSelectedRegion(),
     Synth(SynthMessage),
     // Playhead
     SetPlayhead(Tick),

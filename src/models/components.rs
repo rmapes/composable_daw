@@ -26,8 +26,8 @@ use std::{error::Error, time::Duration};
 use std::fmt;
 
 use crate::models::instuments::{Instrument, SimpleSynth};
-use crate::models::sequences::{PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
-use crate::models::shared::{PatternIdentifier, TrackIdentifier};
+use crate::models::sequences::{MidiSeq, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
+use crate::models::shared::{RegionIdentifier, TrackIdentifier};
 pub trait AudioGenerator {
 }
 
@@ -211,9 +211,21 @@ impl Track {
         Duration::from_secs_f32(length_in_ticks / ticks_per_second as f32)
     }
 
+    pub fn add_midi_region_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
+        let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
+        let midi = MidiSeq::new(RegionIdentifier{ track_id: self.id, region_id: tick }, self.ppq);
+        // Check for collisions
+        if sequence.region_collides_with_existing(tick, midi.length_in_ticks()) {
+            return Err(CollisionError {});
+        }
+        let region = Sequence::Midi(midi);
+        sequence.sequences.insert(tick, region);
+        Ok(())
+    }
+
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
         let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
-        let pattern = PatternSeq::new(PatternIdentifier{ track_id: self.id, pattern_id: tick }, self.ppq);
+        let pattern = PatternSeq::new(RegionIdentifier{ track_id: self.id, region_id: tick }, self.ppq);
         // Check for collisions
         if sequence.region_collides_with_existing(tick, pattern.length_in_ticks()) {
             return Err(CollisionError {});
@@ -223,10 +235,10 @@ impl Track {
         Ok(())
     }
 
-    pub fn get_pattern_by_id(&mut self, id: &PatternIdentifier) -> &mut PatternSeq {
+    pub fn get_pattern_by_id(&mut self, id: &RegionIdentifier) -> &mut PatternSeq {
         let container = &mut self.midi.as_mut().unwrap().sequences;
         let region: &mut Sequence = container
-            .get_mut(&id.pattern_id)
+            .get_mut(&id.region_id)
             .expect("Attempt to access pattern with invalid id");
         // region
         if let Sequence::Pattern(pattern) = region {
@@ -236,10 +248,10 @@ impl Track {
         }
     }
 
-    pub fn delete_pattern(&mut self, id: &PatternIdentifier) {
+    pub fn delete_pattern(&mut self, id: &RegionIdentifier) {
         let container = &mut self.midi.as_mut().unwrap().sequences;
         let _ = container
-            .remove(&id.pattern_id)
+            .remove(&id.region_id)
             .expect("Attempt to access pattern with invalid id");
     }
 }

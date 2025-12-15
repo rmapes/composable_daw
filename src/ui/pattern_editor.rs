@@ -1,7 +1,7 @@
 use iced::widget::{ row, text, Column, Container, Row, button };
 use iced::{Length, Element};
 use crate::models::sequences::PatternSeq;
-use crate::models::shared::{ PatternIdentifier, PatternNoteIdentifier};
+use crate::models::shared::{ RegionIdentifier, PatternNoteIdentifier};
 
 use super::actions::Message;
 
@@ -64,11 +64,11 @@ fn note_label(midi_pitch: &u8) -> Element<'static, Message> {
     ).into()
 }
 
-fn note_toggle_button(pattern_id: PatternIdentifier, note_num: u8, beat_num: u8, is_on: &bool) -> Container<'static, Message> {   
+fn note_toggle_button(pattern_id: RegionIdentifier, note_num: u8, beat_num: u8, is_on: &bool) -> Container<'static, Message> {   
     let style = if *is_on { style::note_button_on } else { style::note_button_off };
     components::control(
        button(
         Container::new(row![]).width(Length::Fixed(20.0)).height(Length::Fixed(20.0)).style(style)
-       ).on_press(Message::PatternClickNote(PatternNoteIdentifier {pattern_id, note_num, beat_num} )).into(),
+       ).on_press(Message::PatternClickNote(PatternNoteIdentifier {region_id: pattern_id, note_num, beat_num} )).into(),
     )
 }
