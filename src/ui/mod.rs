@@ -1,6 +1,8 @@
 mod control_bar;
 mod composer_window;
+mod editor_window;
 mod pattern_editor;
+mod midi_editor;
 mod track_settings;
 mod style;
 mod components;

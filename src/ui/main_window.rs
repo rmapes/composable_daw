@@ -14,7 +14,7 @@ use super::actions::SynthMessage;
 use super::components;
 use super::composer_window;
 use super::control_bar;
-use super::pattern_editor;
+use super::editor_window;
 use super::main_menu::top_menu_view;
 use super::track_settings;
 use super::file_picker::pick_file;
@@ -43,7 +43,7 @@ pub struct MainWindow {
     // UI subcomponents
     control_bar: control_bar::Component,
     composer_window: composer_window::Component,
-    pattern_editor: pattern_editor::Component,
+    editor_window: editor_window::Component,
     track_settings: track_settings::Component,
 
 
@@ -76,7 +76,7 @@ impl Default for MainWindow {
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
             composer_window: composer_window::Component::new(Length::Fill, Length::FillPortion(2)),
-            pattern_editor: pattern_editor::Component::new(Length::Fill, Length::FillPortion(1)),
+            editor_window: editor_window::Component::new(Length::Fill, Length::FillPortion(1)),
             track_settings: track_settings::Component::new(Length::Fixed(100_f32),Length::Fill),            
         }
     }
@@ -249,10 +249,6 @@ impl MainWindow {
                 let selected_region: Option<&Sequence> = self.selected_region
                     .and_then(|selection| song.tracks[selection.track_id.track_id].midi.as_ref()
                         .and_then(|sequence| sequence.sequences.get(&selection.region_id)));
-                let selected_pattern = match selected_region {
-                    Some(Sequence::Pattern(p)) => Some(p),
-                    _ => None, // Fix this when we support other region types
-                };
                 column![
                     top_menu_view(),
                     self.control_bar.view(),
@@ -266,7 +262,7 @@ impl MainWindow {
                                 self.composer_window.view(&song.tracks, self.selected_track, song.ppq, self.playhead),
                             ),
                             components::module_slot(
-                                self.pattern_editor.view(selected_pattern),
+                                self.editor_window.view(selected_region),
                             )
                         ]
                     ]

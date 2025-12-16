@@ -3,7 +3,6 @@ use iced::widget::{ Container, MouseArea, Stack, stack, button, column, containe
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
-use log::info;
 use crate::models::components::Track;
 use crate::models::sequences::{TSequence, Tick};
 use crate::models::shared::RegionIdentifier;

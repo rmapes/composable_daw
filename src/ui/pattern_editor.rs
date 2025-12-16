@@ -21,14 +21,12 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, maybe_pattern: Option<&PatternSeq>) -> Element<'_, Message> {
-        let content: Vec<Element<Message>> = if let Some(pattern) = maybe_pattern {
+    pub fn view(&self, pattern: &PatternSeq) -> Element<'_, Message> {
+        let content: Vec<Element<Message>> = 
             (0..pattern.num_notes)
                 .map(|note_num| pattern_editor_row(pattern, note_num).into())
                 .collect() // Collect into a temporary Vec
-        } else {
-            vec![] // An empty vec if no pattern
-        };
+        ;
         let content = Column::with_children(content);
         components::module(
             content
