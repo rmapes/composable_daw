@@ -240,6 +240,19 @@ impl MainWindow {
                 Task::none()
             },
             Message::Ignore => Task::none(),
+            Message::MidiEditor(msg) => {
+                self.editor_window.update_midi(msg);
+                Task::none()
+            },
+            Message::CreateMidiNote(region_identifier, start, note) => {
+                //Get pattern and add note
+                if let Ok(mut project) = self.data.write() {
+                    let track = &mut project.tracks[region_identifier.track_id.track_id];
+                    let region = track.get_midi_by_id(&region_identifier);
+                    region.add_note(start, note);
+                }
+                Task::none()
+            },
         }
     }
     pub fn view(&self) ->Element<'_, Message> {

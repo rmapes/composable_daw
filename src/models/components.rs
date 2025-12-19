@@ -223,6 +223,19 @@ impl Track {
         Ok(())
     }
 
+    pub fn get_midi_by_id(&mut self, id: &RegionIdentifier) -> &mut MidiSeq {
+        let container = &mut self.midi.as_mut().unwrap().sequences;
+        let region: &mut Sequence = container
+            .get_mut(&id.region_id)
+            .expect("Attempt to access region with invalid id");
+        // region
+        if let Sequence::Midi(seq) = region {
+            seq
+        } else {
+            panic!("Attempt to access non-midi region as midi")
+        }
+    }
+
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
         let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
         let pattern = PatternSeq::new(RegionIdentifier{ track_id: self.id, region_id: tick }, self.ppq);

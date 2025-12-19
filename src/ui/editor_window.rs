@@ -2,6 +2,7 @@ use iced::widget::row;
 use iced::{Element, Length};
 
 use crate::models::sequences::Sequence;
+use crate::ui::actions::MidiEditorMessage;
 
 
 use super::actions::Message;
@@ -35,5 +36,9 @@ impl Component {
         } else {
             row![].into()
         }
+    }
+
+    pub fn update_midi(&self, msg: MidiEditorMessage) {
+        self.midi_editor.update(msg)
     }
 }

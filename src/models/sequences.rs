@@ -272,7 +272,7 @@ impl EventStreamSource for PatternSeq {
 }
 
 // Implement midi seq 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct MidiNote {
     pub channel: u8,
     pub key: u8,
@@ -296,6 +296,10 @@ impl MidiSeq {
             length: ppq * 4,
             ppq,
         }
+    }
+
+    pub fn add_note(&mut self, start: Tick, note: MidiNote) {
+        self.notes.entry(start).or_default().push(note.clone());
     }
 }
 
