@@ -136,7 +136,9 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         let current_tick = self.x_to_tick(relative_x);
                         
                         // update internal state
-                        pending.note.length = current_tick - pending.start;
+                        if current_tick > pending.start {
+                            pending.note.length = current_tick - pending.start;
+                        }
                         // and return message to say all handled
                         return (
                             Status::Captured,
