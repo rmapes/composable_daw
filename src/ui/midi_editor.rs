@@ -1,8 +1,10 @@
+use log::info;
 use std::collections::BTreeMap;
 
 use iced::event::Status;
 use iced::mouse::Cursor;
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
+use iced_aw::grid;
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
 use crate::models::shared::RegionIdentifier;
 
@@ -20,7 +22,6 @@ use iced::widget::canvas::{
 const BEATS_PER_BAR: u32 = 4;
 const SUBDIVISIONS_PER_BEAT: u32 = 4; // Quarters of a beat
 const NOTE_COUNT: u8 = 128; // Standard MIDI note range
-const VISIBLE_NOTES: u8 = 24; // How many keys are visible at once (e.g., two octaves)
 
 const RULER_HEIGHT: f32 = 25.0;
 const KEYBOARD_WIDTH: f32 = 75.0;
@@ -29,6 +30,8 @@ const BEAT_WIDTH: f32 = 100.0; // Width of one beat
 
 const MIDI_BASE: u8 = 48;
 const DEFAULT_LENGTH: Tick = 960; // TODO: calculate from PPQ
+
+const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 
 // --- MODEL & STATE ---
@@ -59,7 +62,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
         _theme: &Theme, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
         let editor_geometry = self.cache.draw(renderer, bounds.size(), |frame| {
             // 1. Draw the UI Sections
-            let ruler_rect = Rectangle::new(Point::ORIGIN, Size::new(bounds.width, RULER_HEIGHT));
+            let ruler_rect = Rectangle::new(Point::new(KEYBOARD_WIDTH, Point::ORIGIN.y), Size::new(bounds.width - KEYBOARD_WIDTH, RULER_HEIGHT));
             let keyboard_rect = Rectangle::new(
                 Point::new(0.0, RULER_HEIGHT),
                 Size::new(KEYBOARD_WIDTH, bounds.height - RULER_HEIGHT),
@@ -69,17 +72,28 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                 Size::new(bounds.width - KEYBOARD_WIDTH, bounds.height - RULER_HEIGHT),
             );
 
-            // 2. Draw the Ruler
-            self.draw_ruler(frame, &ruler_rect, &self.scroll_offset);
+            // Fill in background
+            frame.fill(
+                &Path::rectangle(Point::ORIGIN, frame.size()),
+                Color::BLACK, // Dark background
+            );
 
-            // 3. Draw the Piano Keyboard
-            self.draw_keyboard(frame, &keyboard_rect, &self.scroll_offset);
+            // 2. Draw the Piano Keyboard
+            frame.with_save(|frame| {
+                frame.translate(Vector::new(0.0, RULER_HEIGHT));
+                self.draw_keyboard(frame, &keyboard_rect, &self.scroll_offset);
+            });
 
-            // 4. Draw the Note Grid and Notes
+            // 3. Draw the Note Grid and Notes
             // We use a separate sub-frame for the grid to easily apply scroll offset
-            frame.translate(Vector::new(KEYBOARD_WIDTH, RULER_HEIGHT));
-            self.draw_grid(frame, &grid_rect.size(), &self.scroll_offset);
-            self.draw_midi_notes(frame, state);//, self.notes, &self.scroll_offset); 
+            frame.with_save(|frame| {
+                frame.translate(Vector::new(KEYBOARD_WIDTH, RULER_HEIGHT));
+                self.draw_grid(frame, &grid_rect.size(), &self.scroll_offset);
+                self.draw_midi_notes(frame, state, &grid_rect);//, self.notes, &self.scroll_offset); 
+            });
+
+            // 4. Draw the Ruler
+            self.draw_ruler(frame, &ruler_rect, &self.scroll_offset);
         });
 
         vec![editor_geometry]
@@ -114,7 +128,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         // 1. Calculate Pitch and Tick
                         // Note: scroll_offset.y is usually negative when scrolling down
                         let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
-                        let pitch = (relative_y / NOTE_HEIGHT).floor() as u8;
+                        let pitch = y_to_pitch(relative_y, &grid_bounds.size());
                         
                         let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
                         let start_tick = self.x_to_tick(relative_x);
@@ -170,6 +184,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
     }
 }
 
+
 // --- DRAWING HELPER METHODS ---
 
 impl MidiEditor {
@@ -185,7 +200,7 @@ impl MidiEditor {
         let end_beat = start_beat + total_beats_visible.ceil() as u32 + 1;
 
         for beat in start_beat..end_beat {
-            let x = beat as f32 * BEAT_WIDTH + scroll.x;
+            let x = beat as f32 * BEAT_WIDTH + scroll.x + bounds.position().x;
 
             // Bar Lines (Longest lines)
             if beat % BEATS_PER_BAR == 0 {
@@ -243,18 +258,20 @@ impl MidiEditor {
 
         // Clip to the keyboard area
         // frame.with_save(|frame| {
-        //     frame.with_clip(*bounds, |frame| {
+        // frame.with_clip(*bounds, |frame| {
 
+            let visible_notes = (bounds.size().height / NOTE_HEIGHT).floor() as u8;
             let start_note_index = (-scroll.y / NOTE_HEIGHT).floor() as u8;
-            let end_note_index = start_note_index + VISIBLE_NOTES + 1;
+            let end_note_index = start_note_index + visible_notes + 1;
 
             for i in start_note_index..end_note_index {
-                let y = i as f32 * NOTE_HEIGHT + scroll.y + bounds.y;
-                let is_sharp = match i % 12 {
+                let pitch = i + MIDI_BASE; 
+                let y = pitch_to_y(&pitch, &bounds.size());
+                let is_sharp = match pitch % 12 {
                     1 | 3 | 6 | 8 | 10 => true, // C#, D#, F#, G#, A#
                     _ => false,
                 };
-                let is_octave_c = i % 12 == 0; // C notes
+                let is_octave_c = pitch % 12 == 0; // C notes
 
                 // Draw the key background
                 let key_color = if is_sharp {
@@ -284,6 +301,26 @@ impl MidiEditor {
                 );
 
                 // You would add note names here (e.g., C4, F#5)
+                if !is_sharp {
+                    let pitch_index = pitch % 12;
+                    let octave = (pitch / 12) as i32 - 1; // MIDI note 12 is C0
+                    let label = format!("{}{}", NOTE_NAMES[pitch_index as usize], octave);
+                    
+                    let text = Text {
+                        content: label,
+                        position: Point::new(
+                            bounds.x + KEYBOARD_WIDTH - 5.0, // Right-aligned on the key
+                            y + (NOTE_HEIGHT / 2.0)         // Centered vertically
+                        ),
+                        color: Color::from_rgb(0.5, 0.5, 0.5),
+                        size: iced::Pixels::from(10.0),
+                        horizontal_alignment: iced::alignment::Horizontal::Right,
+                        vertical_alignment: iced::alignment::Vertical::Center,
+                        ..Text::default()
+                    };
+        
+                    frame.fill_text(text);
+                }
             }
         // })
         // });
@@ -292,15 +329,16 @@ impl MidiEditor {
     // 3. Draw the Note Grid
     fn draw_grid(&self, frame: &mut Frame, bounds: &Size, scroll: &Vector) {
         // Apply scroll offset to the grid drawing
-        frame.translate(*scroll);
+        // frame.translate(*scroll);
 
         let total_time_span = 16 as f32 * BEAT_WIDTH; // Example: 16 beats
 
-        let num_rows = VISIBLE_NOTES + 1;
+        let visible_notes = (bounds.height / NOTE_HEIGHT).floor() as u8;
+        let num_rows = visible_notes + 1;
 
         // Draw horizontal note lines
         for i in 0..num_rows {
-            let y = i as f32 * NOTE_HEIGHT;
+            let y = pitch_to_y(&(i + MIDI_BASE), bounds);
             let line = Path::line(Point::new(0.0, y), Point::new(total_time_span, y));
 
             let is_octave_c_row = (i as u8 + (-scroll.y / NOTE_HEIGHT).round() as u8) % 12 == 0;
@@ -372,25 +410,26 @@ impl MidiEditor {
         }
     }
     // 4. draw_midi_notes (Not implemented here, but this is where you draw your note blocks)
-    fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState) { //}, notes: BTreeMap<Tick, Vec<MidiNote>>, scroll: &Vector) { 
+    fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState, bounds: &Rectangle) { //}, notes: BTreeMap<Tick, Vec<MidiNote>>, scroll: &Vector) { 
         if let Some(pending) = &state.pending_note {
             // info!("Drawing pending note at {},{}", pending.start_tick, pending.end_tick);
-            self.draw_note(frame, pending.start, &pending.note);
+            self.draw_note(frame, pending.start, &pending.note, bounds);
         }
         for (start, notes) in &self.notes {
             for note in notes {
-                self.draw_note(frame, *start, &note);
+                self.draw_note(frame, *start, &note, bounds);
             }
         }
      }
 
-    fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote) {
+    fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
         let x = self.tick_to_x(start);
         let width = self.tick_to_x(note.length);
-        let y = (note.key - MIDI_BASE) as f32 * NOTE_HEIGHT;
+        let y = pitch_to_y(&note.key, &bounds.size());
         
         let rect = Path::rectangle(Point::new(x, y), Size::new(width.max(5.0), NOTE_HEIGHT));
         frame.fill(&rect, Color::from_rgba(0.0, 0.8, 1.0, 0.5));
+
         // Transparent blue ghost
     }
     
@@ -408,6 +447,16 @@ impl MidiEditor {
         (tick as f32 / Self::PPQ as f32) * BEAT_WIDTH
     }
 }
+
+fn pitch_to_y(key: &u8, bounds: &Size) -> f32 {
+    let y = (key - MIDI_BASE) as f32 * NOTE_HEIGHT;
+    bounds.height - y
+}
+
+fn y_to_pitch(relative_y: f32, bounds: &Size) -> u8 {
+    ((bounds.height - relative_y) / NOTE_HEIGHT).ceil() as u8
+}
+
 
 // --- CONTAINER WIDGET ---
 // This is what you actually put in your Iced layout.

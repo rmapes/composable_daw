@@ -85,7 +85,7 @@ impl ProjectData {
         let new_track_num = self.tracks.len() + 1;
         let mut new_track = Track::new(TrackIdentifier {track_id: new_track_num - 1}, format!("Track {new_track_num}"), self.ppq);
         // Temporary until we can add regions via UI. Add pattern at start
-        new_track.add_pattern_at(0).expect("Unexpected collision inserting into empty sequence");
+        new_track.add_midi_region_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);
     }
 
