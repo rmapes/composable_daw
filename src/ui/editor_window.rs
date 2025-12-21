@@ -2,7 +2,6 @@ use iced::widget::row;
 use iced::{Element, Length};
 
 use crate::models::sequences::Sequence;
-use crate::ui::actions::MidiEditorMessage;
 
 
 use super::actions::Message;
@@ -10,8 +9,6 @@ use super::midi_editor;
 use super::pattern_editor;
 
 pub struct Component {
-    width: Length,
-    height: Length,
     pattern_editor: pattern_editor::Component,
     midi_editor: midi_editor::Component,
 }
@@ -19,8 +16,6 @@ pub struct Component {
 impl Component {
     pub fn new(width: Length, height: Length) -> Self {
         Self {
-            width,
-            height,
             pattern_editor: pattern_editor::Component::new(width, height),
             midi_editor: midi_editor::Component::new(width, height),
         }
@@ -31,14 +26,11 @@ impl Component {
             match region {
                 Sequence::Pattern(pattern) =>  self.pattern_editor.view(pattern),
                 Sequence::Midi(midi) => self.midi_editor.view(midi),
-                Sequence::SequenceContainer(sequence_container) => row![].into(),
+                Sequence::SequenceContainer(_sequence_container) => row![].into(),
             }
         } else {
             row![].into()
         }
     }
 
-    pub fn update_midi(&self, msg: MidiEditorMessage) {
-        self.midi_editor.update(msg)
-    }
 }

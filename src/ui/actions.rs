@@ -22,7 +22,6 @@ pub enum Message {
     DeleteSelectedRegion(),
     Synth(SynthMessage),
     // Midi Editor
-    MidiEditor(MidiEditorMessage),
     CreateMidiNote(RegionIdentifier, Tick, MidiNote),
     // Playhead
     SetPlayhead(Tick),
@@ -40,11 +39,4 @@ pub enum SynthMessage {
     SetSoundFont(TrackIdentifier, Option<PathBuf>),
     SetBank(TrackIdentifier, u32),
     SetProgram(TrackIdentifier, u8),
-}
-
-// --- Midi Editor Messages --
-#[derive(Debug, Clone)]
-pub enum MidiEditorMessage {
-    StartPendingNote(u8, Tick),
-    UpdatePendingNote(Tick),
 }

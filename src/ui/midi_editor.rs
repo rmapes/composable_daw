@@ -1,14 +1,12 @@
-use log::info;
 use std::collections::BTreeMap;
 
 use iced::event::Status;
 use iced::mouse::Cursor;
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
-use iced_aw::grid;
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
 use crate::models::shared::RegionIdentifier;
 
-use super::actions::{Message, MidiEditorMessage};
+use super::actions::Message;
 
 use super::components;
 
@@ -21,7 +19,6 @@ use iced::widget::canvas::{
 // --- CONFIGURATION CONSTANTS ---
 const BEATS_PER_BAR: u32 = 4;
 const SUBDIVISIONS_PER_BEAT: u32 = 4; // Quarters of a beat
-const NOTE_COUNT: u8 = 128; // Standard MIDI note range
 
 const RULER_HEIGHT: f32 = 25.0;
 const KEYBOARD_WIDTH: f32 = 75.0;
@@ -506,14 +503,6 @@ impl Component {
             .width(self.width)
             .height(self.height).into()
         ).into()
-    }
-
-    pub fn update(&self, msg: MidiEditorMessage) {
-        match msg {
-            crate::ui::actions::MidiEditorMessage::StartPendingNote(pitch, start) => todo!(),
-            crate::ui::actions::MidiEditorMessage::UpdatePendingNote(duration) => todo!(),
-        }
-
     }
 }
 
