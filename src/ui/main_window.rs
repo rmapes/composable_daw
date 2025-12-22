@@ -25,7 +25,6 @@ use std::rc::Rc;
 //////////////////////
 /// Entry point for iced ui
 /// 
-
 pub struct MainWindow {
     // Core application data and engine
     engine: Rc<engine::EngineController>,

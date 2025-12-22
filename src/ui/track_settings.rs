@@ -3,7 +3,6 @@ use iced::{Length, Element};
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::TrackIdentifier;
-use crate::ui::style;
 
 use super::components;
 use super::actions::Message;

@@ -28,20 +28,6 @@ use std::fmt;
 use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::sequences::{MidiSeq, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{RegionIdentifier, TrackIdentifier};
-pub trait AudioGenerator {
-}
-
-pub trait MidiGenerator {
-
-}
-
-pub trait MidiConsumer {
-
-}
-
-pub trait AudioConsumer {
-
-}
 
 pub struct VirtualInstrument {
     pub kind: Instrument,
@@ -55,87 +41,6 @@ impl Default for VirtualInstrument {
     }
 }
 
-impl MidiConsumer for VirtualInstrument {
-
-}
-
-impl AudioGenerator for VirtualInstrument {
-
-}
-
-/*** Conduits ****/
-
-// Midi Connector
-pub struct MidiConnector {
-    // Connects a single input to a single output
-    // Used to allow configurable routing, and to hide implementation details of e.g. tracks
-}
-
-impl MidiConnector {
-
-}
-
-impl MidiConsumer for MidiConnector {
-
-}
-
-impl MidiGenerator for MidiConnector {
-    
-}
-
-// Audio Connector
-pub struct AudioConnector {
-    // Connects a single input to a single output
-    // Used to allow configurable routing, and to hide implementation details of e.g. tracks
-}
-
-impl AudioConnector {
-
-}
-
-impl AudioConsumer for AudioConnector {
-
-}
-
-impl AudioGenerator for AudioConnector {
-    
-}
-
-// Audo Buss (many to one)
-pub struct AudioBuss {
-    // Merges multiple inputs to a single output
-    // Used to allow configurable routing, and merging to a final stereo out
-}
-
-impl AudioBuss {
-
-}
-
-impl AudioConsumer for AudioBuss {
-
-}
-
-impl AudioGenerator for AudioBuss {
-    
-}
-
-// Audo Splitter (many to one)
-pub struct AudioSplitter {
-    // Splits a single input to multiple outputs
-    // Used to allow configurable routing
-}
-
-impl AudioSplitter {
-
-}
-
-impl AudioConsumer for AudioSplitter {
-
-}
-
-impl AudioGenerator for AudioSplitter {
-    
-}
 
 /*** Containers ****/
 
@@ -145,7 +50,7 @@ pub struct Track {
     /// 
     /// 
     // Inputs
-    audio_input: AudioBuss, 
+    // audio_input: AudioBuss, 
     // Input needs to be a buss to support Buss tracks. 
     // Alernative is to allow busses to act as independent entities and each track accept only a single input.
     // This allows routing of busses to multiple outputs via
@@ -162,7 +67,7 @@ pub struct Track {
     /// Volume/Fader
     /// Pan
     /// Output connector
-    pub audio_output: AudioConnector,
+    // pub audio_output: AudioConnector,
 
     // Track Metadata
     pub id: TrackIdentifier,
@@ -194,8 +99,6 @@ impl Track {
             name,
             midi: Some(SequenceContainer::new(ppq)), // If track type == midi
             instrument: VirtualInstrument::default(),
-            audio_input: AudioBuss {  },
-            audio_output:  AudioConnector { },
             ppq,
         }
     }
