@@ -299,7 +299,7 @@ impl MidiSeq {
     }
 
     pub fn add_note(&mut self, start: Tick, note: MidiNote) {
-        self.notes.entry(start).or_default().push(note.clone());
+        self.notes.entry(start).or_default().push(note);
     }
 }
 

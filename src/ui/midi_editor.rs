@@ -117,8 +117,8 @@ impl canvas::Program<Message, Theme> for MidiEditor {
             Size::new(bounds.width - KEYBOARD_WIDTH, bounds.height - RULER_HEIGHT),
         );
 
-        match event {
-            canvas::Event::Mouse(mouse_event) => match mouse_event {
+        if let canvas::Event::Mouse(mouse_event) = event {
+             match mouse_event {
                 iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
                     if grid_bounds.contains(cursor_position) {
                         // info!("State pending note is {}", state.pending_note.is_some());
@@ -160,7 +160,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
 
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
                     if let Some(pending) = &state.pending_note {
-                        let final_note = pending.clone();
+                        let final_note = *pending;
                         state.pending_note = None;
                         return (
                             Status::Captured,
@@ -173,8 +173,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     }
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
 
         (Status::Ignored, None)
@@ -268,7 +267,7 @@ impl MidiEditor {
                     1 | 3 | 6 | 8 | 10 => true, // C#, D#, F#, G#, A#
                     _ => false,
                 };
-                let is_octave_c = pitch % 12 == 0; // C notes
+                let is_octave_c = pitch.is_multiple_of(12); // C notes
 
                 // Draw the key background
                 let key_color = if is_sharp {
@@ -328,7 +327,7 @@ impl MidiEditor {
         // Apply scroll offset to the grid drawing
         // frame.translate(*scroll);
 
-        let total_time_span = 16 as f32 * BEAT_WIDTH; // Example: 16 beats
+        let total_time_span = 16_f32 * BEAT_WIDTH; // Example: 16 beats
 
         let visible_notes = (bounds.height / NOTE_HEIGHT).floor() as u8;
         let num_rows = visible_notes + 1;
@@ -338,7 +337,7 @@ impl MidiEditor {
             let y = pitch_to_y(&(i + MIDI_BASE), bounds);
             let line = Path::line(Point::new(0.0, y), Point::new(total_time_span, y));
 
-            let is_octave_c_row = (i as u8 + (-scroll.y / NOTE_HEIGHT).round() as u8) % 12 == 0;
+            let is_octave_c_row = (i + (-scroll.y / NOTE_HEIGHT).round() as u8).is_multiple_of(12);
 
             let stroke_style = if is_octave_c_row {
                 Color::from_rgb(0.4, 0.0, 0.0) // Stronger line for C notes
@@ -414,7 +413,7 @@ impl MidiEditor {
         }
         for (start, notes) in &self.notes {
             for note in notes {
-                self.draw_note(frame, *start, &note, bounds);
+                self.draw_note(frame, *start, note, bounds);
             }
         }
      }
