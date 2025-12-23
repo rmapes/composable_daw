@@ -54,14 +54,13 @@ impl EventStream{
     }
     // Return list of events at tick and priority
     pub fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEventAt> {
-        if self.events.contains_key(&tick) {
-            let tick_block = self.events.get(&tick).expect("Tick {tick} not found in events");
-            if tick_block.contains_key(&priority) {
-                return tick_block.get(&priority)
-                .expect("Priority {priority} not found in tick_block");
-            }
+        let maybe_events = self.events.get(&tick)
+        .and_then(|tick_block| tick_block.get(&priority));
+
+        match maybe_events {
+            Some(events) => events,
+            None => &self.no_events,
         }
-        &self.no_events
     }
     // Return length in ticks
     pub fn get_length_in_ticks(&self) -> u32 {

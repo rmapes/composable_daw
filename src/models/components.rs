@@ -80,9 +80,6 @@ pub struct Track {
 pub struct CollisionError;
 
 impl Error for CollisionError {
-   fn description(&self) -> &str {
-        "overlapping regions not allowed"
-    }
 }
 
 impl fmt::Display for CollisionError {

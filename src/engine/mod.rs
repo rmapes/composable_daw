@@ -89,118 +89,122 @@ where
     let player_state = player_state.clone();
     move || {
        loop {
-        let received = rx.recv().unwrap();
-        match received {
-            actions::Actions::PlayMidi => {
-                // First check to see if the audio system is already active
-                if let Ok(mut state) = player_state.write() {
-                    if state.is_preparing_to_play {
-                        // Pressed play again before the last play has taken effect.
-                        // Just wait for initialization to complete
-                        info!("Play pressed while preparing to play");
-                        return
-                    }
-                    if state.is_audio_initialized {
-                        // Audio is initialized, so either we pressed play while its already playinh
-                        // or we pressed play to while it was paused. Either way, set playing to true
-                        state.is_playing = true;
-                        info!("Play pressed. Audio already initialized");
-                        return
-                    }
-                }
-                // If we got here, we need to initialize the audio
-                info!("Initializing audio");
-                if let Ok(mut state) = player_state.write() {
-                    state.is_preparing_to_play = true;
-                    if ALWAYS_PLAY_FROM_START {
-                        state.playhead = 0;
-                        state.sample_rate = 0;
-                    } else if let Ok(song) = shared_data.read() {
-                        state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
-                            // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
-                    }
-                    
-                }
-                observer.notify();
-                let worker_tx = tx.clone();
-                let tick_receiver = tick_receiver.clone();
-                // Ensure receiver is empty before we start
-                loop {
-                    if tick_receiver.recv_timeout(Duration::from_millis(1)).is_err() {
-                        break;
-                    }
-                }
-                let worker_shared_data = Arc::clone(&shared_data);
-                // debug!("Prepare to play");
-                thread::spawn(move || {
-                    if let Ok(song) = worker_shared_data.read() {
-                        // BLOCKING AUDIO CALL
-                        play_structure(&song, &worker_tx, tick_receiver).unwrap();
-                    }
-                    // Notify the main engine thread that playback is done
-                    let _ = worker_tx.send(actions::Actions::Internal(
-                        actions::SystemActions::PlaybackFinished
-                    ));
-                });
-            },
-            actions::Actions::Pause => {
-                if let Ok(mut state) = player_state.write()
-                    && state.is_active && state.is_audio_initialized {
-                        state.is_playing = false;
-                }
-            }
-            actions::Actions::Quit => {
-                if let Ok(mut state) = player_state.write() {
-                    state.is_active = false;
-                }
-                break;
-            },
-            actions::Actions::Internal(sys_ev) => {
-                match sys_ev {
-                    actions::SystemActions::SamplesPlayed(num_samples) => {
-                        // debug!("Samples played");
-                        if let Ok(mut state) = player_state.write() 
-                            && state.is_playing {
-                                state.samples_played += num_samples;
-                                // Convert to playhead location
-                                if let Ok(song) = shared_data.read() {
-                                    let new_playhead = song.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
-                                    if new_playhead != state.playhead {
-                                        // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
-                                        for tick in state.playhead..new_playhead {
-                                            let _ = tick_sender.send(tick);
-                                        }
-                                        state.playhead = new_playhead;
-                                    }
-                                }
-                        }                                
-                    }
-                    actions::SystemActions::SetSampleRate(sample_rate) => {
-                        if let Ok(mut state) = player_state.write() {
-                            state.sample_rate = sample_rate;
-                        }                                
-                    }
-                    actions::SystemActions::PlaybackStarted => {
-                        if let Ok(mut state) = player_state.write() {
+        if let Ok(received) = rx.recv() {
+            match received {
+                actions::Actions::PlayMidi => {
+                    // First check to see if the audio system is already active
+                    if let Ok(mut state) = player_state.write() {
+                        if state.is_preparing_to_play {
+                            // Pressed play again before the last play has taken effect.
+                            // Just wait for initialization to complete
+                            info!("Play pressed while preparing to play");
+                            return
+                        }
+                        if state.is_audio_initialized {
+                            // Audio is initialized, so either we pressed play while its already playinh
+                            // or we pressed play to while it was paused. Either way, set playing to true
                             state.is_playing = true;
-                            state.is_audio_initialized = true;
-                            state.is_preparing_to_play = false;
-                            info!("Starting to play");
+                            info!("Play pressed. Audio already initialized");
+                            return
                         }
-                        observer.notify();
-                    },
-                    actions::SystemActions::PlaybackFinished => {
-                        if let Ok(mut state) = player_state.write() {
+                    }
+                    // If we got here, we need to initialize the audio
+                    info!("Initializing audio");
+                    if let Ok(mut state) = player_state.write() {
+                        state.is_preparing_to_play = true;
+                        if ALWAYS_PLAY_FROM_START {
+                            state.playhead = 0;
+                            state.sample_rate = 0;
+                        } else if let Ok(song) = shared_data.read() {
+                            state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
+                                // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
+                        }
+                        
+                    }
+                    observer.notify();
+                    let worker_tx = tx.clone();
+                    let tick_receiver = tick_receiver.clone();
+                    // Ensure receiver is empty before we start
+                    loop {
+                        if tick_receiver.recv_timeout(Duration::from_millis(1)).is_err() {
+                            break;
+                        }
+                    }
+                    let worker_shared_data = Arc::clone(&shared_data);
+                    // debug!("Prepare to play");
+                    thread::spawn(move || {
+                        if let Ok(song) = worker_shared_data.read() {
+                            // BLOCKING AUDIO CALL
+                            play_structure(&song, &worker_tx, tick_receiver).unwrap();
+                        }
+                        // Notify the main engine thread that playback is done
+                        let _ = worker_tx.send(actions::Actions::Internal(
+                            actions::SystemActions::PlaybackFinished
+                        ));
+                    });
+                },
+                actions::Actions::Pause => {
+                    if let Ok(mut state) = player_state.write()
+                        && state.is_active && state.is_audio_initialized {
                             state.is_playing = false;
-                            state.is_audio_initialized = false;
-                            info!("Audio should have been dropped at end of play");
-
+                    }
+                }
+                actions::Actions::Quit => {
+                    if let Ok(mut state) = player_state.write() {
+                        state.is_active = false;
+                    }
+                    break;
+                },
+                actions::Actions::Internal(sys_ev) => {
+                    match sys_ev {
+                        actions::SystemActions::SamplesPlayed(num_samples) => {
+                            // debug!("Samples played");
+                            if let Ok(mut state) = player_state.write() 
+                                && state.is_playing {
+                                    state.samples_played += num_samples;
+                                    // Convert to playhead location
+                                    if let Ok(song) = shared_data.read() {
+                                        let new_playhead = song.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
+                                        if new_playhead != state.playhead {
+                                            // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
+                                            for tick in state.playhead..new_playhead {
+                                                let _ = tick_sender.send(tick);
+                                            }
+                                            state.playhead = new_playhead;
+                                        }
+                                    }
+                            }                                
                         }
-                        info!("Playback finished");
-                        observer.notify();
-                    },
+                        actions::SystemActions::SetSampleRate(sample_rate) => {
+                            if let Ok(mut state) = player_state.write() {
+                                state.sample_rate = sample_rate;
+                            }                                
+                        }
+                        actions::SystemActions::PlaybackStarted => {
+                            if let Ok(mut state) = player_state.write() {
+                                state.is_playing = true;
+                                state.is_audio_initialized = true;
+                                state.is_preparing_to_play = false;
+                                info!("Starting to play");
+                            }
+                            observer.notify();
+                        },
+                        actions::SystemActions::PlaybackFinished => {
+                            if let Ok(mut state) = player_state.write() {
+                                state.is_playing = false;
+                                state.is_audio_initialized = false;
+                                info!("Audio should have been dropped at end of play");
+
+                            }
+                            info!("Playback finished");
+                            observer.notify();
+                        },
+                    }
                 }
             }
+        } else {
+            // Error in receive probably means channel has closed, so simply exit the loop
+            break;
         }
        }
        info!("Exiting loop. Assuming Quit was pressed");
