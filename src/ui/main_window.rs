@@ -4,13 +4,12 @@ use iced::Element;
 use iced::time;
 use iced::{Subscription, window, Task};
 use log::{error, info};
-use crate::models::instuments::Instrument;
 use crate::models::sequences::{Sequence, Tick};
 use crate::models::shared::{RegionIdentifier, ProjectData, RegionType, TrackIdentifier};
 use crate::engine::{self, PlayerState};
+use crate::engine::actions::{Actions, SynthActions};
 
-use super::actions::Message;
-use super::actions::SynthMessage;
+use super::actions::{Message, SynthMessage};
 use super::components;
 use super::composer_window;
 use super::control_bar;
@@ -101,27 +100,11 @@ impl MainWindow {
                     Task::none()
                 } 
             }
-            Message::PatternClickNote(note_identifier) => {
-                // toggle note on in pattern
-                if let Ok(mut song) = self.data.try_write() {
-                    song.get_track_by_id(&note_identifier.region_id.track_id)
-                    .get_pattern_by_id(&note_identifier.region_id)
-                    .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                }               
-                // No further task to do
-                Task::none()
-            },
             Message::GoToStart => {
                 if let Ok(mut state) = self.player_state.try_write() {
                     state.playhead = 0;
                     self.playhead = 0;
                 }
-                Task::none()
-            },
-            Message::AddTrack => {
-                if let Ok(mut song) = self.data.try_write() {
-                    song.new_track();
-                }               
                 Task::none()
             },
             Message::SelectTrack(id) => {
@@ -132,80 +115,8 @@ impl MainWindow {
                 self.selected_region = Some(id);
                 Task::none()
             }
-            Message::Synth(synth_message) => match synth_message {
-                SynthMessage::SelectSoundFont(track_id) => {
-                    Task::perform(
-                        pick_file(track_id, "./soundfonts"), 
-                        |(track_id, path)| { Message::Synth(SynthMessage::SetSoundFont(track_id, path)) } 
-                    ) 
-                }
-                SynthMessage::SetSoundFont(track_id, soundfont_path) => {
-                    if let Some(path) = soundfont_path  
-                        && let Ok(mut project) = self.data.write() {
-                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                            let Instrument::Synth(synth) = instrument;
-                            synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
-                    }
-                        Task::none()
-                }
-                SynthMessage::SetBank(track_id, bank) => {
-                    if let Ok(mut project) = self.data.write() {
-                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                        let Instrument::Synth(synth) = instrument;
-                        synth.bank = bank;
-                    }
-                    Task::none()
-                },
-                SynthMessage::SetProgram(track_id, program) => {
-                    if let Ok(mut project) = self.data.write() {
-                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                        let Instrument::Synth(synth) = instrument;
-                            synth.program = program;
-                        }
-                    Task::none()
-                }
-            },
-            Message::AddRegionAtPlayhead(region_type) => {
-                let player_state = self.player_state.clone();
-                let selected_track = self.selected_track;
-                Task::perform(async move {
-                    if let Ok(state) = player_state.read() {
-                        let track_id = TrackIdentifier { track_id: selected_track};
-                        let tick = state.playhead;
-                        return (Some(track_id), tick, region_type)
-                    }
-                    ( None, 0, RegionType::Pattern)
-                }, |(maybe_track_id, tick, region_type)| { 
-                    if let Some(track_id) = maybe_track_id {
-                        Message::AddRegionAt(track_id, tick, region_type) 
-                    } else {
-                        Message::Ignore
-                    }
-                })
-            },
-            Message::AddRegionAt(track_id, tick, region_type) => {
-                if let Ok(mut project) = self.data.write() {
-                    let track = &mut project.tracks[track_id.track_id];
-                    let _ = match region_type {
-                        RegionType::Pattern => track.add_pattern_at(tick),
-                        RegionType::Midi => track.add_midi_region_at(tick),
-                    };
-                }
-                Task::none()
-            },
             Message::DeselectAllRegions() => {
                 self.selected_region = None;
-                Task::none()
-            },
-            Message::DeleteSelectedRegion() => {
-                if let Some(pattern) =self.selected_region {
-                if let Ok(mut project) = self.data.write() {
-                    let track = &mut project.tracks[pattern.track_id.track_id];
-                    track.delete_pattern(&pattern);
-                }
-
-                self.selected_region = None;
-                }
                 Task::none()
             },
             Message::NewFile => {
@@ -223,6 +134,22 @@ impl MainWindow {
                 }
                 Task::none()
             },
+            Message::AddRegionAtPlayhead(region_type) => {
+                let player_state = self.player_state.clone();
+                if let Ok(state) = player_state.read() {
+                    let track_id = TrackIdentifier { track_id: self.selected_track};
+                    let tick = state.playhead;
+                    self.engine.send(Actions::AddRegionAt(track_id, tick, region_type));
+                };
+                Task::none()
+            },
+            Message::DeleteSelectedRegion => {
+                if let Some(region_id) =self.selected_region {
+                    self.engine.send(Actions::DeleteRegion(region_id));
+                    self.selected_region = None;
+                }
+                Task::none()
+            },
             Message::Tick => {
                 if let Ok(state) = self.player_state.try_read() 
                     && state.is_playing {
@@ -232,14 +159,19 @@ impl MainWindow {
                 Task::none()
             },
             Message::Ignore => Task::none(),
-            Message::CreateMidiNote(region_identifier, start, note) => {
-                //Get pattern and add note
-                if let Ok(mut project) = self.data.write() {
-                    let track = &mut project.tracks[region_identifier.track_id.track_id];
-                    let region = track.get_midi_by_id(&region_identifier);
-                    region.add_note(start, note);
+            Message::Synth(synth_message) => match synth_message {
+                SynthMessage::SelectSoundFont(track_id) => {
+                    Task::perform(
+                        pick_file(track_id, "./soundfonts"), 
+                        |(track_id, path)| { 
+                            Message::Synth(SynthMessage::SetSoundFont(track_id, path)) 
+                        }
+                    )
                 }
-                Task::none()
+                SynthMessage::SetSoundFont(track_id, path) => {
+                    self.engine.send(Actions::Synth(SynthActions::SetSoundFont(track_id, path))); 
+                    Task::none()
+                }
             },
         }
     }

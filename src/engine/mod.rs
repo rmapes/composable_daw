@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use log::{debug, info};
 
+use crate::engine::actions::SynthActions;
 use crate::engine::synth::TrackThread;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::Tick;
@@ -163,6 +164,70 @@ where
                     }
                     break;
                 },
+                // Track
+                actions::Actions::AddTrack => {
+                    if let Ok(mut song) = shared_data.try_write() {
+                        song.new_track();
+                    }               
+                },
+                actions::Actions::AddRegionAt(track_id, tick, region_type) => {
+                    if let Ok(mut project) = shared_data.write() {
+                        let track = &mut project.tracks[track_id.track_id];
+                        let _ = match region_type {
+                            RegionType::Pattern => track.add_pattern_at(tick),
+                            RegionType::Midi => track.add_midi_region_at(tick),
+                        };
+                    }
+                },
+                actions::Actions::DeleteRegion(region_id) => {
+                    if let Ok(mut project) = shared_data.write() {
+                        let track = &mut project.tracks[region_id.track_id.track_id];
+                        track.delete_pattern(&region_id);
+                    }
+                },
+                // Pattern
+                actions::Actions::PatternClickNote(note_identifier) => {
+                    // toggle note on in pattern
+                    if let Ok(mut song) = shared_data.try_write() {
+                        song.get_track_by_id(&note_identifier.region_id.track_id)
+                        .get_pattern_by_id(&note_identifier.region_id)
+                        .toggle_on(note_identifier.beat_num, note_identifier.note_num);
+                    }               
+                 },
+                 // Midi Sequence
+                 actions::Actions::CreateMidiNote(region_identifier, start, note) => {
+                    //Get pattern and add note
+                    if let Ok(mut project) = shared_data.write() {
+                        let track = &mut project.tracks[region_identifier.track_id.track_id];
+                        let region = track.get_midi_by_id(&region_identifier);
+                        region.add_note(start, note);
+                    }
+                },
+    
+                actions::Actions::Synth(action) => match action {
+                    SynthActions::SetSoundFont(track_id, soundfont_path) => {
+                        if let Some(path) = soundfont_path  
+                            && let Ok(mut project) = shared_data.write() {
+                                let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                                let Instrument::Synth(synth) = instrument;
+                                synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+                        }
+                    }
+                    SynthActions::SetBank(track_id, bank) => {
+                        if let Ok(mut project) = shared_data.write() {
+                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                            let Instrument::Synth(synth) = instrument;
+                            synth.bank = bank;
+                        }
+                    },
+                    SynthActions::SetProgram(track_id, program) => {
+                        if let Ok(mut project) = shared_data.write() {
+                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                            let Instrument::Synth(synth) = instrument;
+                                synth.program = program;
+                            }
+                    }
+                },           
                 actions::Actions::Internal(sys_ev) => {
                     match sys_ev {
                         actions::SystemActions::SamplesPlayed(num_samples) => {

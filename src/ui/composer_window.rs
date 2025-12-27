@@ -3,6 +3,7 @@ use iced::widget::{ Container, MouseArea, Stack, stack, button, column, containe
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
+use crate::engine::actions::Actions;
 use crate::models::components::Track;
 use crate::models::sequences::{TSequence, Tick};
 use crate::models::shared::RegionIdentifier;
@@ -77,7 +78,7 @@ impl Component {
     }
     fn controls(&self) -> Element<'_, Message> {
         row![
-            button("+").on_press(Message::AddTrack),
+            button("+").on_press(Message::Engine(Actions::AddTrack)),
         ].into()
     }
     fn track_list(&self, tracks: &[Track], selected_track: usize, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Element<'_, Message> {

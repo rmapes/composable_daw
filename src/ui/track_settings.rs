@@ -1,5 +1,6 @@
 use iced::widget::{ button, column, pick_list, row, text, Column };
 use iced::{Length, Element};
+use crate::engine::actions::{Actions, SynthActions};
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::TrackIdentifier;
@@ -49,9 +50,9 @@ impl Component {
                 column![
                     button(text(synth.soundfont.clone()).size(12)).on_press(Message::Synth(SynthMessage::SelectSoundFont(track_id))),
                     components::label(text("Bank").into()),
-                    self.number_selector(0, 127, synth.bank as u8, move |val: u8| { Message::Synth(SynthMessage::SetBank(track_id, val as u32)) }),
+                    self.number_selector(0, 127, synth.bank as u8, move |val: u8| { Message::Engine(Actions::Synth(SynthActions::SetBank(track_id, val as u32))) }),
                     components::label(text("Program").into()),
-                    self.number_selector(0, 127, synth.program, move |val: u8| { Message::Synth(SynthMessage::SetProgram(track_id, val)) }),
+                    self.number_selector(0, 127, synth.program, move |val: u8| { Message::Engine(Actions::Synth(SynthActions::SetProgram(track_id, val))) }),
                 ]
             }
         }

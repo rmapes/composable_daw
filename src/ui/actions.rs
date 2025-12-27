@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use iced::window;
 
-use crate::models::{sequences::{MidiNote, Tick}, shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier}};
+use crate::models::sequences::Tick;
+use crate::models:: shared::{RegionIdentifier, RegionType, TrackIdentifier};
 use crate::engine::actions::Actions;
 
 #[derive(Debug, Clone)]
@@ -11,21 +12,17 @@ pub enum Message {
     WindowEvent(window::Event),
     // Engine Messages
     Engine(Actions),
-    PatternClickNote(PatternNoteIdentifier),
     GoToStart,
-    AddTrack,
     SelectTrack(TrackIdentifier),
     SelectRegion(RegionIdentifier, bool), 
+    DeleteSelectedRegion,
     DeselectAllRegions(),
-    AddRegionAtPlayhead(RegionType),
-    AddRegionAt(TrackIdentifier, Tick, RegionType),
-    DeleteSelectedRegion(),
-    Synth(SynthMessage),
-    // Midi Editor
-    CreateMidiNote(RegionIdentifier, Tick, MidiNote),
     // Playhead
     SetPlayhead(Tick),
+    AddRegionAtPlayhead(RegionType),
     Tick,
+    // Synth
+    Synth(SynthMessage),
     // Menu
     NewFile,
     OpenFile,
@@ -37,6 +34,4 @@ pub enum Message {
 pub enum SynthMessage {
     SelectSoundFont(TrackIdentifier),
     SetSoundFont(TrackIdentifier, Option<PathBuf>),
-    SetBank(TrackIdentifier, u32),
-    SetProgram(TrackIdentifier, u8),
 }

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use iced::mouse::Cursor;
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
+use crate::engine::actions::Actions;
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
 use crate::models::shared::RegionIdentifier;
 
@@ -151,11 +152,11 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     if let Some(pending) = &state.pending_note {
                         let final_note = *pending;
                         state.pending_note = None;
-                        return Some(iced::widget::Action::publish(Message::CreateMidiNote (
+                        return Some(iced::widget::Action::publish(Message::Engine(Actions::CreateMidiNote (
                             self.region_identifier,
                             final_note.start,
                             final_note.note,
-                        )));
+                        ))));
                     }
                 }
                 _ => {}

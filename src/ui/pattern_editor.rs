@@ -1,5 +1,6 @@
 use iced::widget::{ row, text, Column, Container, Row, button };
 use iced::{Length, Element};
+use crate::engine::actions::Actions;
 use crate::models::sequences::PatternSeq;
 use crate::models::shared::{ RegionIdentifier, PatternNoteIdentifier};
 
@@ -67,6 +68,6 @@ fn note_toggle_button(pattern_id: RegionIdentifier, note_num: u8, beat_num: u8, 
     components::control(
        button(
         Container::new(row![]).width(Length::Fixed(20.0)).height(Length::Fixed(20.0)).style(style)
-       ).on_press(Message::PatternClickNote(PatternNoteIdentifier {region_id: pattern_id, note_num, beat_num} )).into(),
+       ).on_press(Message::Engine(Actions::PatternClickNote(PatternNoteIdentifier {region_id: pattern_id, note_num, beat_num} ))).into(),
     )
 }
