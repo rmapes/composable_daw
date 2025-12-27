@@ -3,7 +3,7 @@ use iced::Length;
 use iced::Element;
 use iced::time;
 use iced::{Subscription, window, Task};
-use log::info;
+use log::{error, info};
 use crate::models::instuments::Instrument;
 use crate::models::sequences::{Sequence, Tick};
 use crate::models::shared::{RegionIdentifier, ProjectData, RegionType, TrackIdentifier};
@@ -91,6 +91,16 @@ impl MainWindow {
                 }
                 _ => Task::none(),
             }
+            Message::Engine(action) => { 
+                if let Err(err) = self.engine.send(action) {
+                    //TODO: Restart gracefully.
+                    error!("Engine shutdown unexpectedly. Shutting down");
+                    error!("{}", err);
+                    iced::exit()
+                } else { 
+                    Task::none()
+                } 
+            }
             Message::PatternClickNote(note_identifier) => {
                 // toggle note on in pattern
                 if let Ok(mut song) = self.data.try_write() {
@@ -101,23 +111,6 @@ impl MainWindow {
                 // No further task to do
                 Task::none()
             },
-            Message::Play => {
-                if let Ok(mut state) = self.player_state.try_write() 
-                    && state.is_audio_initialized {
-                        state.is_playing = true;
-                        return Task::none()
-                }
-                self.engine.play_midi();
-                Task::none()
-            },
-            Message::Stop => {
-                // self.engine.pause();
-                if let Ok(mut state) = self.player_state.try_write() 
-                    && state.is_audio_initialized {
-                        state.is_playing = false;
-                }
-                Task::none()
-            }
             Message::GoToStart => {
                 if let Ok(mut state) = self.player_state.try_write() {
                     state.playhead = 0;

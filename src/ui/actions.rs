@@ -3,15 +3,15 @@ use std::path::PathBuf;
 use iced::window;
 
 use crate::models::{sequences::{MidiNote, Tick}, shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier}};
-
+use crate::engine::actions::Actions;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     // Window event messages...
     WindowEvent(window::Event),
+    // Engine Messages
+    Engine(Actions),
     PatternClickNote(PatternNoteIdentifier),
-    Play,
-    Stop,
     GoToStart,
     AddTrack,
     SelectTrack(TrackIdentifier),

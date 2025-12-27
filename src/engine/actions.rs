@@ -1,10 +1,12 @@
+#[derive(Debug, Clone)]
 pub enum Actions {
-    PlayMidi,
+    Play,
     Pause,
     Quit,
     Internal(SystemActions),
 }
 
+#[derive(Debug, Clone)]
 pub enum SystemActions {
     SamplesPlayed(usize),
     SetSampleRate(u32),

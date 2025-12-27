@@ -1,6 +1,7 @@
 use iced::{widget::{ row, Row }, Length};
 use super::actions::Message;
 use super::components::icons::{icon_button, Icon};
+use crate::engine::actions::Actions::{Play, Pause};
 
 pub struct Component {
     width: Length,
@@ -16,8 +17,8 @@ impl Component {
     pub fn view(&self) -> Row<'_, Message> {
         row![
             icon_button( Icon::RewindToStart).on_press(Message::GoToStart),
-            icon_button( Icon::Stop ).on_press(Message::Stop),
-            icon_button( Icon::Play ).on_press(Message::Play)
+            icon_button( Icon::Stop ).on_press(Message::Engine(Pause)),
+            icon_button( Icon::Play ).on_press(Message::Engine(Play))
         ]
         .width(self.width)
         .height(self.height)

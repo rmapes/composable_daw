@@ -1,10 +1,12 @@
+pub mod actions;
+
 mod synth;
 mod buss;
 mod audio;
-mod actions;
 
 use std::cmp::max;
 use std::error::Error;
+use std::sync::mpsc::SendError;
 use std::sync::{mpsc, Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -21,6 +23,16 @@ use crate::models::components::Track;
 pub struct EngineController {
     tx: mpsc::Sender<actions::Actions>,
 }
+
+impl EngineController {
+    pub fn send(&self, action: actions::Actions) -> Result<(), SendError<actions::Actions>> {
+        self.tx.send(action)
+    }
+    pub fn quit(&self) {
+        let _ = self.tx.send(actions::Actions::Quit);
+    }
+}
+
 
 pub struct PlayerState {
     pub is_preparing_to_play: bool,
@@ -91,21 +103,21 @@ where
        loop {
         if let Ok(received) = rx.recv() {
             match received {
-                actions::Actions::PlayMidi => {
+                actions::Actions::Play => {
                     // First check to see if the audio system is already active
                     if let Ok(mut state) = player_state.write() {
                         if state.is_preparing_to_play {
                             // Pressed play again before the last play has taken effect.
                             // Just wait for initialization to complete
                             info!("Play pressed while preparing to play");
-                            return
+                            continue
                         }
                         if state.is_audio_initialized {
                             // Audio is initialized, so either we pressed play while its already playinh
                             // or we pressed play to while it was paused. Either way, set playing to true
                             state.is_playing = true;
                             info!("Play pressed. Audio already initialized");
-                            return
+                            continue
                         }
                     }
                     // If we got here, we need to initialize the audio
@@ -212,19 +224,6 @@ where
 
     
     (EngineController {tx}, player_state.clone())
-}
-
-impl EngineController {
-    pub fn play_midi(&self) {
-        let _ = self.tx.send(actions::Actions::PlayMidi);
-    }
-    pub fn quit(&self) {
-        let _ = self.tx.send(actions::Actions::Quit);
-    }
-    pub fn pause(&self) {
-        let _ = self.tx.send(actions::Actions::Pause);
-    }
-
 }
 
 fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, tick_rx: crossbeam_channel::Receiver<Tick>) -> Result<(), Box<dyn Error>> {
