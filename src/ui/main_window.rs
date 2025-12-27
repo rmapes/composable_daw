@@ -5,7 +5,7 @@ use iced::time;
 use iced::{Subscription, window, Task};
 use log::{error, info};
 use crate::models::sequences::{Sequence, Tick};
-use crate::models::shared::{RegionIdentifier, ProjectData, RegionType, TrackIdentifier};
+use crate::models::shared::{RegionIdentifier, ProjectData, TrackIdentifier};
 use crate::engine::{self, PlayerState};
 use crate::engine::actions::{Actions, SynthActions};
 
@@ -91,14 +91,7 @@ impl MainWindow {
                 _ => Task::none(),
             }
             Message::Engine(action) => { 
-                if let Err(err) = self.engine.send(action) {
-                    //TODO: Restart gracefully.
-                    error!("Engine shutdown unexpectedly. Shutting down");
-                    error!("{}", err);
-                    iced::exit()
-                } else { 
-                    Task::none()
-                } 
+                self.send_to_engine_and_handle_errors(action) 
             }
             Message::GoToStart => {
                 if let Ok(mut state) = self.player_state.try_write() {
@@ -139,14 +132,16 @@ impl MainWindow {
                 if let Ok(state) = player_state.read() {
                     let track_id = TrackIdentifier { track_id: self.selected_track};
                     let tick = state.playhead;
-                    self.engine.send(Actions::AddRegionAt(track_id, tick, region_type));
+                    return self.send_to_engine_and_handle_errors(
+                        Actions::AddRegionAt(track_id, tick, region_type)
+                    )
                 };
                 Task::none()
             },
             Message::DeleteSelectedRegion => {
                 if let Some(region_id) =self.selected_region {
-                    self.engine.send(Actions::DeleteRegion(region_id));
                     self.selected_region = None;
+                    return self.send_to_engine_and_handle_errors(Actions::DeleteRegion(region_id))
                 }
                 Task::none()
             },
@@ -169,10 +164,20 @@ impl MainWindow {
                     )
                 }
                 SynthMessage::SetSoundFont(track_id, path) => {
-                    self.engine.send(Actions::Synth(SynthActions::SetSoundFont(track_id, path))); 
-                    Task::none()
+                    self.send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(track_id, path)))
                 }
             },
+        }
+    }
+
+fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message> {
+        if let Err(err) = self.engine.send(action) {
+            //TODO: Restart gracefully.
+            error!("Engine shutdown unexpectedly. Shutting down");
+            error!("{}", err);
+            iced::exit()
+        } else { 
+            Task::none()
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
