@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use iced::event::Status;
 use iced::mouse::Cursor;
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
@@ -101,14 +100,14 @@ impl canvas::Program<Message, Theme> for MidiEditor {
     fn update(
         &self,
         state: &mut Self::State,
-        event: canvas::Event,
+        event: &iced::Event,
         bounds: Rectangle,
         cursor: Cursor,
-    ) -> (Status, Option<Message>) {
+    ) -> Option<iced::widget::Action<Message>> {
         let cursor_position = if let Some(p) = cursor.position_in(bounds) {
             p
         } else {
-            return (Status::Ignored, None);
+            return None;
         };
 
         // Calculate if the cursor is within the Grid area
@@ -117,7 +116,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
             Size::new(bounds.width - KEYBOARD_WIDTH, bounds.height - RULER_HEIGHT),
         );
 
-        if let canvas::Event::Mouse(mouse_event) = event {
+        if let iced::Event::Mouse(mouse_event) = event {
              match mouse_event {
                 iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
                     if grid_bounds.contains(cursor_position) {
@@ -134,10 +133,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch + MIDI_BASE, length: DEFAULT_LENGTH, velocity: 100 }});
                         // info!("Pending note set from {start_tick}");
                         // and return message to say all handled
-                        return (
-                            Status::Captured,
-                            None,
-                        );
+                        return Some(iced::widget::Action::capture());
                     }
                 }
 
@@ -151,10 +147,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             pending.note.length = current_tick - pending.start;
                         }
                         // and return message to say all handled
-                        return (
-                            Status::Captured,
-                            None
-                        );
+                        return Some(iced::widget::Action::capture());
                     }
                 }
 
@@ -162,21 +155,18 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     if let Some(pending) = &state.pending_note {
                         let final_note = *pending;
                         state.pending_note = None;
-                        return (
-                            Status::Captured,
-                            Some(Message::CreateMidiNote (
-                                self.region_identifier,
-                                final_note.start,
-                                final_note.note,
-                            ))
-                        );
+                        return Some(iced::widget::Action::publish(Message::CreateMidiNote (
+                            self.region_identifier,
+                            final_note.start,
+                            final_note.note,
+                        )));
                     }
                 }
                 _ => {}
             }
         }
 
-        (Status::Ignored, None)
+        None
     }
 }
 
@@ -305,13 +295,11 @@ impl MidiEditor {
                     let text = Text {
                         content: label,
                         position: Point::new(
-                            bounds.x + KEYBOARD_WIDTH - 5.0, // Right-aligned on the key
-                            y + (NOTE_HEIGHT / 2.0)         // Centered vertically
+                            bounds.x + 3.0 * KEYBOARD_WIDTH / 4.0, // Right align on the key
+                            y + (NOTE_HEIGHT / 2.0) - 4.0        // Centered vertically
                         ),
                         color: Color::from_rgb(0.5, 0.5, 0.5),
                         size: iced::Pixels::from(10.0),
-                        horizontal_alignment: iced::alignment::Horizontal::Right,
-                        vertical_alignment: iced::alignment::Vertical::Center,
                         ..Text::default()
                     };
         

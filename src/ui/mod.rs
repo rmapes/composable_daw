@@ -16,7 +16,12 @@ use main_window::MainWindow;
 const APP_TITLE: &str = "Composable: Pluggable DAW";
 
 pub fn run() -> Result<(), iced::Error> {
-    iced::application(APP_TITLE, MainWindow::update, MainWindow::view)
+    iced::application(
+        || (MainWindow::default(), iced::Task::none()),
+        MainWindow::update,
+        MainWindow::view
+    )
+    .title(APP_TITLE)
     .subscription(MainWindow::subscription)
     .run()
 }

@@ -1,5 +1,5 @@
 use iced::mouse::{Button, Cursor, Event};
-use iced::widget::{ Container, MouseArea, Stack, stack, button, column, container, horizontal_space, row, scrollable, text};
+use iced::widget::{ Container, MouseArea, Stack, stack, button, column, container, Space, row, scrollable, text};
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
@@ -50,7 +50,7 @@ impl Component {
         const RULER_HEIGHT: f32 = 10.0;
 
         let ruler_layer = row![
-            horizontal_space().width(Length::Fixed(100.0)),
+            Space::new().width(Length::Fixed(100.0)),
             iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE)).width(Length::Fixed(TIMELINE_WIDTH))                
         ].height(Length::Fixed(RULER_HEIGHT));
 
@@ -63,7 +63,7 @@ impl Component {
                     self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE),
                     ],
                     row![
-                        horizontal_space().width(Length::Fixed(100.0)),
+                        Space::new().width(Length::Fixed(100.0)),
                         iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill).width(Length::Fill)
                     ].width(Length::Fill)         
                 ]
@@ -147,7 +147,7 @@ impl Component {
         let button = self.region(w, id.unwrap());
 
         row![
-            horizontal_space().width(x),
+            Space::new().width(Length::Fixed(x)),
             button,
         ].into()
 
@@ -297,21 +297,21 @@ impl canvas::Program<Message, Theme> for TickRuler {
     fn update(
         &self,
         _state: &mut Self::State,
-        event: iced::widget::canvas::Event,
+        event: &iced::Event,
         bounds: Rectangle,
         cursor: Cursor,
-    ) -> (iced::event::Status, Option<Message>) {
-        if let iced::widget::canvas::Event::Mouse(mouse_event) = event 
+    ) -> Option<iced::widget::Action<Message>> {
+        if let iced::Event::Mouse(mouse_event) = event 
             && let Some(cursor_position) = cursor.position_in(bounds) {
                 // Check for a mouse button press event (e.g., left click)
                 if matches!(mouse_event, Event::ButtonPressed(Button::Left)) {
                     // convert cursor position to tick
                     let tick_position = cursor_position.x / self.length_per_tick;
                     // cursor_position is relative to the canvas bounds
-                    return (iced::event::Status::Captured, Some(Message::SetPlayhead(tick_position as u32)));
+                    return Some(iced::widget::Action::publish(Message::SetPlayhead(tick_position as u32)));
                 }
         }
-        (iced::event::Status::Ignored, None)
+        None
     }
 
     fn draw(

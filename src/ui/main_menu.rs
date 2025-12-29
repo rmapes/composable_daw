@@ -33,19 +33,19 @@ pub fn top_menu_view() -> Element<'static, Message>
             menu_tpl_1(menu_items!(
                 // (text("New"))
                 // (text("Open"))
-                (button(text("New")).on_press(Message::NewFile))
+                (button(text("New")).on_press(Message::NewFile)),
                 (button(text("Open")).on_press(Message::OpenFile))
-            )
-        ))
+            ))
+        ),
         (
             text("Edit"),
             menu_tpl_1(menu_items!(
                 // (text("New"))
                 // (text("Open"))
-                (button(text("Add Pattern")).on_press(Message::AddRegionAtPlayhead(RegionType::Pattern)))
-                (button(text("Add Midi")).on_press(Message::AddRegionAtPlayhead(RegionType::Midi)))
+                (button(text("Add Pattern")).on_press(Message::AddRegionAtPlayhead(RegionType::Pattern))),
+                (button(text("Add Midi")).on_press(Message::AddRegionAtPlayhead(RegionType::Midi))),
                 (button(text("Delete Region")).on_press(Message::DeleteSelectedRegion()))
-            )
-        ))
+            ))
+        )
     ).into()
 }

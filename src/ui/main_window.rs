@@ -293,3 +293,42 @@ impl MainWindow {
         self.engine.quit();
     }
 }
+
+////////////////////////////////
+/// Integration Tests
+#[cfg(test)]
+mod integration_tests {
+
+    use super::*;
+    use iced_test::{simulator, Simulator};
+
+    use super::super::actions::Message;
+
+
+    #[test]
+    fn test_add_and_delete_tracks() {
+        let app = MainWindow::default();
+        let mut ui = simulator(app.view());
+        // Check that we've started up with one track present, and that it is selected
+        assert_eq!(tracks_present(&mut ui), 1)
+        // Click + to add a track     
+        // Check that a new track has been added
+        // Click to select the second track
+        // Check that it is selected
+        // Use the file menu to delete the track
+        // Check that we are back to two tracks
+        // Click file/new
+        // Check we are back to one track
+    }
+
+    // Fluent helper functions
+    fn tracks_present(ui: &mut Simulator<Message>) -> usize {
+        let mut count: usize = 0;
+        for i in 1..1000 {
+            if ui.find(format!("Track {i}")).is_ok() {
+                count += 1;
+            }
+        }
+        count
+    }
+}

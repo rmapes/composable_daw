@@ -9,10 +9,13 @@ midir = "0.10.2"
 oxisynth = "0.1.0"
 cpal = "0.15"
 ringbuf = "0.4.8"
-iced = { version = "0.13.1", features = ["canvas", "tokio", "image"] }
+iced = { version = "0.14", features = ["canvas", "tokio", "image"] }
 log = "0.4.28"
 pretty_env_logger = "0.5.0"
 rfd = "0.15.4"
-iced_aw = "0.12.2"
+iced_aw = "0.13"
 crossbeam-channel = "0.5.15"
+
+[dev-dependencies]
+iced_test = "0.14.0"
 
