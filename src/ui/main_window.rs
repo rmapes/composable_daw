@@ -300,25 +300,31 @@ impl MainWindow {
 mod integration_tests {
 
     use super::*;
-    use iced_test::{simulator, Simulator};
+    use iced_test::{Error, Simulator, simulator};
+    use std::{thread, time};
 
     use super::super::actions::Message;
 
 
     #[test]
-    fn test_add_and_delete_tracks() {
-        let app = MainWindow::default();
-        let mut ui = simulator(app.view());
-        // Check that we've started up with one track present, and that it is selected
-        assert_eq!(tracks_present(&mut ui), 1)
-        // Click + to add a track     
+    fn test_add_and_delete_tracks() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        {
+            let mut ui = simulator(app.view());
+            // Check that we've started up with one track present, and that it is selected
+            assert_eq!(tracks_present(&mut ui), 1);
+        }
+        // Click + to add a track
+        let mut ui = add_track(&mut app)?;
         // Check that a new track has been added
+        assert_eq!(tracks_present(&mut ui), 2);
         // Click to select the second track
         // Check that it is selected
         // Use the file menu to delete the track
         // Check that we are back to two tracks
         // Click file/new
         // Check we are back to one track
+        Ok(())
     }
 
     // Fluent helper functions
@@ -330,5 +336,24 @@ mod integration_tests {
             }
         }
         count
+    }
+
+    const TEN_MILLIS: time::Duration = time::Duration::from_millis(10);
+
+    fn add_track(app: &mut MainWindow) -> Result<Simulator<'_, Message>, Error> {
+        // Find and click the "+" button in the composer window controls
+        // The button is created with button("+") in composer_window.rs line 80
+        let mut ui = simulator(app.view());
+        ui.find("+")?;
+        ui.click("+")?;
+        thread::sleep(TEN_MILLIS);
+        // Collect messages from the click
+        let messages = ui.into_messages().collect::<Vec<_>>();
+        // Update state with messages
+        for message in messages {
+            let _ = app.update(message);
+        }
+        // Create new simulator with updated view
+        Ok(simulator(app.view()))
     }
 }
