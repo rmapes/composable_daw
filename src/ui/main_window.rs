@@ -246,7 +246,12 @@ impl MainWindow {
     pub fn view(&self) ->Element<'_, Message> {
         let content: Column<'_, Message> = {
             if let Ok(song) = self.data.try_read() {
-                let selected_track =  &song.tracks[self.selected_track]; 
+                let selected_track = if self.selected_track < song.tracks.len() {
+                    &song.tracks[self.selected_track]
+                } else {
+                    // If selected_track is out of bounds, default to first track
+                    &song.tracks[0]
+                }; 
                 let selected_region: Option<&Sequence> = self.selected_region
                     .and_then(|selection| song.tracks[selection.track_id.track_id].midi.as_ref()
                         .and_then(|sequence| sequence.sequences.get(&selection.region_id)));
@@ -317,7 +322,11 @@ mod integration_tests {
         // Check that a new track has been added
         assert_eq!(test.tracks_present(), 2);
         // Click to select the second track
+        assert!(!test.is_track_selected("Track 2"), "Track 2 should not be selected initially");
+        test.select_track(1)?; // Select track by index (0-based, so 1 = "Track 2")
         // Check that it is selected
+        assert!(test.is_track_selected(1), "Track 2 should be selected");
+        assert!(test.is_track_selected("Track 2"), "Track 2 should be selected by name");
         // Use the file menu to delete the track
         // Check that we are back to two tracks
         // Click file/new using the menu helper method
@@ -390,5 +399,70 @@ mod integration_tests {
             count
         }
 
+        /// Select a track by its name (e.g., "Track 1") or by index (0-based)
+        /// Returns the track index that was selected
+        fn select_track(&mut self, track: impl Into<TrackSelector>) -> Result<usize, Error> {
+            let track_name = match track.into() {
+                TrackSelector::Name(name) => name,
+                TrackSelector::Index(idx) => format!("Track {}", idx + 1),
+            };
+            
+            // Click on the track name to select it
+            self.click(&track_name)?;
+            
+            // Return the track index (extract from name like "Track 1" -> 0)
+            if let Some(num_str) = track_name.strip_prefix("Track ") {
+                if let Ok(num) = num_str.parse::<usize>() {
+                    return Ok(num - 1); // Convert to 0-based index
+                }
+            }
+            Err(Error::SelectorNotFound { selector: track_name })
+        }
+
+        /// Check if a specific track is currently selected
+        /// Takes either a track name (e.g., "Track 1") or index (0-based)
+        fn is_track_selected(&self, track: impl Into<TrackSelector>) -> bool {
+            let expected_index = match track.into() {
+                TrackSelector::Name(name) => {
+                    if let Some(num_str) = name.strip_prefix("Track ") {
+                        if let Ok(num) = num_str.parse::<usize>() {
+                            num - 1 // Convert to 0-based
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                TrackSelector::Index(idx) => idx,
+            };
+            
+            // Check if the app's selected_track matches
+            self.app.selected_track == expected_index
+        }
+    }
+
+    /// Helper enum for track selection - can specify by name or index
+    enum TrackSelector {
+        Name(String),
+        Index(usize),
+    }
+
+    impl From<&str> for TrackSelector {
+        fn from(name: &str) -> Self {
+            TrackSelector::Name(name.to_string())
+        }
+    }
+
+    impl From<String> for TrackSelector {
+        fn from(name: String) -> Self {
+            TrackSelector::Name(name)
+        }
+    }
+
+    impl From<usize> for TrackSelector {
+        fn from(idx: usize) -> Self {
+            TrackSelector::Index(idx)
+        }
     }
 }
