@@ -304,10 +304,10 @@ impl MainWindow {
 #[cfg(test)]
 mod integration_tests {
 
-    use crate::models::sequences::MidiNote;
+    use crate::models::{sequences::MidiNote, shared::PatternNoteIdentifier};
 
     use super::*;
-    use iced::{Point, widget::Id};
+    use iced::widget::Id;
     use iced_test::{Error, Selector, selector::Bounded, simulator};
 
     use super::super::actions::Message;
@@ -375,7 +375,38 @@ mod integration_tests {
         assert!(test.is_editor_visible(), "Editor should be visible for MIDI region");
 
         // 8. Click grid to add note (at tick 10, pitch 60)
-        test.click_editor_grid(10, 60)?;
+        test.click_midi_editor_grid(10, 60)?;
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_pattern_region() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+
+        // 1. Check that there is a region currently selected 
+        // (MainWindow default selects Region 0 on Track 0)
+        assert!(test.has_selection(), "A region should be selected by default");
+
+        // 2. Check "Edit"/"Delete Region" removes it
+        test.click_menu_item("Edit", "Delete Region")?;
+        assert!(!test.has_selection(), "Selection should be gone after delete");
+
+        // 3. Check playhead is at 0
+        assert_eq!(test.get_playhead(), 0);
+
+        // 4. Add MIDI region at tick 0 via menu
+        test.click_menu_item("Edit", "Add Pattern Region")?;
+        // Selecting it to ensure it's the active one
+        test.click(Id::new("Region 1"))?; 
+
+        // 5. Check selecting displays MIDI editor
+        // We check if the editor window is viewing a sequence (non-None)
+        assert!(test.is_editor_visible(), "Editor should be visible for MIDI region");
+
+        // 6. Click grid to add note (at tick 10, pitch 60)
+        test.click_pattern_editor_grid(3, 2)?;
         
         Ok(())
     }
@@ -420,6 +451,12 @@ mod integration_tests {
                     let track_id = TrackIdentifier { track_id: self.app.selected_track};
                     let tick = self.app.playhead;
                     Some(Message::AddRegionAt(track_id, tick, RegionType::Midi))
+                },
+                ("Edit", "Add Pattern Region") => {
+                    // Simulate AddRegionAtPlayhead, as we can't chain tasks.
+                    let track_id = TrackIdentifier { track_id: self.app.selected_track};
+                    let tick = self.app.playhead;
+                    Some(Message::AddRegionAt(track_id, tick, RegionType::Pattern))
                 },
                 _ => None,
             };
@@ -473,6 +510,7 @@ mod integration_tests {
             self.app.playhead
         }
 
+        // TODO: This was created by cursor and doesn't actually check the editor is visible. Need to add ids to the editor container, and replace with a find.
         fn is_editor_visible(&self) -> bool {
             // Check if the data layer has a sequence for the selection
             if let Ok(song) = self.app.data.try_read() {
@@ -483,10 +521,25 @@ mod integration_tests {
             false
         }
 
-        fn click_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
+        fn click_midi_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
             if let Some(region_id) = self.app.selected_region {
                 let midi_note = MidiNote { key: note, velocity: 100, channel: 0, length: 960};
                 let msg = Message::CreateMidiNote(region_id, tick, midi_note);
+                let _ = self.app.update(msg);
+                Ok(())
+            } else {
+                Err(Error::SelectorNotFound { selector: "Editor Grid (No Region Selected)".to_string() })
+            }
+        }
+
+        fn click_pattern_editor_grid(&mut self, beat: u8, note: u8) -> Result<(), Error> {
+            if let Some(region_id) = self.app.selected_region {
+                let pattern_note = PatternNoteIdentifier { 
+                    region_id,
+                    note_num: note,
+                    beat_num: beat,
+                };
+                let msg = Message::PatternClickNote(pattern_note);
                 let _ = self.app.update(msg);
                 Ok(())
             } else {
