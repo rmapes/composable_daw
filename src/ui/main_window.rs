@@ -372,7 +372,7 @@ mod integration_tests {
 
         // 7. Check selecting displays MIDI editor
         // We check if the editor window is viewing a sequence (non-None)
-        assert!(test.is_editor_visible(), "Editor should be visible for MIDI region");
+        assert!(test.is_midi_editor_visible(), "Editor should be visible for MIDI region");
 
         // 8. Click grid to add note (at tick 10, pitch 60)
         test.click_midi_editor_grid(10, 60)?;
@@ -403,7 +403,7 @@ mod integration_tests {
 
         // 5. Check selecting displays MIDI editor
         // We check if the editor window is viewing a sequence (non-None)
-        assert!(test.is_editor_visible(), "Editor should be visible for MIDI region");
+        assert!(test.is_pattern_editor_visible(), "Editor should be visible for Pattern region");
 
         // 6. Click grid to add note (at tick 10, pitch 60)
         test.click_pattern_editor_grid(3, 2)?;
@@ -510,15 +510,14 @@ mod integration_tests {
             self.app.playhead
         }
 
-        // TODO: This was created by cursor and doesn't actually check the editor is visible. Need to add ids to the editor container, and replace with a find.
-        fn is_editor_visible(&self) -> bool {
-            // Check if the data layer has a sequence for the selection
-            if let Ok(song) = self.app.data.try_read() {
-                if let Some(sel) = self.app.selected_region {
-                    return song.tracks[sel.track_id.track_id].midi.is_some();
-                }
-            }
-            false
+        fn is_midi_editor_visible(&self) -> bool {
+            let mut ui = simulator(self.app.view());
+            ui.find(Id::new("MidiEditor")).is_ok()
+        }
+
+        fn is_pattern_editor_visible(&self) -> bool {
+            let mut ui = simulator(self.app.view());
+            ui.find(Id::new("PatternEditor")).is_ok()
         }
 
         fn click_midi_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {

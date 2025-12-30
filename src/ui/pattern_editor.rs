@@ -32,7 +32,7 @@ impl Component {
             content
             .width(self.width)
             .height(self.height).into()
-        ).into()
+        ).id("PatternEditor").into()
     }
 }
 
