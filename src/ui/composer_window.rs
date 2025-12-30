@@ -138,13 +138,14 @@ impl Component {
         // 2. Interactive Markers (Foreground Layer)
         let regions: Vec<Element<'_, Message>> = self.get_regions(track).into_iter()
         .filter(|(_, _, id)| {id.is_some()} )
-        .map(|(start, length, id)| {
+        .enumerate()
+        .map(|(i, (start, length, id))| {
         // Assuming 16 bars in the timeline, convert to length per tick
         let x = start as f32 * length_per_tick;
         let w = length as f32 * length_per_tick;
  
         // Create the button widget
-        let button = self.region(w, id.unwrap());
+        let button = self.region(w, id.unwrap(), format!("Region {}", i + 1));
 
         row![
             Space::new().width(Length::Fixed(x)),
@@ -167,7 +168,7 @@ impl Component {
             content
         ).on_press(Message::DeselectAllRegions());
 
-        components::display(clickable_content.into())
+        components::display(clickable_content.into()).id("TimelineBackground")
     }
 
     fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<RegionIdentifier>)> {
@@ -183,8 +184,7 @@ impl Component {
         }).unwrap_or_default()
     }
 
-    fn region<'a>(&self, width: f32, region_id: RegionIdentifier) -> Element<'a, Message> {
-    
+    fn region<'a>(&self, width: f32, region_id: RegionIdentifier, debug_id: String) -> Element<'a, Message> {
         // 1. Visual Element (The thin, tall "rectangle")
         let region_marker = container(text(""))
             .width(iced::Length::Fixed(width)) 
@@ -193,7 +193,7 @@ impl Component {
                 background: Some(Color::from_rgb(0.0, 0.4, 0.6).into()), 
                 border: border::rounded(5),
                 ..Default::default()
-            });
+            }).id(debug_id);
     
         // 2. Interactive Element
         // Wrap it in a button and handle the press action

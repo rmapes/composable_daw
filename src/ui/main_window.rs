@@ -304,8 +304,11 @@ impl MainWindow {
 #[cfg(test)]
 mod integration_tests {
 
+    use crate::models::sequences::MidiNote;
+
     use super::*;
-    use iced_test::{Error, simulator};
+    use iced::{Point, widget::Id};
+    use iced_test::{Error, Selector, selector::Bounded, simulator};
 
     use super::super::actions::Message;
 
@@ -328,7 +331,7 @@ mod integration_tests {
         assert!(test.is_track_selected(1), "Track 2 should be selected");
         assert!(test.is_track_selected("Track 2"), "Track 2 should be selected by name");
         // Use the file menu to delete the track
-        // Check that we are back to two tracks
+        // Check that we are back to a single tracks
         // Click file/new using the menu helper method
         test.click_menu_item("File", "New")?;
         // Check we are back to one track
@@ -336,7 +339,49 @@ mod integration_tests {
         Ok(())
     }
 
-    // Fluent test helper that manages app state and simulator
+#[test]
+    fn test_add_midi_region() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+
+        // 1. Check that there is a region currently selected 
+        // (MainWindow default selects Region 0 on Track 0)
+        assert!(test.has_selection(), "A region should be selected by default");
+
+        // 2. Check that clicking outside deselects
+        // Assuming "TimelineBackground" is a valid selector for the empty area
+        test.click(Id::new("TimelineBackground"))?; 
+        assert!(!test.has_selection(), "Region should be deselected after clicking background");
+
+        // 3. Check that clicking on the midi region selects it
+        // Note: Default region in Track 1 usually named "Region 1" or similar
+        test.click(Id::new("Region 1"))?;
+        assert!(test.has_selection(), "Region should be selected after clicking it");
+
+        // 4. Check "Edit"/"Delete Region" removes it
+        test.click_menu_item("Edit", "Delete Region")?;
+        assert!(!test.has_selection(), "Selection should be gone after delete");
+
+        // 5. Check playhead is at 0
+        assert_eq!(test.get_playhead(), 0);
+
+        // 6. Add MIDI region at tick 0 via menu
+        test.click_menu_item("Edit", "Add Midi Region")?;
+        // Selecting it to ensure it's the active one
+        test.click(Id::new("Region 1"))?; 
+
+        // 7. Check selecting displays MIDI editor
+        // We check if the editor window is viewing a sequence (non-None)
+        assert!(test.is_editor_visible(), "Editor should be visible for MIDI region");
+
+        // 8. Click grid to add note (at tick 10, pitch 60)
+        test.click_editor_grid(10, 60)?;
+        
+        Ok(())
+    }
+
+    // --- Expanded Emulator ---
+
     struct Emulator<'a> {
         app: &'a mut MainWindow,
     }
@@ -346,42 +391,42 @@ mod integration_tests {
             Self { app }
         }
 
-        fn click(&mut self, selector: &str) -> Result<(), Error> {
+        // Select an element, and click on it directly
+        fn click<S>(&mut self, selector: S) -> Result<(), Error> 
+        where S:Selector + Send + Clone, S::Output: Bounded + Clone + Send + Sync + 'static {
             let mut ui = simulator(self.app.view());
-            ui.find(selector)?;
-            ui.click(selector)?;
-            // Collect messages from the click (consumes ui, releasing the borrow)
+            ui.find(selector.clone())?;
+            ui.click(selector.clone())?;
             let messages = ui.into_messages().collect::<Vec<_>>();
-            // Now we can update the app (mutable borrow is available)
             for message in messages {
                 let _ = self.app.update(message);
             }
             Ok(())
         }
 
-        /// Click a menu item - handles the menu opening and item selection
-        /// First clicks the menu header to open it, then clicks the item
-        /// Note: iced_aw menus manage state internally, so menu items may not
-        /// be directly findable. This method tries to click through the UI,
-        /// but falls back to directly triggering the message if needed.
         fn click_menu_item(&mut self, menu: &str, item: &str) -> Result<(), Error> {
-            // Click the menu header to open it
             self.click(menu)?;
-            // Try to click the menu item
             if self.click(item).is_ok() {
                 return Ok(());
             }
             
-            // Fallback: iced_aw menus may not expose items to iced_test selectors
-            // Map common menu items to their messages and trigger directly
+            // Expanded fallback mapping
             let message = match (menu, item) {
                 ("File", "New") => Some(Message::NewFile),
                 ("File", "Open") => Some(Message::OpenFile),
+                ("Edit", "Delete Region") => Some(Message::DeleteSelectedRegion()),
+                ("Edit", "Add Midi Region") => {
+                    // Simulate AddRegionAtPlayhead, as we can't chain tasks.
+                    let track_id = TrackIdentifier { track_id: self.app.selected_track};
+                    let tick = self.app.playhead;
+                    Some(Message::AddRegionAt(track_id, tick, RegionType::Midi))
+                },
                 _ => None,
             };
             
             if let Some(msg) = message {
-                let _ = self.app.update(msg);
+                let task = self.app.update(msg);
+                assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
                 Ok(())
             } else {
                 Err(Error::SelectorNotFound { selector: format!("{} -> {}", menu, item) })
@@ -392,77 +437,65 @@ mod integration_tests {
             let mut ui = simulator(self.app.view());
             let mut count: usize = 0;
             for i in 1..1000 {
-                if ui.find(format!("Track {i}")).is_ok() {
-                    count += 1;
-                }
+                if ui.find(format!("Track {i}")).is_ok() { count += 1; }
+                else { break; }
             }
             count
         }
 
-        /// Select a track by its name (e.g., "Track 1") or by index (0-based)
-        /// Returns the track index that was selected
         fn select_track(&mut self, track: impl Into<TrackSelector>) -> Result<usize, Error> {
-            let track_name = match track.into() {
-                TrackSelector::Name(name) => name,
+            let selector = track.into();
+            let track_name = match &selector {
+                TrackSelector::Name(name) => name.clone(),
                 TrackSelector::Index(idx) => format!("Track {}", idx + 1),
             };
-            
-            // Click on the track name to select it
-            self.click(&track_name)?;
-            
-            // Return the track index (extract from name like "Track 1" -> 0)
-            if let Some(num_str) = track_name.strip_prefix("Track ") {
-                if let Ok(num) = num_str.parse::<usize>() {
-                    return Ok(num - 1); // Convert to 0-based index
+            self.click(track_name)?;
+            match selector {
+                TrackSelector::Index(idx) => Ok(idx),
+                TrackSelector::Name(_) => Ok(self.app.selected_track)
+            }
+        }
+
+        fn is_track_selected(&self, track: impl Into<TrackSelector>) -> bool {
+            match track.into() {
+                TrackSelector::Index(idx) => self.app.selected_track == idx,
+                TrackSelector::Name(name) => format!("Track {}", self.app.selected_track + 1) == name,
+            }
+        }
+
+        // --- New Helper Methods ---
+
+        fn has_selection(&self) -> bool {
+            self.app.selected_region.is_some()
+        }
+
+        fn get_playhead(&self) -> Tick {
+            self.app.playhead
+        }
+
+        fn is_editor_visible(&self) -> bool {
+            // Check if the data layer has a sequence for the selection
+            if let Ok(song) = self.app.data.try_read() {
+                if let Some(sel) = self.app.selected_region {
+                    return song.tracks[sel.track_id.track_id].midi.is_some();
                 }
             }
-            Err(Error::SelectorNotFound { selector: track_name })
+            false
         }
 
-        /// Check if a specific track is currently selected
-        /// Takes either a track name (e.g., "Track 1") or index (0-based)
-        fn is_track_selected(&self, track: impl Into<TrackSelector>) -> bool {
-            let expected_index = match track.into() {
-                TrackSelector::Name(name) => {
-                    if let Some(num_str) = name.strip_prefix("Track ") {
-                        if let Ok(num) = num_str.parse::<usize>() {
-                            num - 1 // Convert to 0-based
-                        } else {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                TrackSelector::Index(idx) => idx,
-            };
-            
-            // Check if the app's selected_track matches
-            self.app.selected_track == expected_index
+        fn click_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
+            if let Some(region_id) = self.app.selected_region {
+                let midi_note = MidiNote { key: note, velocity: 100, channel: 0, length: 960};
+                let msg = Message::CreateMidiNote(region_id, tick, midi_note);
+                let _ = self.app.update(msg);
+                Ok(())
+            } else {
+                Err(Error::SelectorNotFound { selector: "Editor Grid (No Region Selected)".to_string() })
+            }
         }
     }
 
-    /// Helper enum for track selection - can specify by name or index
-    enum TrackSelector {
-        Name(String),
-        Index(usize),
-    }
-
-    impl From<&str> for TrackSelector {
-        fn from(name: &str) -> Self {
-            TrackSelector::Name(name.to_string())
-        }
-    }
-
-    impl From<String> for TrackSelector {
-        fn from(name: String) -> Self {
-            TrackSelector::Name(name)
-        }
-    }
-
-    impl From<usize> for TrackSelector {
-        fn from(idx: usize) -> Self {
-            TrackSelector::Index(idx)
-        }
-    }
+    enum TrackSelector { Name(String), Index(usize) }
+    impl From<&str> for TrackSelector { fn from(name: &str) -> Self { TrackSelector::Name(name.to_string()) } }
+    impl From<usize> for TrackSelector { fn from(idx: usize) -> Self { TrackSelector::Index(idx) } }
 }
