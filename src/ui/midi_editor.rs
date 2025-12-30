@@ -104,11 +104,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
         bounds: Rectangle,
         cursor: Cursor,
     ) -> Option<iced::widget::Action<Message>> {
-        let cursor_position = if let Some(p) = cursor.position_in(bounds) {
-            p
-        } else {
-            return None;
-        };
+        let cursor_position = cursor.position_in(bounds)?;
 
         // Calculate if the cursor is within the Grid area
         let grid_bounds = Rectangle::new(

@@ -47,7 +47,6 @@ pub enum RegionType {
 
 ////////////
 /// Data that will be stored to file
-
 const DEFAULT_PPQ: u32 = 960;
 pub struct ProjectData {
     // Components

@@ -8,7 +8,6 @@ use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 
-use crate::engine::buss::BufferedOutput;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use super::buss::Output;
 
@@ -38,32 +37,6 @@ impl Output for Synth {
 	}
 }
 
-pub fn prepare_output<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &P, bank: u32, program: u8 ) -> Result<BufferedOutput, Box<dyn Error>> {
-	let mut synth = create_synth(soundfont, bank, program)?;
-	synth.set_sample_rate(sample_rate as f32);
-	let event_stream = seq.to_event_stream();
-	let mut output = BufferedOutput::new();
-	debug!("Preparing output for event source");
-	for tick in 0..event_stream.get_length_in_ticks() {
-		on_tick_unsafe(tick, &mut synth, &event_stream)?;
-		// Wait for next tick
-		output.read_f32((event_stream.get_tick_duration(bpm).as_nanos() * sample_rate as u128 / 1e9 as u128) as usize, &mut synth);
-	}
-	Ok(output)
-}
-
-fn on_tick_unsafe(tick: Tick, synth: &mut Synth, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
-	// println!("Tick {tick}");
-	for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
-		// println!("Tick: {tick}");
-		for event in event_stream.get_events(tick, priority) {
-			// println!("Event at {tick}");
-			synth.send_event(event.to_midi())?;
-		}
-	};
-	Ok(())
-}
-
 
 fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
 		// println!("Tick: {tick}");
@@ -77,7 +50,7 @@ fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &Event
 				// Attempt to downcast the trait object reference (&mut dyn Output)
 				if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
 					// println!("Playing event at {tick}");
-					s.send_event(event.to_midi())?;
+					s.send_event(event.as_midi())?;
 				}
 			}
 		}
@@ -103,7 +76,7 @@ pub struct TrackThread {
 }
 
 impl TrackThread {
-	pub fn new<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, bpm: u8, soundfont: &P, bank: u32, program: u8) -> Self {
+	pub fn new<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
 		let synth: Arc<RwLock<Box<dyn Output>>> = {
 			let mut synth = create_synth(soundfont, bank, program).expect("Couldn't create synth");
 			synth.set_sample_rate(sample_rate as f32);

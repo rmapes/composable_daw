@@ -73,14 +73,6 @@ pub fn label(_: &Theme) -> Style {
     }
 }
 
-pub fn border(_: &Theme) -> Style {
-    Style {
-        // Set the background color
-        background: Some(CONTROL_BLACK.into()),
-        border: border::width(2),
-        ..Style::default()
-    }
-}
 
 // Specific styles
 pub fn note_button_on(_: &Theme) -> Style {

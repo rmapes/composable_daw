@@ -4,7 +4,6 @@ mod synth;
 mod buss;
 mod audio;
 
-use std::cmp::max;
 use std::error::Error;
 use std::sync::mpsc::SendError;
 use std::sync::{mpsc, Arc, RwLock};
@@ -13,12 +12,10 @@ use std::time::Duration;
 
 use log::{debug, info};
 
-use crate::engine::buss::{BufferedOutput, Output};
-use crate::engine::synth::{TrackThread, prepare_output};
-use crate::models::instuments::{Instrument, SimpleSynth};
+use crate::engine::synth::TrackThread;
+use crate::models::instuments::Instrument;
 use crate::models::sequences::Tick;
 use crate::models::shared::ProjectData;
-use crate::models::components::Track;
 
 pub struct EngineController {
     tx: mpsc::Sender<actions::Actions>,
@@ -100,8 +97,7 @@ where
     let tx = tx.clone();
     let player_state = player_state.clone();
     move || {
-       loop {
-        if let Ok(received) = rx.recv() {
+       while let Ok(received) = rx.recv() {
             match received {
                 actions::Actions::Play => {
                     // First check to see if the audio system is already active
@@ -214,10 +210,6 @@ where
                     }
                 }
             }
-        } else {
-            // Error in receive probably means channel has closed, so simply exit the loop
-            break;
-        }
        }
        info!("Exiting loop. Assuming Quit was pressed");
     }});
@@ -235,7 +227,7 @@ fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, 
 
             Instrument::Synth(instrument) => {
                 if let Some(seq) = &track.midi {
-                    Ok(TrackThread::new(seq, engine.sample_rate as u32, structure.bpm, &instrument.get_soundfont_path(), instrument. bank, instrument.program))
+                    Ok(TrackThread::new(seq, engine.sample_rate as u32, &instrument.get_soundfont_path(), instrument. bank, instrument.program))
                 } else {
                     Err("Not midi")
                 }
@@ -257,43 +249,4 @@ fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, 
     info!("Sequence complete");
     engine.pause()?;
     Ok(())
- }
-
- fn play_structure_buffered(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>) -> Result<(), Box<dyn Error>> {
-	let mut engine = audio::init_audio(tx)?;
-    let _ = engine.pause(); // Engine starts with stream running. Stop it.
-    // Match synth sample rate to the device sample rate so pitch/timing are correct
-    let mut len = std::time::Duration::from_millis(0);
-    let outputs: Result<Vec<Arc<RwLock<Box<dyn Output>>>>, _> = structure.tracks.iter().map(|track| {
-        len = max(len, track.duration(structure.ticks_per_second()));
-        match &track.instrument.kind {
-            Instrument::Synth(instrument) => get_buffered_output_for_track(track, engine.sample_rate as u32, structure.bpm, instrument).map(|r| {
-                let output: Box<dyn Output> = Box::new(r);
-                Arc::new(RwLock::new(output))
-            })
-        }
-        
-    }).collect();
-    let outputs = outputs?;
-    let _ = outputs.into_iter().map(|output | {
-        engine.add_input(output);       
-    } ).count();
-    info!("Playing for {} ms", len.as_millis());
-    engine.start()?;
-    std::thread::sleep(len);
-    info!("Sequence complete");
-    engine.pause()?;
-    Ok(())
- }
-
-
- fn get_buffered_output_for_track(track: &Track, sample_rate: u32, bpm: u8, instrument: &SimpleSynth) -> Result<BufferedOutput, Box<dyn Error>> {
-    // Get the midi event stream
-    if let Some(event_stream) = &track.midi {
-    // For the moment, just pipe into synth. Eventually, we'll want to determine the audio generator from the track config
-        prepare_output(event_stream, sample_rate, bpm, &instrument.get_soundfont_path(), instrument. bank, instrument.program)
-    } else {
-        Ok(BufferedOutput::new())
-    }
- }
- 
+}

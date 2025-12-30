@@ -32,9 +32,6 @@ pub trait Output: Any + Send + Sync {
 
 // Enabled outputs to be downcast to original type
 impl dyn Output {
-    pub fn as_any(&self) -> &dyn Any {
-        self
-    }
     pub fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
@@ -98,6 +95,8 @@ impl Output for Buss {
     }
 }
 
+// Ignore unused code as we will use it in a later iteration
+#[allow(dead_code)]
 pub struct BufferedOutput {
     left_buf: Vec<f32>,
     right_buf: Vec<f32>,
@@ -106,6 +105,7 @@ pub struct BufferedOutput {
 }
 
 impl BufferedOutput {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         BufferedOutput {
             left_buf: Vec::new(),
@@ -114,6 +114,7 @@ impl BufferedOutput {
             right_read_start: 0,
         }
     }
+    #[allow(dead_code)]
     pub fn read_f32<T: Output>(&mut self, len: usize, input: &mut T) {
         let loff = self.left_buf.len();
         let roff = self.right_buf.len();

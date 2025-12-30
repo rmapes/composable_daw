@@ -40,7 +40,7 @@ impl EventStream{
         EventStream {
             ppq,
             events: HashMap::new(),
-            length_in_ticks: length_in_ticks,
+            length_in_ticks,
             no_events: Vec::new(),
         }
     }
@@ -66,10 +66,6 @@ impl EventStream{
     pub fn get_length_in_ticks(&self) -> u32 {
         self.length_in_ticks
     }
-    // Return length of ticks
-    pub fn get_tick_duration(&self, bpm: u8) -> std::time::Duration {
-        std::time::Duration::from_secs_f32(60.0_f32/(bpm as u32 * self.ppq) as f32)
-    }
 }
 
 // Define a sequence trait, to specify common functions for all sequences
@@ -83,7 +79,6 @@ pub struct PatternSeq {
     pub note_values: Vec<u8>,
     pub num_notes: u8,
     pub num_beats: u8,
-    pub bpm: u8,
     pub pattern: Vec<Vec<bool>>,
     pub ppq: u32, /* ticks per quarter note */
     pub beats_per_quarter_note: u8,
@@ -104,14 +99,12 @@ impl PatternSeq {
         let num_notes = note_values.len() as u8;
         let num_beats = 16;
         let pattern = (0..num_beats).map(|_| { (0..num_notes).map(|_| {false}).collect() }).collect();
-        let bpm= 120; // TODO: Get from Project
         let beats_per_quarter_note = 4;
         Self { 
             id,
             note_values, 
             num_notes, 
             num_beats, 
-            bpm, 
             pattern, 
             ppq,
             beats_per_quarter_note,
@@ -186,17 +179,17 @@ pub enum MidiEvent {
 }
 
 impl MidiEvent {
-    pub fn to_oxisynth(&self) -> oxisynth::MidiEvent {
+    pub fn to_oxisynth(self) -> oxisynth::MidiEvent {
         match self {
-            MidiEvent::NoteOn { channel, key, vel } => { oxisynth::MidiEvent::NoteOn { channel: *channel, key: *key, vel: *vel } },
-            MidiEvent::NoteOff { channel, key } => { oxisynth::MidiEvent::NoteOff { channel: *channel, key: *key } },
-            MidiEvent::ControlChange { channel, ctrl, value } => { oxisynth::MidiEvent::ControlChange { channel: *channel, ctrl: *ctrl, value: *value } },
-            MidiEvent::AllNotesOff { channel } => { oxisynth::MidiEvent::AllNotesOff { channel: *channel } },
-            MidiEvent::AllSoundOff { channel } => { oxisynth::MidiEvent::AllSoundOff { channel: *channel } },
-            MidiEvent::PitchBend { channel, value } => { oxisynth::MidiEvent::PitchBend { channel: *channel, value: *value } },
-            MidiEvent::ProgramChange { channel, program_id } => { oxisynth::MidiEvent::ProgramChange { channel: *channel, program_id: *program_id } },
-            MidiEvent::ChannelPressure { channel, value } => { oxisynth::MidiEvent::ChannelPressure { channel: *channel, value: *value } },
-            MidiEvent::PolyphonicKeyPressure { channel, key, value } => { oxisynth::MidiEvent::PolyphonicKeyPressure { channel: *channel, key: *key, value: *value } },
+            MidiEvent::NoteOn { channel, key, vel } => { oxisynth::MidiEvent::NoteOn { channel, key, vel } },
+            MidiEvent::NoteOff { channel, key } => { oxisynth::MidiEvent::NoteOff { channel, key } },
+            MidiEvent::ControlChange { channel, ctrl, value } => { oxisynth::MidiEvent::ControlChange { channel, ctrl, value } },
+            MidiEvent::AllNotesOff { channel } => { oxisynth::MidiEvent::AllNotesOff { channel } },
+            MidiEvent::AllSoundOff { channel } => { oxisynth::MidiEvent::AllSoundOff { channel } },
+            MidiEvent::PitchBend { channel, value } => { oxisynth::MidiEvent::PitchBend { channel, value } },
+            MidiEvent::ProgramChange { channel, program_id } => { oxisynth::MidiEvent::ProgramChange { channel, program_id } },
+            MidiEvent::ChannelPressure { channel, value } => { oxisynth::MidiEvent::ChannelPressure { channel, value } },
+            MidiEvent::PolyphonicKeyPressure { channel, key, value } => { oxisynth::MidiEvent::PolyphonicKeyPressure { channel, key, value } },
             MidiEvent::SystemReset => { oxisynth::MidiEvent::SystemReset },
         }
     }
@@ -216,7 +209,7 @@ impl MidiEventAt {
     pub fn get_event_time(&self) ->  Tick {
         self.ticks
     }  
-    pub fn to_midi(&self) -> oxisynth::MidiEvent {
+    pub fn as_midi(&self) -> oxisynth::MidiEvent {
         self.event.to_oxisynth()
     }  
     pub fn clone_at(&self, new_tick: u32) -> Self {
@@ -440,7 +433,6 @@ impl EventStreamSource for SequenceContainer {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
 
     use crate::models::shared::TrackIdentifier;
 
@@ -470,14 +462,6 @@ mod tests {
         // assert!(event_stream.get_events( 0, EventPriority::System).is_empty());  TODO: create tests showing that these calls panick, or make return is empty
         // assert!(event_stream.get_events( 12, EventPriority::Other).is_empty());
         // assert!(event_stream.get_events( 12, EventPriority::Audio).is_empty());
-    }
-
-    #[test]
-    fn event_stream_can_calculate_tick_duration_for_a_given_bpm() {
-        let length_in_ticks = 960*4;
-        let bpm = 120;
-        let event_stream = EventStream::new(960, length_in_ticks);
-        assert_eq!(event_stream.get_tick_duration(bpm), Duration::from_secs_f32(60.0/(960.0 * bpm as f32)))
     }
 
 

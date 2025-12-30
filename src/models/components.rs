@@ -22,7 +22,7 @@ All of the components that make up the structure of a 'song'
 
 /*** Generators ****/
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 use std::fmt;
 
 use crate::models::instuments::{Instrument, SimpleSynth};
@@ -98,17 +98,6 @@ impl Track {
             instrument: VirtualInstrument::default(),
             ppq,
         }
-    }
-
-    pub fn length_in_ticks(&self) -> Tick {
-        self.midi.as_ref().map(|s| s.length_in_ticks()).unwrap_or(0)
-    }
-
-    pub fn duration(&self, ticks_per_second: u32) -> Duration {
-        // Find last sequence
-        // 15000 * pattern.num_beats as u64 / pattern.bpm as u64;
-        let length_in_ticks = self.length_in_ticks() as f32;
-        Duration::from_secs_f32(length_in_ticks / ticks_per_second as f32)
     }
 
     pub fn add_midi_region_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
