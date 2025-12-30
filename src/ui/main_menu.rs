@@ -44,7 +44,7 @@ pub fn top_menu_view() -> Element<'static, Message>
                 // (text("Open"))
                 (button(text("Add Pattern")).on_press(Message::AddRegionAtPlayhead(RegionType::Pattern))),
                 (button(text("Add Midi")).on_press(Message::AddRegionAtPlayhead(RegionType::Midi))),
-                (button(text("Delete Region")).on_press(Message::DeleteSelectedRegion()))
+                (button(text("Delete Region")).on_press(Message::DeleteSelectedRegion))
             ))
         )
     ).into()

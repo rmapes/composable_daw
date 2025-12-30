@@ -149,7 +149,6 @@ impl MainWindow {
                 if let Ok(state) = self.player_state.try_read() 
                     && state.is_playing {
                     self.playhead = state.playhead;
-                    // println!("Tick: {}", state.playhead);
                 }
                 Task::none()
             },
@@ -241,7 +240,9 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
 #[cfg(test)]
 mod integration_tests {
 
-    use crate::models::{sequences::MidiNote, shared::PatternNoteIdentifier};
+    use std::{thread, time::Duration};
+
+    use crate::models::{sequences::MidiNote, shared::{PatternNoteIdentifier, RegionType}};
 
     use super::*;
     use iced::widget::Id;
@@ -256,11 +257,13 @@ mod integration_tests {
         // Using fluent TestApp helper for cleaner test code
         let mut test = Emulator::new(&mut app);
         // Check that we've started up with one track present
-        assert_eq!(test.tracks_present(), 1);
+        assert_eq!(test.tracks_present(), 1, "We should start with one track present");
         // Click + to add a track (fluent method calls)
         test.click("+")?;
+        // Wait for engine to update
+        thread::sleep(Duration::from_millis(1));
         // Check that a new track has been added
-        assert_eq!(test.tracks_present(), 2);
+        assert_eq!(test.tracks_present(), 2, "A new track should have been added");
         // Click to select the second track
         assert!(!test.is_track_selected("Track 2"), "Track 2 should not be selected initially");
         test.select_track(1)?; // Select track by index (0-based, so 1 = "Track 2")
@@ -304,6 +307,7 @@ mod integration_tests {
 
         // 6. Add MIDI region at tick 0 via menu
         test.click_menu_item("Edit", "Add Midi Region")?;
+        thread::sleep(Duration::from_millis(1));
         // Selecting it to ensure it's the active one
         test.click(Id::new("Region 1"))?; 
 
@@ -335,6 +339,7 @@ mod integration_tests {
 
         // 4. Add MIDI region at tick 0 via menu
         test.click_menu_item("Edit", "Add Pattern Region")?;
+        thread::sleep(Duration::from_millis(1));
         // Selecting it to ensure it's the active one
         test.click(Id::new("Region 1"))?; 
 
@@ -382,18 +387,18 @@ mod integration_tests {
             let message = match (menu, item) {
                 ("File", "New") => Some(Message::NewFile),
                 ("File", "Open") => Some(Message::OpenFile),
-                ("Edit", "Delete Region") => Some(Message::DeleteSelectedRegion()),
+                ("Edit", "Delete Region") => Some(Message::DeleteSelectedRegion),
                 ("Edit", "Add Midi Region") => {
                     // Simulate AddRegionAtPlayhead, as we can't chain tasks.
                     let track_id = TrackIdentifier { track_id: self.app.selected_track};
                     let tick = self.app.playhead;
-                    Some(Message::AddRegionAt(track_id, tick, RegionType::Midi))
+                    Some(Message::Engine(Actions::AddRegionAt(track_id, tick, RegionType::Midi)))
                 },
                 ("Edit", "Add Pattern Region") => {
                     // Simulate AddRegionAtPlayhead, as we can't chain tasks.
                     let track_id = TrackIdentifier { track_id: self.app.selected_track};
                     let tick = self.app.playhead;
-                    Some(Message::AddRegionAt(track_id, tick, RegionType::Pattern))
+                    Some(Message::Engine(Actions::AddRegionAt(track_id, tick, RegionType::Pattern)))
                 },
                 _ => None,
             };
@@ -460,7 +465,7 @@ mod integration_tests {
         fn click_midi_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
             if let Some(region_id) = self.app.selected_region {
                 let midi_note = MidiNote { key: note, velocity: 100, channel: 0, length: 960};
-                let msg = Message::CreateMidiNote(region_id, tick, midi_note);
+                let msg = Message::Engine(Actions::CreateMidiNote(region_id, tick, midi_note));
                 let _ = self.app.update(msg);
                 Ok(())
             } else {
@@ -475,7 +480,7 @@ mod integration_tests {
                     note_num: note,
                     beat_num: beat,
                 };
-                let msg = Message::PatternClickNote(pattern_note);
+                let msg = Message::Engine(Actions::PatternClickNote(pattern_note));
                 let _ = self.app.update(msg);
                 Ok(())
             } else {

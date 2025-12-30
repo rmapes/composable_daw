@@ -16,7 +16,7 @@ use crate::engine::actions::SynthActions;
 use crate::engine::synth::TrackThread;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::Tick;
-use crate::models::shared::ProjectData;
+use crate::models::shared::{ProjectData, RegionType};
 
 pub struct EngineController {
     tx: mpsc::Sender<actions::Actions>,
@@ -166,7 +166,7 @@ where
                 },
                 // Track
                 actions::Actions::AddTrack => {
-                    if let Ok(mut song) = shared_data.try_write() {
+                    if let Ok(mut song) = shared_data.write() {
                         song.new_track();
                     }               
                 },
