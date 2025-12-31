@@ -152,7 +152,6 @@ impl MainWindow {
                 }
                 Task::none()
             },
-            Message::Ignore => Task::none(),
             Message::Synth(synth_message) => match synth_message {
                 SynthMessage::SelectSoundFont(track_id) => {
                     Task::perform(

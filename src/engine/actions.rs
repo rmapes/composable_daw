@@ -31,6 +31,7 @@ pub enum SystemActions {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)] // Set is not part of enum name
 pub enum SynthActions {
     SetSoundFont(TrackIdentifier, Option<PathBuf>),
     SetBank(TrackIdentifier, u32),

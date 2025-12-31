@@ -26,8 +26,6 @@ pub enum Message {
     // Menu
     NewFile,
     OpenFile,
-    // For abandoning task chains
-    Ignore,
 }
 
 #[derive(Debug, Clone)]
