@@ -164,6 +164,14 @@ where
                     }
                     break;
                 },
+                // Project
+                actions::Actions::NewFile => {
+                    // Once we implement save, we should ask the user if they want to save before closing the current file
+                    if let Ok(mut project) = shared_data.write() {
+                        project.reset();
+                    }
+                },
+    
                 // Track
                 actions::Actions::AddTrack => {
                     if let Ok(mut song) = shared_data.write() {

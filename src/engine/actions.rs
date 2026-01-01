@@ -8,6 +8,8 @@ pub enum Actions {
     Play,
     Pause,
     Quit,
+    // Project Actions
+    NewFile,
     // Track Actions
     AddTrack,
     AddRegionAt(TrackIdentifier, Tick, RegionType),

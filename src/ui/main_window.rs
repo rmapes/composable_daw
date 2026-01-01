@@ -114,10 +114,7 @@ impl MainWindow {
             },
             Message::NewFile => {
                 // Once we implement save, we should ask the user if they want to save before closing the current file
-                if let Ok(mut project) = self.data.write() {
-                    project.reset();
-                }
-                Task::none()
+                self.send_to_engine_and_handle_errors(Actions::NewFile) 
             },
             Message::OpenFile => todo!(),
             Message::SetPlayhead(tick_position) => {
@@ -273,6 +270,7 @@ mod integration_tests {
         // Check that we are back to a single tracks
         // Click file/new using the menu helper method
         test.click_menu_item("File", "New")?;
+        thread::sleep(Duration::from_millis(1));
         // Check we are back to one track
         assert_eq!(test.tracks_present(), 1);
         Ok(())
