@@ -256,8 +256,6 @@ mod integration_tests {
         assert_eq!(test.tracks_present(), 1, "We should start with one track present");
         // Click + to add a track (fluent method calls)
         test.click("+")?;
-        // Wait for engine to update
-        thread::sleep(Duration::from_millis(1));
         // Check that a new track has been added
         assert_eq!(test.tracks_present(), 2, "A new track should have been added");
         // Click to select the second track
@@ -270,7 +268,6 @@ mod integration_tests {
         // Check that we are back to a single tracks
         // Click file/new using the menu helper method
         test.click_menu_item("File", "New")?;
-        thread::sleep(Duration::from_millis(1));
         // Check we are back to one track
         assert_eq!(test.tracks_present(), 1);
         Ok(())
@@ -304,7 +301,6 @@ mod integration_tests {
 
         // 6. Add MIDI region at tick 0 via menu
         test.click_menu_item("Edit", "Add Midi Region")?;
-        thread::sleep(Duration::from_millis(1));
         // Selecting it to ensure it's the active one
         test.click(Id::new("Region 1"))?; 
 
@@ -336,7 +332,6 @@ mod integration_tests {
 
         // 4. Add MIDI region at tick 0 via menu
         test.click_menu_item("Edit", "Add Pattern Region")?;
-        thread::sleep(Duration::from_millis(1));
         // Selecting it to ensure it's the active one
         test.click(Id::new("Region 1"))?; 
 
@@ -371,12 +366,16 @@ mod integration_tests {
             for message in messages {
                 let _ = self.app.update(message);
             }
+            // Wait for engine to update
+            thread::sleep(Duration::from_millis(1));
             Ok(())
         }
 
         fn click_menu_item(&mut self, menu: &str, item: &str) -> Result<(), Error> {
             self.click(menu)?;
             if self.click(item).is_ok() {
+                // Wait for engine to update
+                thread::sleep(Duration::from_millis(1));
                 return Ok(());
             }
             
@@ -403,6 +402,8 @@ mod integration_tests {
             if let Some(msg) = message {
                 let task = self.app.update(msg);
                 assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
+                // Wait for engine to update
+                thread::sleep(Duration::from_millis(1));
                 Ok(())
             } else {
                 Err(Error::SelectorNotFound { selector: format!("{} -> {}", menu, item) })
