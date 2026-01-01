@@ -48,6 +48,7 @@ pub enum RegionType {
 ////////////
 /// Data that will be stored to file
 const DEFAULT_PPQ: u32 = 960;
+#[derive(Debug, Clone)]
 pub struct ProjectData {
     // Components
     pub tracks: Vec<Track>,

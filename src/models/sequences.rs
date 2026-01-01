@@ -73,7 +73,7 @@ pub trait TSequence {
     fn length_in_ticks(&self) -> Tick;
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PatternSeq {
     pub id: RegionIdentifier,
     pub note_values: Vec<u8>,
@@ -272,7 +272,7 @@ pub struct MidiNote {
     pub length: Tick,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MidiSeq {
     pub id: RegionIdentifier,
     pub notes: BTreeMap<Tick, Vec<MidiNote>>,
@@ -325,6 +325,7 @@ impl EventStreamSource for MidiSeq {
 // Implement Sequence Polymorphism
 
 #[allow(dead_code)] // Possibly a YAGN, but we're anticipating needing SequenceContainer.
+#[derive(Debug, Clone)]
 pub enum Sequence {
     Pattern(PatternSeq),
     Midi(MidiSeq),
@@ -357,6 +358,7 @@ impl TSequence for Sequence {
 /// 
 pub type Tick = u32;
 
+#[derive(Debug, Clone)]
 pub struct SequenceContainer {
     pub sequences: HashMap<Tick, Sequence>,
     ppq: u32,

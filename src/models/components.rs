@@ -29,6 +29,7 @@ use crate::models::instuments::{Instrument, SimpleSynth};
 use crate::models::sequences::{MidiSeq, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{RegionIdentifier, TrackIdentifier};
 
+#[derive(Debug, Clone)]
 pub struct VirtualInstrument {
     pub kind: Instrument,
 }
@@ -44,6 +45,7 @@ impl Default for VirtualInstrument {
 
 /*** Containers ****/
 
+#[derive(Debug, Clone)]
 pub struct Track {
     /////////////////
     /// Fixed structures

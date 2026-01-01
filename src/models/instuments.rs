@@ -23,6 +23,7 @@ impl SimpleSynth {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Instrument {
     Synth(SimpleSynth)
 }

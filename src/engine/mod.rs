@@ -20,6 +20,7 @@ use crate::models::shared::{ProjectData, RegionType};
 
 pub struct EngineController {
     tx: mpsc::Sender<actions::Actions>,
+    pub data_change_receiver: flume::Receiver<ProjectData>,
 }
 
 impl EngineController {
@@ -85,10 +86,11 @@ where
 }
 
 const ALWAYS_PLAY_FROM_START: bool  = false;
-pub fn start<F>(observer_callback: F, shared_data: Arc<RwLock<ProjectData>>) -> (EngineController, Arc<RwLock<PlayerState>>) 
+pub fn start<F>(observer_callback: F, project_ref: &ProjectData) -> (EngineController, Arc<RwLock<PlayerState>>) 
 where 
     F: Fn(&PlayerState) + Send + Sync + 'static {
     let (tx, rx) = mpsc::channel::<actions::Actions>();
+    let (data_change_sender, data_change_receiver) = flume::unbounded();
     let (tick_sender, tick_receiver) = crossbeam_channel::unbounded();
     let player_state = Arc::new(RwLock::new(PlayerState::new()));
 
@@ -97,6 +99,7 @@ where
     thread::spawn({
     let tx = tx.clone();
     let player_state = player_state.clone();
+    let mut project = project_ref.clone();
     move || {
        while let Ok(received) = rx.recv() {
             match received {
@@ -124,8 +127,8 @@ where
                         if ALWAYS_PLAY_FROM_START {
                             state.playhead = 0;
                             state.sample_rate = 0;
-                        } else if let Ok(song) = shared_data.read() {
-                            state.samples_played = (state.playhead  *  state.sample_rate / song.ticks_per_second()) as usize;
+                        } else {
+                            state.samples_played = (state.playhead  *  state.sample_rate / project.ticks_per_second()) as usize;
                                 // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
                         }
                         
@@ -139,13 +142,11 @@ where
                             break;
                         }
                     }
-                    let worker_shared_data = Arc::clone(&shared_data);
                     // debug!("Prepare to play");
+                    let worker_project = project.clone();
                     thread::spawn(move || {
-                        if let Ok(song) = worker_shared_data.read() {
                             // BLOCKING AUDIO CALL
-                            play_structure(&song, &worker_tx, tick_receiver).unwrap();
-                        }
+                        play_structure(&worker_project, &worker_tx, tick_receiver).unwrap();
                         // Notify the main engine thread that playback is done
                         let _ = worker_tx.send(actions::Actions::Internal(
                             actions::SystemActions::PlaybackFinished
@@ -166,74 +167,64 @@ where
                 },
                 // Project
                 actions::Actions::NewFile => {
-                    // Once we implement save, we should ask the user if they want to save before closing the current file
-                    if let Ok(mut project) = shared_data.write() {
-                        project.reset();
-                    }
+                    project.reset();
+                    data_change_sender.send(project.clone());
                 },
     
                 // Track
                 actions::Actions::AddTrack => {
-                    if let Ok(mut song) = shared_data.write() {
-                        song.new_track();
-                    }               
+                    project.new_track();
+                    data_change_sender.send(project.clone());
                 },
                 actions::Actions::AddRegionAt(track_id, tick, region_type) => {
-                    if let Ok(mut project) = shared_data.write() {
-                        let track = &mut project.tracks[track_id.track_id];
-                        let _ = match region_type {
-                            RegionType::Pattern => track.add_pattern_at(tick),
-                            RegionType::Midi => track.add_midi_region_at(tick),
-                        };
-                    }
+                    let track = &mut project.tracks[track_id.track_id];
+                    let _ = match region_type {
+                        RegionType::Pattern => track.add_pattern_at(tick),
+                        RegionType::Midi => track.add_midi_region_at(tick),
+                    };
+                    data_change_sender.send(project.clone());
                 },
                 actions::Actions::DeleteRegion(region_id) => {
-                    if let Ok(mut project) = shared_data.write() {
-                        let track = &mut project.tracks[region_id.track_id.track_id];
-                        track.delete_pattern(&region_id);
-                    }
+                    let track = &mut project.tracks[region_id.track_id.track_id];
+                    track.delete_pattern(&region_id);
+                    data_change_sender.send(project.clone());
                 },
                 // Pattern
                 actions::Actions::PatternClickNote(note_identifier) => {
                     // toggle note on in pattern
-                    if let Ok(mut song) = shared_data.try_write() {
-                        song.get_track_by_id(&note_identifier.region_id.track_id)
-                        .get_pattern_by_id(&note_identifier.region_id)
-                        .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                    }               
-                 },
+                    project.get_track_by_id(&note_identifier.region_id.track_id)
+                    .get_pattern_by_id(&note_identifier.region_id)
+                    .toggle_on(note_identifier.beat_num, note_identifier.note_num);
+                    data_change_sender.send(project.clone());
+                },
                  // Midi Sequence
                  actions::Actions::CreateMidiNote(region_identifier, start, note) => {
                     //Get pattern and add note
-                    if let Ok(mut project) = shared_data.write() {
-                        let track = &mut project.tracks[region_identifier.track_id.track_id];
-                        let region = track.get_midi_by_id(&region_identifier);
-                        region.add_note(start, note);
-                    }
-                },
-    
+                    let track = &mut project.tracks[region_identifier.track_id.track_id];
+                    let region = track.get_midi_by_id(&region_identifier);
+                    region.add_note(start, note);
+                    data_change_sender.send(project.clone());
+                },    
                 actions::Actions::Synth(action) => match action {
                     SynthActions::SetSoundFont(track_id, soundfont_path) => {
-                        if let Some(path) = soundfont_path  
-                            && let Ok(mut project) = shared_data.write() {
+                        if let Some(path) = soundfont_path {
                                 let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                                 let Instrument::Synth(synth) = instrument;
                                 synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
-                        }
+                                data_change_sender.send(project.clone());
+                            }
                     }
                     SynthActions::SetBank(track_id, bank) => {
-                        if let Ok(mut project) = shared_data.write() {
-                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                            let Instrument::Synth(synth) = instrument;
-                            synth.bank = bank;
-                        }
+                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                        let Instrument::Synth(synth) = instrument;
+                        synth.bank = bank;
+                        data_change_sender.send(project.clone());
                     },
                     SynthActions::SetProgram(track_id, program) => {
-                        if let Ok(mut project) = shared_data.write() {
-                            let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                            let Instrument::Synth(synth) = instrument;
-                                synth.program = program;
-                            }
+                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                        let Instrument::Synth(synth) = instrument;
+                        synth.program = program;
+                        data_change_sender.send(project.clone());
                     }
                 },           
                 actions::Actions::Internal(sys_ev) => {
@@ -242,18 +233,16 @@ where
                             // debug!("Samples played");
                             if let Ok(mut state) = player_state.write() 
                                 && state.is_playing {
-                                    state.samples_played += num_samples;
-                                    // Convert to playhead location
-                                    if let Ok(song) = shared_data.read() {
-                                        let new_playhead = song.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
-                                        if new_playhead != state.playhead {
-                                            // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
-                                            for tick in state.playhead..new_playhead {
-                                                let _ = tick_sender.send(tick);
-                                            }
-                                            state.playhead = new_playhead;
-                                        }
+                                state.samples_played += num_samples;
+                                // Convert to playhead location
+                                let new_playhead = project.ticks_per_second() * state.samples_played as u32 / state.sample_rate;
+                                if new_playhead != state.playhead {
+                                    // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
+                                    for tick in state.playhead..new_playhead {
+                                        let _ = tick_sender.send(tick);
                                     }
+                                    state.playhead = new_playhead;
+                                }
                             }                                
                         }
                         actions::SystemActions::SetSampleRate(sample_rate) => {
@@ -288,7 +277,7 @@ where
     }});
 
     
-    (EngineController {tx}, player_state.clone())
+    (EngineController {tx, data_change_receiver}, player_state.clone())
 }
 
 fn play_structure(structure: &ProjectData, tx: &mpsc::Sender<actions::Actions>, tick_rx: crossbeam_channel::Receiver<Tick>) -> Result<(), Box<dyn Error>> {

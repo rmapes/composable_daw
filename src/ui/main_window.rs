@@ -1,3 +1,8 @@
+use iced::advanced::subscription::{Recipe, EventStream};
+use iced::futures::SinkExt;
+use iced::futures::channel::mpsc;
+use iced::futures::stream::BoxStream;
+use std::hash::Hash;
 use iced::widget::{column, Column, row};
 use iced::Length;
 use iced::Element;
@@ -19,16 +24,15 @@ use super::track_settings;
 use super::file_picker::pick_file;
 
 use std::sync::{Arc, RwLock};
-use std::rc::Rc;
 
 //////////////////////
 /// Entry point for iced ui
 /// 
 pub struct MainWindow {
     // Core application data and engine
-    engine: Rc<engine::EngineController>,
+    engine: engine::EngineController,
     player_state: Arc<RwLock<PlayerState>>,
-    data: Arc<RwLock<ProjectData>>,
+    data: ProjectData,
 
     // Mutable state
     selected_track: usize,
@@ -47,9 +51,15 @@ pub struct MainWindow {
 
 }
 
+impl std::hash::Hash for MainWindow {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_i64(123456_i64);  // Use a static hash to allow data change subscription to work
+    }
+}
+
 impl Default for MainWindow {
     fn default() -> Self {
-        let data = Arc::new(RwLock::new(ProjectData::new()));
+        let data = ProjectData::new();
         let (engine, player_state) = {
             let (engine, player_state) = engine::start(
             {
@@ -58,8 +68,10 @@ impl Default for MainWindow {
                     // Eventually, I'll need to work out how to handle internal state updates
                 }
             },
-            Arc::clone(&data),);
-            (Rc::new(engine), player_state)
+            
+            &data
+            );
+            (engine, player_state)
         };
         let selected_track = TrackIdentifier{ track_id: 0 };
     
@@ -162,6 +174,10 @@ impl MainWindow {
                     self.send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(track_id, path)))
                 }
             },
+            Message::ProjectDataChanged(project_data) => {
+                self.data = project_data;
+                Task::none()
+            },
         }
     }
 
@@ -177,37 +193,33 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
     }
     pub fn view(&self) ->Element<'_, Message> {
         let content: Column<'_, Message> = {
-            if let Ok(song) = self.data.try_read() {
-                let selected_track = if self.selected_track < song.tracks.len() {
-                    &song.tracks[self.selected_track]
-                } else {
-                    // If selected_track is out of bounds, default to first track
-                    &song.tracks[0]
-                }; 
-                let selected_region: Option<&Sequence> = self.selected_region
-                    .and_then(|selection| song.tracks[selection.track_id.track_id].midi.as_ref()
-                        .and_then(|sequence| sequence.sequences.get(&selection.region_id)));
-                column![
-                    top_menu_view(),
-                    self.control_bar.view(),
-                    // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
-                    row![
+            let selected_track = if self.selected_track < self.data.tracks.len() {
+                &self.data.tracks[self.selected_track]
+            } else {
+                // If selected_track is out of bounds, default to first track
+                &self.data.tracks[0]
+            }; 
+            let selected_region: Option<&Sequence> = self.selected_region
+                .and_then(|selection| self.data.tracks[selection.track_id.track_id].midi.as_ref()
+                    .and_then(|sequence| sequence.sequences.get(&selection.region_id)));
+            column![
+                top_menu_view(),
+                self.control_bar.view(),
+                // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
+                row![
+                    components::module_slot(
+                        self.track_settings.view(selected_track)
+                    ).width(Length::Shrink), // Shrink to fit channel strips
+                    column![
                         components::module_slot(
-                            self.track_settings.view(selected_track)
-                        ).width(Length::Shrink), // Shrink to fit channel strips
-                        column![
-                            components::module_slot(
-                                self.composer_window.view(&song.tracks, self.selected_track, song.ppq, self.playhead),
-                            ),
-                            components::module_slot(
-                                self.editor_window.view(selected_region),
-                            )
-                        ]
+                            self.composer_window.view(&self.data.tracks, self.selected_track, self.data.ppq, self.playhead),
+                        ),
+                        components::module_slot(
+                            self.editor_window.view(selected_region),
+                        )
                     ]
-                ].width(self.width).height(self.height)
-                } else {
-                column![] // TODO: store a local copy of the song data to deal with try_lock failing
-            }
+                ]
+            ].width(self.width).height(self.height)
         };
         components::rack(content.into()).into()
     }
@@ -219,9 +231,12 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
         // 2. Subscription for the Millisecond Tick
         // Every 1 millisecond, send a Message::Tick
         let tick = time::every(time::Duration::from_millis(1)).map(|_| Message::Tick);
+
+        // 3. Subscribe to project data change events
+        let data_change = project_data_change_listener(self);
     
-        // 3. Combine both subscriptions
-        Subscription::batch(vec![window_events, tick])
+        // 4. Combine all subscriptions
+        Subscription::batch(vec![window_events, tick, data_change])
     }
     
     // Don't forget to stop engine on shutdown
@@ -231,12 +246,54 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
     }
 }
 
+pub fn project_data_change_listener(wnd: &MainWindow) -> Subscription<Message> {
+    // 1. Create the recipe instance
+    let recipe = ProjectDataListener {
+        receiver: wnd.engine.data_change_receiver.clone(),
+    };
+
+    // 2. Turn the recipe into a Subscription
+    // In 0.14, this is usually under iced::advanced::subscription::from_recipe
+    iced::advanced::subscription::from_recipe(recipe)
+}
+pub struct ProjectDataListener {
+    // We store the receiver here
+    receiver: flume::Receiver<ProjectData>,
+}
+
+impl Recipe for ProjectDataListener {
+    type Output = Message;
+
+    // This is the "Identity" of your subscription
+    fn hash(&self, state: &mut rustc_hash::FxHasher) {
+        use std::any::TypeId;
+        TypeId::of::<Self>().hash(state);
+        // You could also hash a specific project ID if you have one
+    }
+
+    // This is where the actual async work happens
+    fn stream(self: Box<Self>, _input: EventStream) -> BoxStream<'static, Self::Output> {
+        let rx = self.receiver;
+        
+        // We use iced's internal stream channel helper
+        let stream = iced::stream::channel(100, move |mut output: mpsc::Sender<Message>| async move {
+            while let Ok(data) = rx.recv_async().await {
+                if output.send(Message::ProjectDataChanged(data)).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Box::pin(stream)
+    }
+}
+
 ////////////////////////////////
 /// Integration Tests
 #[cfg(test)]
 mod integration_tests {
 
-    use std::{thread, time::Duration};
+    use std::{collections::VecDeque, thread, time::Duration};
 
     use crate::models::{sequences::MidiNote, shared::{PatternNoteIdentifier, RegionType}};
 
@@ -359,18 +416,32 @@ mod integration_tests {
         // Select an element, and click on it directly
         fn click<S>(&mut self, selector: S) -> Result<(), Error> 
         where S:Selector + Send + Clone, S::Output: Bounded + Clone + Send + Sync + 'static {
-            let mut ui = simulator(self.app.view());
-            ui.find(selector.clone())?;
-            ui.click(selector.clone())?;
-            let messages = ui.into_messages().collect::<Vec<_>>();
-            for message in messages {
-                let _ = self.app.update(message);
-            }
+            let messages = {
+                let view = self.app.view();
+                let mut ui = simulator(view);
+                ui.find(selector.clone())?;
+                ui.click(selector.clone())?;
+                ui.into_messages().collect::<VecDeque<_>>()
+            };
             // Wait for engine to update
-            thread::sleep(Duration::from_millis(1));
+            self.process_messages(messages);
             Ok(())
         }
 
+        fn process_messages(&mut self, mut messages: VecDeque<Message>) {
+            while !messages.is_empty() {
+                if let Some(message) = messages.pop_front() {
+                    let task = self.app.update(message.clone());
+                    assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
+                }
+                // Now check for generated events
+                thread::sleep(Duration::from_millis(1));
+                if let Ok(data) = self.app.engine.data_change_receiver.try_recv() {
+                    messages.push_back(Message::ProjectDataChanged(data));
+                }
+            }
+        }
+        
         fn click_menu_item(&mut self, menu: &str, item: &str) -> Result<(), Error> {
             self.click(menu)?;
             if self.click(item).is_ok() {
@@ -400,10 +471,9 @@ mod integration_tests {
             };
             
             if let Some(msg) = message {
-                let task = self.app.update(msg);
-                assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
-                // Wait for engine to update
-                thread::sleep(Duration::from_millis(1));
+                let mut messages = VecDeque::new();
+                messages.push_back(msg);
+                self.process_messages(messages);
                 Ok(())
             } else {
                 Err(Error::SelectorNotFound { selector: format!("{} -> {}", menu, item) })
@@ -491,3 +561,4 @@ mod integration_tests {
     impl From<&str> for TrackSelector { fn from(name: &str) -> Self { TrackSelector::Name(name.to_string()) } }
     impl From<usize> for TrackSelector { fn from(idx: usize) -> Self { TrackSelector::Index(idx) } }
 }
+

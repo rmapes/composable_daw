@@ -15,6 +15,9 @@ pretty_env_logger = "0.5.0"
 rfd = "0.15.4"
 iced_aw = "0.13"
 crossbeam-channel = "0.5.15"
+tokio = {version="1.48.0", features = ["sync"] }
+flume = "0.12.0"
+rustc-hash = "2.1.1"
 
 [dev-dependencies]
 iced_test = "0.14.0"
