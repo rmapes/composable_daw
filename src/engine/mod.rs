@@ -10,7 +10,7 @@ use std::sync::{mpsc, Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::engine::actions::SynthActions;
 use crate::engine::synth::TrackThread;
@@ -85,6 +85,13 @@ where
     }
 }
 
+enum ActionFollowUp {
+    ProjectDataUpdate,
+    PlayerStateUpdate,
+    Continue,
+    Exit,
+}
+
 const ALWAYS_PLAY_FROM_START: bool  = false;
 pub fn start<F>(observer_callback: F, project_ref: &ProjectData) -> (EngineController, Arc<RwLock<PlayerState>>) 
 where 
@@ -102,79 +109,87 @@ where
     let mut project = project_ref.clone();
     move || {
        while let Ok(received) = rx.recv() {
-            match received {
+            let follow_up = match received {
                 actions::Actions::Play => {
                     // First check to see if the audio system is already active
-                    if let Ok(mut state) = player_state.write() {
-                        if state.is_preparing_to_play {
-                            // Pressed play again before the last play has taken effect.
-                            // Just wait for initialization to complete
-                            info!("Play pressed while preparing to play");
-                            continue
+                    let already_initialised = if let Ok(state) = player_state.read() {
+                        state.is_preparing_to_play || state.is_audio_initialized
+                    } else {
+                        true
+                    };
+                    if already_initialised {
+                        if let Ok(mut state) = player_state.write() {
+                            if state.is_preparing_to_play {
+                                // Pressed play again before the last play has taken effect.
+                                // Just wait for initialization to complete
+                                info!("Play pressed while preparing to play");
+                            }
+                            if state.is_audio_initialized {
+                                // Audio is initialized, so either we pressed play while its already playinh
+                                // or we pressed play to while it was paused. Either way, set playing to true
+                                state.is_playing = true;
+                                info!("Play pressed. Audio already initialized");
+                            }
                         }
-                        if state.is_audio_initialized {
-                            // Audio is initialized, so either we pressed play while its already playinh
-                            // or we pressed play to while it was paused. Either way, set playing to true
-                            state.is_playing = true;
-                            info!("Play pressed. Audio already initialized");
-                            continue
+                        ActionFollowUp::Continue
+                    } else {
+                        // If we got here, we need to initialize the audio
+                        info!("Initializing audio");
+                        if let Ok(mut state) = player_state.write() {
+                            state.is_preparing_to_play = true;
+                            if ALWAYS_PLAY_FROM_START {
+                                state.playhead = 0;
+                                state.sample_rate = 0;
+                            } else {
+                                state.samples_played = (state.playhead  *  state.sample_rate / project.ticks_per_second()) as usize;
+                                    // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
+                            }
+                            
                         }
+                        observer.notify();
+                        let worker_tx = tx.clone();
+                        let tick_receiver = tick_receiver.clone();
+                        // Ensure receiver is empty before we start
+                        loop {
+                            if tick_receiver.recv_timeout(Duration::from_millis(1)).is_err() {
+                                break;
+                            }
+                        }
+                        // debug!("Prepare to play");
+                        let worker_project = project.clone();
+                        thread::spawn(move || {
+                                // BLOCKING AUDIO CALL
+                            play_structure(&worker_project, &worker_tx, tick_receiver).unwrap();
+                            // Notify the main engine thread that playback is done
+                            let _ = worker_tx.send(actions::Actions::Internal(
+                                actions::SystemActions::PlaybackFinished
+                            ));
+                        });
+                        ActionFollowUp::Continue
                     }
-                    // If we got here, we need to initialize the audio
-                    info!("Initializing audio");
-                    if let Ok(mut state) = player_state.write() {
-                        state.is_preparing_to_play = true;
-                        if ALWAYS_PLAY_FROM_START {
-                            state.playhead = 0;
-                            state.sample_rate = 0;
-                        } else {
-                            state.samples_played = (state.playhead  *  state.sample_rate / project.ticks_per_second()) as usize;
-                                // info!("Initialize playhead to {} ({} samples)", state.playhead, state.samples_played);
-                        }
-                        
-                    }
-                    observer.notify();
-                    let worker_tx = tx.clone();
-                    let tick_receiver = tick_receiver.clone();
-                    // Ensure receiver is empty before we start
-                    loop {
-                        if tick_receiver.recv_timeout(Duration::from_millis(1)).is_err() {
-                            break;
-                        }
-                    }
-                    // debug!("Prepare to play");
-                    let worker_project = project.clone();
-                    thread::spawn(move || {
-                            // BLOCKING AUDIO CALL
-                        play_structure(&worker_project, &worker_tx, tick_receiver).unwrap();
-                        // Notify the main engine thread that playback is done
-                        let _ = worker_tx.send(actions::Actions::Internal(
-                            actions::SystemActions::PlaybackFinished
-                        ));
-                    });
                 },
                 actions::Actions::Pause => {
                     if let Ok(mut state) = player_state.write()
                         && state.is_active && state.is_audio_initialized {
                             state.is_playing = false;
                     }
+                    ActionFollowUp::PlayerStateUpdate
                 }
                 actions::Actions::Quit => {
                     if let Ok(mut state) = player_state.write() {
                         state.is_active = false;
                     }
-                    break;
+                    ActionFollowUp::Exit
                 },
                 // Project
                 actions::Actions::NewFile => {
                     project.reset();
-                    data_change_sender.send(project.clone());
-                },
-    
+                    ActionFollowUp::ProjectDataUpdate
+                },    
                 // Track
                 actions::Actions::AddTrack => {
                     project.new_track();
-                    data_change_sender.send(project.clone());
+                    ActionFollowUp::ProjectDataUpdate
                 },
                 actions::Actions::AddRegionAt(track_id, tick, region_type) => {
                     let track = &mut project.tracks[track_id.track_id];
@@ -182,12 +197,12 @@ where
                         RegionType::Pattern => track.add_pattern_at(tick),
                         RegionType::Midi => track.add_midi_region_at(tick),
                     };
-                    data_change_sender.send(project.clone());
+                    ActionFollowUp::ProjectDataUpdate
                 },
                 actions::Actions::DeleteRegion(region_id) => {
                     let track = &mut project.tracks[region_id.track_id.track_id];
                     track.delete_pattern(&region_id);
-                    data_change_sender.send(project.clone());
+                    ActionFollowUp::ProjectDataUpdate
                 },
                 // Pattern
                 actions::Actions::PatternClickNote(note_identifier) => {
@@ -195,15 +210,15 @@ where
                     project.get_track_by_id(&note_identifier.region_id.track_id)
                     .get_pattern_by_id(&note_identifier.region_id)
                     .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                    data_change_sender.send(project.clone());
+                    ActionFollowUp::ProjectDataUpdate
                 },
                  // Midi Sequence
-                 actions::Actions::CreateMidiNote(region_identifier, start, note) => {
+                actions::Actions::CreateMidiNote(region_identifier, start, note) => {
                     //Get pattern and add note
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);
                     region.add_note(start, note);
-                    data_change_sender.send(project.clone());
+                    ActionFollowUp::ProjectDataUpdate
                 },    
                 actions::Actions::Synth(action) => match action {
                     SynthActions::SetSoundFont(track_id, soundfont_path) => {
@@ -211,20 +226,22 @@ where
                                 let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                                 let Instrument::Synth(synth) = instrument;
                                 synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
-                                data_change_sender.send(project.clone());
-                            }
+                                ActionFollowUp::ProjectDataUpdate
+                        } else {
+                            ActionFollowUp::Continue
+                        }
                     }
                     SynthActions::SetBank(track_id, bank) => {
                         let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                         let Instrument::Synth(synth) = instrument;
                         synth.bank = bank;
-                        data_change_sender.send(project.clone());
+                        ActionFollowUp::ProjectDataUpdate
                     },
                     SynthActions::SetProgram(track_id, program) => {
                         let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                         let Instrument::Synth(synth) = instrument;
                         synth.program = program;
-                        data_change_sender.send(project.clone());
+                        ActionFollowUp::ProjectDataUpdate
                     }
                 },           
                 actions::Actions::Internal(sys_ev) => {
@@ -243,12 +260,14 @@ where
                                     }
                                     state.playhead = new_playhead;
                                 }
-                            }                                
+                            }
+                            ActionFollowUp::PlayerStateUpdate                             
                         }
                         actions::SystemActions::SetSampleRate(sample_rate) => {
                             if let Ok(mut state) = player_state.write() {
                                 state.sample_rate = sample_rate;
-                            }                                
+                            } 
+                            ActionFollowUp::Continue                               
                         }
                         actions::SystemActions::PlaybackStarted => {
                             if let Ok(mut state) = player_state.write() {
@@ -257,7 +276,7 @@ where
                                 state.is_preparing_to_play = false;
                                 info!("Starting to play");
                             }
-                            observer.notify();
+                            ActionFollowUp::PlayerStateUpdate
                         },
                         actions::SystemActions::PlaybackFinished => {
                             if let Ok(mut state) = player_state.write() {
@@ -267,11 +286,22 @@ where
 
                             }
                             info!("Playback finished");
-                            observer.notify();
+                            ActionFollowUp::PlayerStateUpdate
                         },
                     }
                 }
-            }
+            };
+            match follow_up {
+                ActionFollowUp::ProjectDataUpdate => {
+                    if data_change_sender.send(project.clone()).is_err() {
+                        error!("Couldn't update ui. Quitting");
+                        break;
+                    }
+                },
+                ActionFollowUp::PlayerStateUpdate => {observer.notify();},
+                ActionFollowUp::Exit => break,
+                ActionFollowUp::Continue => {},
+            };
        }
        info!("Exiting loop. Assuming Quit was pressed");
     }});
