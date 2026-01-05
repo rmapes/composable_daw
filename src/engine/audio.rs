@@ -2,7 +2,6 @@
 
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
-use cpal::traits::StreamTrait;
 
 use super::actions::{Actions, SystemActions};
 use super::buss::{Buss, Output};
@@ -19,12 +18,12 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn start(&mut self) -> Result<(), cpal::PlayStreamError>{
-        self._stream.play()
-    }
-    pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
-        self._stream.pause()
-    }
+    // pub fn start(&mut self) -> Result<(), cpal::PlayStreamError>{
+    //     self._stream.play()
+    // }
+    // pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
+    //     self._stream.pause()
+    // }
     pub fn add_input(&mut self, o: Arc<RwLock<Box<dyn Output>>>) {
         if let Ok(mut guard) = self._input.lock() {
             guard.add_input(o);

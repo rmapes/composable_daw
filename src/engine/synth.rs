@@ -1,5 +1,5 @@
 use crossbeam_channel::Receiver;
-use log::{debug, error};
+use log::{debug, error, info};
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
@@ -9,6 +9,7 @@ use std::thread::{self, JoinHandle};
 
 
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
+use crate::models::shared::TrackIdentifier;
 use super::buss::Output;
 
 
@@ -70,36 +71,53 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	Ok(synth)
 }
 
+pub enum TrackThreadEvents {
+	Tick(Tick),
+	Update(TrackIdentifier, EventStream)
+}
+
 pub struct TrackThread {
+	id: TrackIdentifier,
     pub synth: Arc<RwLock<Box<dyn Output>>>, // This will actually be a Synth type which we downcast later
     event_stream: EventStream,
 }
 
 impl TrackThread {
-	pub fn new<P: AsRef<Path> + ?Sized + ToString>(seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
+	pub fn new<P: AsRef<Path> + ?Sized + ToString>(id: TrackIdentifier, seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
 		let synth: Arc<RwLock<Box<dyn Output>>> = {
 			let mut synth = create_synth(soundfont, bank, program).expect("Couldn't create synth");
 			synth.set_sample_rate(sample_rate as f32);
 			Arc::new(RwLock::new(Box::new(synth)))
 		};
 		let event_stream = seq.to_event_stream();
-		Self { synth, event_stream }
+		Self { id, synth, event_stream }
 	}
-	pub fn run(self, tick_source: Receiver<Tick>) -> JoinHandle<()> {
-		debug!("Spawning track thread");
+	pub fn run(mut self, tick_source: Receiver<TrackThreadEvents>) -> JoinHandle<()> {
+		info!("Spawning track thread");
 		thread::spawn(move || {
-			debug!("Starting track thread");
-            let event_stream = self.event_stream;
+			info!("Starting track thread");
 			loop {
+				let event_stream = &self.event_stream;
 				match tick_source.recv() {
-					Ok(tick) => {
-						// println!("Receiving tick at {tick}");
-						if tick > event_stream.get_length_in_ticks() {
-							break;
-						}
-						if let Err(e) = on_tick(tick, self.synth.clone(), &event_stream) {
-							error!("Problem processing tick in track thread: {}", e);
-							break;
+					Ok(event) => {
+						match event {
+							TrackThreadEvents::Tick(tick) => {
+								if tick > event_stream.get_length_in_ticks() {
+									//break;
+									// Send PlaybackFinished event
+									continue;
+								}
+								if let Err(e) = on_tick(tick, self.synth.clone(), event_stream) {
+									error!("Problem processing tick in track thread: {}", e);
+									break;
+								}
+							},
+							TrackThreadEvents::Update(id, event_stream) => {
+								if id == self.id {
+									info!("Updating event stream for track {}", id.track_id);
+									self.event_stream = event_stream;
+								}
+							}
 						}
 					}
 					Err(e) => {
@@ -109,7 +127,7 @@ impl TrackThread {
 					}
 				}
 			}
-			println!("Ending track thread");
+			info!("Ending track thread");
 		})
 	}
 }

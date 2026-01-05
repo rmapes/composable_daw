@@ -394,9 +394,13 @@ impl SequenceContainer {
 
 impl TSequence for SequenceContainer {
     fn length_in_ticks(&self) -> Tick {
-        let last_sequence_start = self.sequences.keys().max().unwrap_or(&0);
-        let last_length = self.sequences[last_sequence_start].length_in_ticks();
-        last_sequence_start + last_length
+        if self.sequences.is_empty() {
+            0
+        } else {
+            let last_sequence_start = self.sequences.keys().max().unwrap_or(&0);
+            let last_length = self.sequences[last_sequence_start].length_in_ticks();
+            last_sequence_start + last_length
+        }
     }
 }
 

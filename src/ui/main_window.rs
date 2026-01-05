@@ -435,7 +435,7 @@ mod integration_tests {
                     assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
                 }
                 // Now check for generated events
-                thread::sleep(Duration::from_millis(1));
+                thread::sleep(Duration::from_millis(1000));
                 if let Ok(data) = self.app.engine.data_change_receiver.try_recv() {
                     messages.push_back(Message::ProjectDataChanged(data));
                 }

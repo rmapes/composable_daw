@@ -21,17 +21,17 @@ use super::components::*;
 
 ////////
 /// Value objects to identify structures stored within Project Data
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct TrackIdentifier {
     pub track_id: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct RegionIdentifier {
     pub track_id: TrackIdentifier,
     pub region_id: Tick,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct PatternNoteIdentifier {
     pub region_id: RegionIdentifier,
     pub note_num: u8,
@@ -80,13 +80,15 @@ impl ProjectData {
         self.ppq * self.bpm as u32/ 60
     }
 
-    pub fn new_track(&mut self) {
+    pub fn new_track(&mut self) -> TrackIdentifier {
         // Add a new track, defaulting to name Track # where # is current position
         let new_track_num = self.tracks.len() + 1;
-        let mut new_track = Track::new(TrackIdentifier {track_id: new_track_num - 1}, format!("Track {new_track_num}"), self.ppq);
+        let id = TrackIdentifier {track_id: new_track_num - 1};
+        let mut new_track = Track::new(id, format!("Track {new_track_num}"), self.ppq);
         // Temporary until we can add regions via UI. Add pattern at start
         new_track.add_midi_region_at(0).expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);
+        id
     }
 
     pub fn get_track_by_id(&mut self, id: &TrackIdentifier) -> &mut Track {

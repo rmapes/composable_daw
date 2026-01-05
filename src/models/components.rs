@@ -91,6 +91,7 @@ impl fmt::Display for CollisionError {
 }
 
 
+
 impl Track {
     pub fn new(id: TrackIdentifier, name: String, ppq: u32) -> Self {
         Self {
