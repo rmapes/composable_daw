@@ -8,6 +8,8 @@ use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 
+use crate::engine::actions::SynthActions;
+use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use crate::models::shared::TrackIdentifier;
 use super::buss::Output;
@@ -60,7 +62,7 @@ fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &Event
 }
 
 
-fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, program: u8) ->  Result<Synth, Box<dyn Error>> {
+fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, program: u8) ->  Result<(Synth, SoundFontId), Box<dyn Error>> {
 	debug!("Loading font from {}", ToString::to_string(soundfont));
 	let mut synth = Synth::default();
 	let mut file = File::open(soundfont)?; 
@@ -68,29 +70,33 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	let font_id = synth.add_font(font, true);
 	// Now select specifed bank and program (limit to channel 0, since only one midi stream per instrument)
 	let _ = synth.select_program(0, font_id, bank, program);
-	Ok(synth)
+	Ok((synth, font_id))
 }
 
 pub enum TrackThreadEvents {
 	Tick(Tick),
-	Update(TrackIdentifier, EventStream)
+	Update(TrackIdentifier, EventStream),
+	Synth(SynthActions),
 }
 
 pub struct TrackThread {
 	id: TrackIdentifier,
     pub synth: Arc<RwLock<Box<dyn Output>>>, // This will actually be a Synth type which we downcast later
     event_stream: EventStream,
+	soundfont_id: SoundFontId,
+	bank_id: u32,
+	program_id: u8,
 }
 
 impl TrackThread {
 	pub fn new<P: AsRef<Path> + ?Sized + ToString>(id: TrackIdentifier, seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
-		let synth: Arc<RwLock<Box<dyn Output>>> = {
-			let mut synth = create_synth(soundfont, bank, program).expect("Couldn't create synth");
-			synth.set_sample_rate(sample_rate as f32);
-			Arc::new(RwLock::new(Box::new(synth)))
-		};
+		let bank_id = 0;
+		let program_id = 0;
+		let (mut synth, soundfont_id) = create_synth(soundfont, bank, program).expect("Couldn't create synth");
+		synth.set_sample_rate(sample_rate as f32);
+		let synth: std::sync::Arc<RwLock<Box<dyn Output + 'static>>> = Arc::new(RwLock::new(Box::new(synth)));
 		let event_stream = seq.to_event_stream();
-		Self { id, synth, event_stream }
+		Self { id, synth, soundfont_id, event_stream, bank_id, program_id }
 	}
 	pub fn run(mut self, tick_source: Receiver<TrackThreadEvents>) -> JoinHandle<()> {
 		info!("Spawning track thread");
@@ -117,6 +123,50 @@ impl TrackThread {
 									info!("Updating event stream for track {}", id.track_id);
 									self.event_stream = event_stream;
 								}
+							},
+							TrackThreadEvents::Synth(action) => match action {
+								SynthActions::SetSoundFont(track_id, soundfont_path) => {
+									if track_id == self.id && let Some(path) = soundfont_path &&
+										 let Ok(mut boxed_output_guard) = self.synth.write() {
+										// Get a mutable reference to the Box<dyn Output>
+										let boxed_output_ref: &mut Box<dyn Output> = &mut boxed_output_guard;
+										if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
+											let soundfont_file = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+											let soundfont_path = get_soundfont_path(&soundfont_file);
+											let mut file = File::open(soundfont_path).unwrap(); 
+											let font = SoundFont::load(&mut file).unwrap(); 
+											self.soundfont_id = s.add_font(font, true);
+											let _ = s.select_program(0, self.soundfont_id, self.bank_id, self.program_id);
+										}
+									}
+								}
+								SynthActions::SetBank(track_id, bank) => {
+									if track_id == self.id && let Ok(mut boxed_output_guard) = self.synth.write() {
+										// Get a mutable reference to the Box<dyn Output>
+										let boxed_output_ref: &mut Box<dyn Output> = &mut boxed_output_guard;
+						
+										// Attempt to downcast the trait object reference (&mut dyn Output)
+										if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
+											self.bank_id = bank;
+											let _ = s.select_bank(0, bank);
+											println!("Set bank");
+										}
+									}
+								},
+								SynthActions::SetProgram(track_id, program) => {
+									println!("Set program received for track_id {} on track {}", track_id.track_id, self.id.track_id);
+									if track_id == self.id && let Ok(mut boxed_output_guard) = self.synth.write() {
+										// Get a mutable reference to the Box<dyn Output>
+										let boxed_output_ref: &mut Box<dyn Output> = &mut boxed_output_guard;
+						
+										// Attempt to downcast the trait object reference (&mut dyn Output)
+										if let Some(s) = boxed_output_ref.as_any_mut().downcast_mut::<Synth>() {
+											self.program_id = program;
+											let _ = s.select_program(0, self.soundfont_id, self.bank_id, program);
+											println!("Set program");
+										}
+									}
+							}			
 							}
 						}
 					}
@@ -131,5 +181,3 @@ impl TrackThread {
 		})
 	}
 }
-
-

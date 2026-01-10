@@ -19,11 +19,15 @@ impl Default for SimpleSynth {
 
 impl SimpleSynth {
     pub fn get_soundfont_path(&self) -> String {
-        format!("{SOUNDFONT_DIR_PATH}{0}", self.soundfont)
+        get_soundfont_path(&self.soundfont)
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Instrument {
     Synth(SimpleSynth)
+}
+
+pub fn get_soundfont_path(soundfont: &String) -> String {
+	format!("{SOUNDFONT_DIR_PATH}{0}", soundfont)
 }

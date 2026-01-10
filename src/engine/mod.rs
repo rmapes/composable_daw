@@ -13,6 +13,7 @@ use log::{error, info};
 
 use crate::engine::actions::SynthActions;
 use crate::engine::sources::AudioSources;
+use crate::engine::synth::TrackThreadEvents;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::{ProjectData, RegionType};
@@ -114,7 +115,7 @@ where
         let audio = audio::init_audio(&tx.clone()).expect("Failed to start audio");
         let mut audio_sources = AudioSources::new(audio, tick_receiver, &project.tracks);
         while let Ok(received) = rx.recv() {
-            let tick_sender = tick_sender.clone();
+            let track_thread_sender = tick_sender.clone();
             let follow_up = match received {
                 actions::Actions::Play => {
                     info!("Playing audio");
@@ -165,7 +166,7 @@ where
                         RegionType::Pattern => track.add_pattern_at(tick),
                         RegionType::Midi => track.add_midi_region_at(tick),
                     };
-                    if let Err(e) = audio_sources.update_track(track, tick_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -175,7 +176,7 @@ where
                 actions::Actions::DeleteRegion(region_id) => {
                     let track = &mut project.tracks[region_id.track_id.track_id];
                     track.delete_pattern(&region_id);
-                    if let Err(e) = audio_sources.update_track(track, tick_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -189,7 +190,7 @@ where
                     track
                     .get_pattern_by_id(&note_identifier.region_id)
                     .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                    if let Err(e) = audio_sources.update_track(track, tick_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -202,35 +203,42 @@ where
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);
                     region.add_note(start, note);
-                    if let Err(e) = audio_sources.update_track(track, tick_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },    
-                actions::Actions::Synth(action) => match action {
-                    SynthActions::SetSoundFont(track_id, soundfont_path) => {
-                        if let Some(path) = soundfont_path {
+                actions::Actions::Synth(action) => {
+                    if let Err(e) = track_thread_sender.send(TrackThreadEvents::Synth(action.clone())) {
+                        error!("FATAL: Unexpected error forwarding action to instrument: {}", e);
+                        ActionFollowUp::Exit
+                    } else {
+                        match action {
+                            SynthActions::SetSoundFont(track_id, soundfont_path) => {
+                                if let Some(path) = soundfont_path {
+                                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                                        let Instrument::Synth(synth) = instrument;
+                                        synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+                                        ActionFollowUp::ProjectDataUpdate
+                                } else {
+                                    ActionFollowUp::Continue
+                                }
+                            }
+                            SynthActions::SetBank(track_id, bank) => {
                                 let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
                                 let Instrument::Synth(synth) = instrument;
-                                synth.soundfont = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+                                synth.bank = bank;
                                 ActionFollowUp::ProjectDataUpdate
-                        } else {
-                            ActionFollowUp::Continue
+                            },
+                            SynthActions::SetProgram(track_id, program) => {
+                                let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
+                                let Instrument::Synth(synth) = instrument;
+                                synth.program = program;
+                                ActionFollowUp::ProjectDataUpdate
+                            }
                         }
-                    }
-                    SynthActions::SetBank(track_id, bank) => {
-                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                        let Instrument::Synth(synth) = instrument;
-                        synth.bank = bank;
-                        ActionFollowUp::ProjectDataUpdate
-                    },
-                    SynthActions::SetProgram(track_id, program) => {
-                        let instrument = &mut project.tracks[track_id.track_id].instrument.kind;
-                        let Instrument::Synth(synth) = instrument;
-                        synth.program = program;
-                        ActionFollowUp::ProjectDataUpdate
                     }
                 },           
                 actions::Actions::Internal(sys_ev) => {
@@ -245,7 +253,7 @@ where
                                 if new_playhead != state.playhead {
                                     // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
                                     for tick in state.playhead..new_playhead {
-                                        let _ = tick_sender.send(synth::TrackThreadEvents::Tick(tick));
+                                        let _ = track_thread_sender.send(synth::TrackThreadEvents::Tick(tick));
                                     }
                                     state.playhead = new_playhead;
                                 }

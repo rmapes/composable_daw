@@ -8,7 +8,6 @@ use crate::models::sequences::EventStreamSource;
  * Threads for tracks and instruments
  * These will feed into the audio thread
  */
-
  pub struct AudioSources {
     audio: AudioEngine,
     tracks: HashMap<TrackIdentifier, JoinHandle<()>>,
