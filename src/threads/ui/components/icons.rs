@@ -3,16 +3,16 @@ use std::sync::LazyLock;
 use iced::widget::{Button, button, image};
 use iced::Length;
 
-use crate::ui::actions::Message;
+use super::super::actions::Message;
 
 // This file predefines the systems application items, and allows them to be embedded in the application
 
 
 // 1. Define the icons to be embedded in the application
 // The path is relative to this file.
-const PLAY_ICON_BYTES: &[u8] = include_bytes!("../../../icons/play.png");
-const STOP_ICON_BYTES: &[u8] = include_bytes!("../../../icons/stop.png");
-const REWIND_TO_START_ICON_BYTES: &[u8] = include_bytes!("../../../icons/rewind_to_start.png");
+const PLAY_ICON_BYTES: &[u8] = include_bytes!("../../../../icons/play.png");
+const STOP_ICON_BYTES: &[u8] = include_bytes!("../../../../icons/stop.png");
+const REWIND_TO_START_ICON_BYTES: &[u8] = include_bytes!("../../../../icons/rewind_to_start.png");
 
 // 2. Create the Handle from the bytes
 struct IconHandles {

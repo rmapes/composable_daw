@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 
-use crate::engine::actions::SynthActions;
+use super::actions::SynthActions;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use crate::models::shared::TrackIdentifier;

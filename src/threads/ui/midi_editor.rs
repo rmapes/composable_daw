@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use iced::mouse::Cursor;
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
-use crate::engine::actions::Actions;
+use super::super::engine::actions::Actions;
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
 use crate::models::shared::RegionIdentifier;
 

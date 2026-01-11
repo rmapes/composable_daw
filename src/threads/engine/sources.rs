@@ -2,7 +2,9 @@ use std::{collections::HashMap, thread::JoinHandle};
 
 use log::info;
 
-use crate::{engine::{audio::AudioEngine, synth::{TrackThread, TrackThreadEvents}}, models::{components::Track, instuments::Instrument, shared::TrackIdentifier}};
+use super::synth::{TrackThread, TrackThreadEvents};
+use super::audio::AudioEngine;
+use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 use crate::models::sequences::EventStreamSource;
 /**
  * Threads for tracks and instruments

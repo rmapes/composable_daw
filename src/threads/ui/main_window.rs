@@ -11,8 +11,8 @@ use iced::{Subscription, window, Task};
 use log::{error, info};
 use crate::models::sequences::{Sequence, Tick};
 use crate::models::shared::{RegionIdentifier, ProjectData, TrackIdentifier};
-use crate::engine::{self, PlayerState};
-use crate::engine::actions::{Actions, SynthActions};
+use super::super::engine::{self, PlayerState};
+use super::super::engine::actions::{Actions, SynthActions};
 
 use super::actions::{Message, SynthMessage};
 use super::components;

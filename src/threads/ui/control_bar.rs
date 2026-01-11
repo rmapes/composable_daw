@@ -1,7 +1,7 @@
 use iced::{widget::{ row, Row }, Length};
 use super::actions::Message;
 use super::components::icons::{icon_button, Icon};
-use crate::engine::actions::Actions::{Play, Pause};
+use super::super::engine::actions::Actions::{Play, Pause};
 
 pub struct Component {
     width: Length,

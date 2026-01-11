@@ -1,6 +1,6 @@
 use iced::widget::{ row, text, Column, Container, Row, button };
 use iced::{Length, Element};
-use crate::engine::actions::Actions;
+use super::super::engine::actions::Actions;
 use crate::models::sequences::PatternSeq;
 use crate::models::shared::{ RegionIdentifier, PatternNoteIdentifier};
 

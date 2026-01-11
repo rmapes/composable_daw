@@ -4,7 +4,7 @@ use iced::window;
 
 use crate::models::sequences::Tick;
 use crate::models::shared::{ProjectData, RegionIdentifier, RegionType, TrackIdentifier};
-use crate::engine::actions::Actions;
+use super::super::engine::actions::Actions;
 
 #[derive(Debug, Clone)]
 pub enum Message {

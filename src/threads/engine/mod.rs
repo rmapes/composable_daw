@@ -1,8 +1,6 @@
 pub mod actions;
-
 mod synth;
-mod buss;
-mod audio;
+pub mod buss;
 mod sources;
 
 use std::sync::mpsc::SendError;
@@ -11,9 +9,10 @@ use std::thread;
 
 use log::{error, info};
 
-use crate::engine::actions::SynthActions;
-use crate::engine::sources::AudioSources;
-use crate::engine::synth::TrackThreadEvents;
+use actions::SynthActions;
+use sources::AudioSources;
+use synth::TrackThreadEvents;
+use super::audio;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::{ProjectData, RegionType};

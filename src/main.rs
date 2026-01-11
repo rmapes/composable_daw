@@ -1,15 +1,9 @@
 use std::error::Error;
 
-// #![allow(
-//     clippy::too_many_arguments,
-//     http://crt.r2m03.amazontrust.com/r2m03.cer
-// )]
-// mod midi_ports;
-mod engine;
+use crate::threads::ui;
+
 mod models;
-mod ui;
-
-
+mod threads;
 
 
 fn main() -> Result<(), Box<dyn Error>> {
