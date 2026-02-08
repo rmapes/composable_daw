@@ -10,7 +10,6 @@ use log::{error, info};
 
 use actions::SynthActions;
 use sources::AudioSources;
-use synth::TrackThreadEvents;
 use super::audio;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
@@ -109,11 +108,9 @@ where
     let player_state = player_state.clone();
     let mut project = project_ref.clone();
     move || {
-        let (tick_sender, tick_receiver) = crossbeam_channel::unbounded();
-        let audio = audio::init_audio(&tx.clone()).expect("Failed to start audio");
-        let mut audio_sources = AudioSources::new(audio, tick_receiver, &project.tracks);
+        let (audio, stereo_output) = audio::init_audio(&tx.clone()).expect("Failed to start audio");
+        let mut audio_sources = AudioSources::new(audio, stereo_output, &project.tracks);
         while let Ok(received) = rx.recv() {
-            let track_thread_sender = tick_sender.clone();
             let follow_up = match received {
                 actions::Actions::Play => {
                     info!("Playing audio");
@@ -164,7 +161,7 @@ where
                         RegionType::Pattern => track.add_pattern_at(tick),
                         RegionType::Midi => track.add_midi_region_at(tick),
                     };
-                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -174,7 +171,7 @@ where
                 actions::Actions::DeleteRegion(region_id) => {
                     let track = &mut project.tracks[region_id.track_id.track_id];
                     track.delete_pattern(&region_id);
-                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -188,7 +185,7 @@ where
                     track
                     .get_pattern_by_id(&note_identifier.region_id)
                     .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -201,7 +198,7 @@ where
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);
                     region.add_note(start, note);
-                    if let Err(e) = audio_sources.update_track(track, track_thread_sender.clone()) {
+                    if let Err(e) = audio_sources.update_track(track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -209,7 +206,7 @@ where
                     }
                 },    
                 actions::Actions::Synth(action) => {
-                    if let Err(e) = track_thread_sender.send(TrackThreadEvents::Synth(action.clone())) {
+                    if let Err(e) = audio_sources.handle_synth_action(action.clone()) {
                         error!("FATAL: Unexpected error forwarding action to instrument: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -251,7 +248,7 @@ where
                                 if new_playhead != state.playhead {
                                     // info!("Playhead moved to {new_playhead}  ({} samples)", state.samples_played);
                                     for tick in state.playhead..new_playhead {
-                                        let _ = track_thread_sender.send(synth::TrackThreadEvents::Tick(tick));
+                                        audio_sources.on_tick(tick);
                                     }
                                     state.playhead = new_playhead;
                                 }

@@ -71,6 +71,10 @@ pub struct BussConsumer {
     right_input: HeapCons<f32>
 }
 
+// SAFETY: BussConsumer is only used in the CPAL audio callback thread, which is single-threaded.
+// The ring buffer is lock-free and designed for cross-thread communication, so this is safe.
+unsafe impl Sync for BussConsumer {}
+
 impl Output for BussConsumer {
     /// Pulls samples from the ringbuffer into the provided output slices
     fn write_f32(&mut self, 
@@ -139,7 +143,35 @@ impl BussProducer {
         self.left_output.push_slice(left);
         self.right_output.push_slice(right);
     }
+
+    /// Check if there's capacity in the ring buffer
+    pub fn has_capacity(&self) -> bool {
+        self.left_output.vacant_len() >= self.buf_size && self.right_output.vacant_len() >= self.buf_size
+    }
+
+    /// Get the available capacity (minimum of left and right)
+    pub fn available_capacity(&self) -> usize {
+        min(self.left_output.vacant_len(), self.right_output.vacant_len())
+    }
+
+    /// Write audio from a Buss into the ring buffer
+    pub fn write_from_buss(&mut self, buss: &mut Buss) {
+        let capacity = min(self.buf_size, self.available_capacity());
+        if capacity > 0 {
+            let mut left_buf = vec![0.0_f32; capacity];
+            let mut right_buf = vec![0.0_f32; capacity];
+            buss.write_f32(capacity, &mut left_buf, 0, 1, &mut right_buf, 0, 1);
+            let left_written = self.left_output.push_slice(&left_buf);
+            let right_written = self.right_output.push_slice(&right_buf);
+            // Both should write the same amount, but handle gracefully if not
+            let _ = min(left_written, right_written);
+        }
+    }
 }
+
+// SAFETY: BussProducer is only used in the engine thread, which is single-threaded.
+// The ring buffer is lock-free and designed for cross-thread communication, so this is safe.
+unsafe impl Sync for BussProducer {}
 
 impl Output for BussProducer {
     fn write_f32(&mut self, 

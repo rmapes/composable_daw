@@ -1,39 +1,44 @@
-use std::{collections::HashMap, thread::JoinHandle};
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use log::info;
 
-use super::synth::{TrackThread, TrackThreadEvents};
-use super::audio::{AudioEngine, interfaces::Output};
+use super::synth::TrackSynth;
+use super::audio::{AudioEngine, stereo_output::StereoOutputController, buss::Buss, interfaces::Output};
 use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
-use crate::models::sequences::EventStreamSource;
-use std::sync::{Arc, RwLock};
-/**
- * Threads for tracks and instruments
- * These will feed into the audio thread
- */
- pub struct AudioSources {
-    audio: AudioEngine,
-    tracks: HashMap<TrackIdentifier, JoinHandle<()>>,
-    tick_source: crossbeam_channel::Receiver<TrackThreadEvents>,
- }
+use crate::models::sequences::{EventStreamSource, Tick};
 
- impl AudioSources {
-    pub fn new(audio: AudioEngine, tick_source: crossbeam_channel::Receiver<TrackThreadEvents>, tracks: &Vec<Track>) -> Self {
+/**
+ * Manages audio sources (synths) in the engine thread
+ * All synths and busses live in the same thread
+ */
+pub struct AudioSources {
+    audio: AudioEngine,
+    stereo_output: StereoOutputController,
+    final_buss: Buss,
+    tracks: HashMap<TrackIdentifier, Rc<RefCell<TrackSynth>>>,
+}
+
+impl AudioSources {
+    pub fn new(audio: AudioEngine, stereo_output: StereoOutputController, tracks: &Vec<Track>) -> Self {
         info!("Creating new Audio Source Controller with {} tracks", tracks.len());
         let mut this = Self {
             audio,
+            stereo_output,
+            final_buss: Buss::new(),
             tracks: HashMap::new(),
-            tick_source,
         };
         for track in tracks { let _ = this.add_track(track); }
         this
     }
+
     pub fn add_track(&mut self, track: &Track) -> Result<(), &str> {
         info!("Adding track {}", track.id.track_id);
         match &track.instrument.kind {
             Instrument::Synth(instrument) => {
                 if let Some(seq) = &track.midi {
-                    let track_thread = TrackThread::new(
+                    let track_synth = TrackSynth::new(
                             track.id,
                             seq, 
                             self.audio.sample_rate, 
@@ -41,10 +46,11 @@ use std::sync::{Arc, RwLock};
                             instrument.bank, 
                             instrument.program
                         );
-                    let synth_wrapper = ArcWrapper { inner: track_thread.synth.clone() };
-                    self.audio.add_input(Box::new(synth_wrapper));
-                    let handle = track_thread.run(self.tick_source.clone());
-                    self.tracks.insert(track.id, handle);
+                    let track_synth_rc = Rc::new(RefCell::new(track_synth));
+                    // Add TrackSynth (which implements Output) to final buss via a wrapper
+                    let wrapper = Rc::clone(&track_synth_rc);
+                    self.final_buss.add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
+                    self.tracks.insert(track.id, track_synth_rc);
                     Ok(())
                 } else {
                     Err("Not midi")
@@ -53,23 +59,51 @@ use std::sync::{Arc, RwLock};
         }
     }
 
-    pub fn update_track(&mut self, track: &Track, event_sender: crossbeam_channel::Sender<TrackThreadEvents>) -> Result<(), &str> {
-        info!("Sending update for track {}", track.id.track_id);
+    pub fn update_track(&mut self, track: &Track) -> Result<(), &str> {
+        info!("Updating track {}", track.id.track_id);
         if let Some(seq) = &track.midi {
             let event_stream = seq.to_event_stream();
-            event_sender.send(TrackThreadEvents::Update(track.id, event_stream)).expect("Failed to send update");
+            if let Some(track_synth) = self.tracks.get(&track.id) {
+                track_synth.borrow_mut().update_event_stream(event_stream);
+            }
             Ok(())
         } else {
             Err("Not midi")
         }
     }
+
+    /// Process a tick: update all synths and populate ring buffer if capacity available
+    pub fn on_tick(&mut self, tick: Tick) {
+        // Process events for all synths
+        for track_synth in self.tracks.values() {
+            if let Err(e) = track_synth.borrow_mut().process_tick(tick) {
+                log::error!("Error processing tick for track {}: {}", track_synth.borrow().id.track_id, e);
+            }
+        }
+        // Populate ring buffer from final buss if capacity available
+        self.stereo_output.on_tick(&mut self.final_buss);
+    }
+
+    /// Handle synth actions (soundfont, bank, program changes)
+    pub fn handle_synth_action(&mut self, action: super::actions::SynthActions) -> Result<(), Box<dyn std::error::Error>> {
+        for track_synth in self.tracks.values() {
+            track_synth.borrow_mut().handle_synth_action(action.clone())?;
+        }
+        Ok(())
+    }
 }
 
-struct ArcWrapper {
-    inner: Arc<RwLock<Box<dyn Output>>>,
+/// Wrapper to make Rc<RefCell<TrackSynth>> implement Output
+/// SAFETY: This is only used in a single-threaded context (engine thread)
+struct RefCellOutputWrapper {
+    inner: Rc<RefCell<TrackSynth>>,
 }
 
-impl Output for ArcWrapper {
+// SAFETY: We only use this in the engine thread, never across threads
+unsafe impl Send for RefCellOutputWrapper {}
+unsafe impl Sync for RefCellOutputWrapper {}
+
+impl Output for RefCellOutputWrapper {
     fn write_f32(&mut self, 
         len: usize, 
         left_out: &mut [f32], 
@@ -79,8 +113,6 @@ impl Output for ArcWrapper {
         roff: usize, 
         rincr: usize,
     ) {
-        if let Ok(mut guard) = self.inner.write() {
-            guard.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
-        }
+        self.inner.borrow_mut().write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
     }
 }

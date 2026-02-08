@@ -3,6 +3,7 @@
 pub mod buss;
 pub mod interfaces; //TODO: Make private
 pub mod buffered_output; //TODO: Make private
+pub mod stereo_output;
 
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
@@ -12,12 +13,12 @@ use super::engine::actions::{Actions, SystemActions};
 use std::error::Error;
 use std::sync::mpsc;
 
-use buss::{BussConsumer, BussProducer};
+use buss::BussConsumer;
 use interfaces::Output;
+use stereo_output::StereoOutputController;
 
 pub struct AudioEngine {
 	_stream: cpal::Stream,
-    _input: BussProducer,
     pub sample_rate: u32,
 }
 
@@ -28,13 +29,10 @@ impl AudioEngine {
     // pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
     //     self._stream.pause()
     // }
-    pub fn add_input(&mut self, o: Box<dyn Output>) {
-        self._input.add_input(o);
-    }
 }
 
 
-pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<dyn Error>> {
+pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<(AudioEngine, StereoOutputController), Box<dyn Error>> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -44,7 +42,7 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<
         .map_err(|e| format!("Failed to get default output config: {e}"))?;
     let channels = supported.channels() as usize;
 
-    let (mut buss_consumer, buss_producer) = BussProducer::new();
+    let (mut buss_consumer, stereo_output) = StereoOutputController::new();
 
     let err_fn = |err| eprintln!("audio stream error: {err}");
 
@@ -64,7 +62,7 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<
     };
 
 
-    Ok(AudioEngine { _stream: stream , _input: buss_producer, sample_rate: supported.sample_rate().0})
+    Ok((AudioEngine { _stream: stream, sample_rate: supported.sample_rate().0 }, stereo_output))
 }
 
 fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer, tx: &mpsc::Sender<Actions>) {
