@@ -1,6 +1,5 @@
 pub mod actions;
 mod synth;
-pub mod buss;
 mod sources;
 
 use std::sync::mpsc::SendError;

@@ -12,7 +12,7 @@ use super::actions::SynthActions;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use crate::models::shared::TrackIdentifier;
-use super::buss::Output;
+use super::audio::interfaces::Output;
 
 
 // pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
@@ -60,7 +60,6 @@ fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &Event
 	};
 	Ok(())
 }
-
 
 fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, program: u8) ->  Result<(Synth, SoundFontId), Box<dyn Error>> {
 	debug!("Loading font from {}", ToString::to_string(soundfont));

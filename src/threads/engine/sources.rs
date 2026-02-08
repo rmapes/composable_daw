@@ -3,9 +3,10 @@ use std::{collections::HashMap, thread::JoinHandle};
 use log::info;
 
 use super::synth::{TrackThread, TrackThreadEvents};
-use super::audio::AudioEngine;
+use super::audio::{AudioEngine, interfaces::Output};
 use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 use crate::models::sequences::EventStreamSource;
+use std::sync::{Arc, RwLock};
 /**
  * Threads for tracks and instruments
  * These will feed into the audio thread
@@ -40,7 +41,8 @@ use crate::models::sequences::EventStreamSource;
                             instrument.bank, 
                             instrument.program
                         );
-                    self.audio.add_input(track_thread.synth.clone());
+                    let synth_wrapper = ArcWrapper { inner: track_thread.synth.clone() };
+                    self.audio.add_input(Box::new(synth_wrapper));
                     let handle = track_thread.run(self.tick_source.clone());
                     self.tracks.insert(track.id, handle);
                     Ok(())
@@ -59,6 +61,26 @@ use crate::models::sequences::EventStreamSource;
             Ok(())
         } else {
             Err("Not midi")
+        }
+    }
+}
+
+struct ArcWrapper {
+    inner: Arc<RwLock<Box<dyn Output>>>,
+}
+
+impl Output for ArcWrapper {
+    fn write_f32(&mut self, 
+        len: usize, 
+        left_out: &mut [f32], 
+        loff: usize, 
+        lincr: usize, 
+        right_out: &mut [f32], 
+        roff: usize, 
+        rincr: usize,
+    ) {
+        if let Ok(mut guard) = self.inner.write() {
+            guard.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
         }
     }
 }

@@ -1,19 +1,23 @@
 
 
+pub mod buss;
+pub mod interfaces; //TODO: Make private
+pub mod buffered_output; //TODO: Make private
+
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 
+
 use super::engine::actions::{Actions, SystemActions};
-use super::engine::buss::{Buss, Output};
-use std::sync::Mutex;
-use std::sync::Arc;
 use std::error::Error;
-use std::sync::RwLock;
 use std::sync::mpsc;
+
+use buss::{BussConsumer, BussProducer};
+use interfaces::Output;
 
 pub struct AudioEngine {
 	_stream: cpal::Stream,
-    _input: Arc<Mutex<Buss>>,
+    _input: BussProducer,
     pub sample_rate: u32,
 }
 
@@ -24,10 +28,8 @@ impl AudioEngine {
     // pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
     //     self._stream.pause()
     // }
-    pub fn add_input(&mut self, o: Arc<RwLock<Box<dyn Output>>>) {
-        if let Ok(mut guard) = self._input.lock() {
-            guard.add_input(o);
-        }
+    pub fn add_input(&mut self, o: Box<dyn Output>) {
+        self._input.add_input(o);
     }
 }
 
@@ -42,19 +44,18 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<
         .map_err(|e| format!("Failed to get default output config: {e}"))?;
     let channels = supported.channels() as usize;
 
-    let buss = Arc::new(Mutex::new(Buss::new()));
+    let (mut buss_consumer, buss_producer) = BussProducer::new();
 
     let err_fn = |err| eprintln!("audio stream error: {err}");
 
     let stream = match supported.sample_format() {
         cpal::SampleFormat::F32 => {
-            let buss_for_cb = buss.clone();
             let config: cpal::StreamConfig = supported.clone().into();
             let tx = tx.clone();
             let _ = tx.send(Actions::Internal(SystemActions::SetSampleRate(config.sample_rate.0)));
             device.build_output_stream(
                 &config,
-                move |data: &mut [f32], _| fill_output_buffer(data, channels, &buss_for_cb, &tx),
+                move |data: &mut [f32], _| fill_output_buffer(data, channels, &mut buss_consumer, &tx),
                 err_fn,
                 None,
             )?
@@ -63,18 +64,16 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<AudioEngine, Box<
     };
 
 
-    Ok(AudioEngine { _stream: stream , _input: buss, sample_rate: supported.sample_rate().0})
+    Ok(AudioEngine { _stream: stream , _input: buss_producer, sample_rate: supported.sample_rate().0})
 }
 
-fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &Arc<Mutex<Buss>>, tx: &mpsc::Sender<Actions>) {
+fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer, tx: &mpsc::Sender<Actions>) {
 	let frames = data.len() / channels;
 	// Render exactly 'frames' samples per channel using write_f32 as per docs
 	let mut left = vec![0.0_f32; frames];
 	let mut right = vec![0.0_f32; frames];
-	if let Ok(mut guard) = buss.lock() {
-		// https://docs.rs/oxisynth/0.1.0/oxisynth/struct.Synth.html#method.write
-		guard.write_f32(frames, &mut left, 0, 1, &mut right, 0, 1);
-	}
+    // https://docs.rs/oxisynth/0.1.0/oxisynth/struct.Synth.html#method.write
+    buss.write_f32(frames, &mut left, 0, 1, &mut right, 0, 1);
 
 	match channels {
 		1 => {
@@ -166,43 +165,52 @@ mod tests {
 
     #[test]
     fn fill_data_buffer_should_combine_stereo_for_mono_output() {
-        // Set up
-        let mut raw_buss = Buss::new();
-        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
-        raw_buss.add_input(input);
-        let buss = Arc::new(Mutex::new(raw_buss));
+        // Set up ring buffer and populate it with test data
+        let (mut consumer, mut producer) = BussProducer::new();
+        let mut buss = Buss::new();
+        let input: Box<dyn Output> = Box::new(MockInput::new()); 
+        buss.add_input(input);
+        // Populate ring buffer
+        producer.add_input(Box::new(buss));
+        producer.on_tick();
         // Test
         let mut data = [0.0_f32; MOCK_INPUT_LEN];
         let (tx, _) = mpsc::channel::<Actions>();
-        fill_output_buffer(&mut data, 1, &buss, &tx);
+        fill_output_buffer(&mut data, 1, &mut consumer, &tx);
         assert_approx_eq_array(&data, &[0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.11, 0.12, 0.13, 0.14])
     }
 
     #[test]
     fn fill_data_buffer_should_interleave_stereo_for_stereo_output() {
-        // Set up
-        let mut raw_buss = Buss::new();
-        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
-        raw_buss.add_input(input);
-        let buss = Arc::new(Mutex::new(raw_buss));
+        // Set up ring buffer and populate it with test data
+        let (mut consumer, mut producer) = BussProducer::new();
+        let mut buss = Buss::new();
+        let input: Box<dyn Output> = Box::new(MockInput::new()); 
+        buss.add_input(input);
+        // Populate ring buffer
+        producer.add_input(Box::new(buss));
+        producer.on_tick();
         // Test
         let mut data = [0.0_f32; 2*MOCK_INPUT_LEN];
         let (tx, _) = mpsc::channel::<Actions>();
-        fill_output_buffer(&mut data, 2, &buss, &tx);
+        fill_output_buffer(&mut data, 2, &mut consumer, &tx);
         assert_approx_eq_array(&data, &[0.0, 0.1, 0.01, 0.11, 0.02, 0.12, 0.03, 0.13, 0.04, 0.14, 0.05, 0.15, 0.06, 0.16, 0.07, 0.17, 0.08, 0.18, 0.09, 0.19])
     }
 
     #[test]
     fn fill_data_buffer_should_interleave_stereo_for_multichannel_output() {
-        // Set up
-        let mut raw_buss = Buss::new();
-        let input: Arc<RwLock<Box<dyn Output>>> = Arc::new(RwLock::new(Box::new(MockInput::new()))); 
-        raw_buss.add_input(input);
-        let buss = Arc::new(Mutex::new(raw_buss));
+        // Set up ring buffer and populate it with test data
+        let (mut consumer, mut producer) = BussProducer::new();
+        let mut buss = Buss::new();
+        let input: Box<dyn Output> = Box::new(MockInput::new()); 
+        buss.add_input(input);
+        // Populate ring buffer
+        producer.add_input(Box::new(buss));
+        producer.on_tick();
         // Test
         let mut data = [0.0_f32; 3*MOCK_INPUT_LEN];
         let (tx, _) = mpsc::channel::<Actions>();
-        fill_output_buffer(&mut data, 3, &buss, &tx);
+        fill_output_buffer(&mut data, 3, &mut consumer, &tx);
         // Interleave, but fill channels above 2 with 0.0
         assert_approx_eq_array(&data, &[
             0.0, 0.1, 0.0, 
