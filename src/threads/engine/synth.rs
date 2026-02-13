@@ -41,7 +41,6 @@ impl Output for Synth {
 }
 
 
-#[allow(dead_code)]
 fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
 		// println!("Tick: {tick}");
 		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
@@ -84,14 +83,12 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	Ok((synth, font_id))
 }
 
-#[allow(dead_code)]
 pub enum TrackThreadEvents {
 	Tick(Tick),
 	Update(TrackIdentifier, EventStream),
 	Synth(SynthActions),
 }
 
-#[allow(dead_code)]
 pub struct TrackThread {
 	id: TrackIdentifier,
     pub synth: Arc<RwLock<Box<dyn Output>>>, // This will actually be a Synth type which we downcast later

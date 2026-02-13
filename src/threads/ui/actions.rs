@@ -29,6 +29,8 @@ pub enum Message {
     // Menu
     NewFile,
     OpenFile,
+    // Midi Editor
+    MidiEditor(super::midi_editor::MidiEditorMessage),
 }
 
 #[derive(Debug, Clone)]

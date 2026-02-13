@@ -10,6 +10,7 @@ use super::actions::Message;
 
 use super::components;
 
+use iced::widget::{pick_list, row, text, container};
 
 use iced::widget::canvas::{
     self, Canvas, Frame, Geometry, Path, Stroke, Text, LineCap, Style,
@@ -30,6 +31,58 @@ const DEFAULT_LENGTH: Tick = 960; // TODO: calculate from PPQ
 
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
+// --- SNAP TO GRID ---
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapToGrid {
+    None,
+    Division,
+    Beat,
+    Bar,
+}
+
+impl std::fmt::Display for SnapToGrid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl SnapToGrid {
+    pub const ALL: [SnapToGrid; 4] = [
+        SnapToGrid::None,
+        SnapToGrid::Division,
+        SnapToGrid::Beat,
+        SnapToGrid::Bar,
+    ];
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SnapToGrid::None => "None",
+            SnapToGrid::Division => "Division",
+            SnapToGrid::Beat => "Beat",
+            SnapToGrid::Bar => "Bar",
+        }
+    }
+
+    /// Get the snap interval in ticks
+    fn snap_interval(&self) -> Tick {
+        const PPQ: u32 = 480;
+        match self {
+            SnapToGrid::None => 1, // No snapping, but use 1 to avoid division by zero
+            SnapToGrid::Division => PPQ / SUBDIVISIONS_PER_BEAT, // 120 ticks
+            SnapToGrid::Beat => PPQ, // 480 ticks
+            SnapToGrid::Bar => PPQ * BEATS_PER_BAR, // 1920 ticks
+        }
+    }
+
+    /// Snap a tick value to the nearest grid point
+    pub fn snap_tick(&self, tick: Tick) -> Tick {
+        if *self == SnapToGrid::None {
+            return tick;
+        }
+        let interval = self.snap_interval();
+        ((tick as f32 / interval as f32).round() as u32) * interval
+    }
+}
 
 // --- MODEL & STATE ---
 #[derive(Default, Copy, Clone)]
@@ -49,6 +102,7 @@ pub struct MidiEditor {
     // Add your MIDI note data structure here
     notes: BTreeMap<Tick, Vec<MidiNote>>,
     region_identifier: RegionIdentifier,
+    snap_to_grid: SnapToGrid,
 }
 
 // Implement the Program trait for the editor
@@ -124,7 +178,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         let pitch = y_to_pitch(relative_y, &grid_bounds.size());
                         
                         let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                        let start_tick = self.x_to_tick(relative_x);
+                        let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
 
                         // update internal state
                         state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch + MIDI_BASE, length: DEFAULT_LENGTH, velocity: 100 }});
@@ -137,7 +191,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                 iced::mouse::Event::CursorMoved { .. } => {
                     if let Some(pending) = &mut state.pending_note {
                         let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                        let current_tick = self.x_to_tick(relative_x);
+                        let current_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
                         
                         // update internal state
                         if current_tick > pending.start {
@@ -442,17 +496,18 @@ fn y_to_pitch(relative_y: f32, bounds: &Size) -> u8 {
 // --- CONTAINER WIDGET ---
 // This is what you actually put in your Iced layout.
 impl MidiEditor {
-    pub fn new(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier) -> Self {
+    pub fn new(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid) -> Self {
         Self {
             cache: canvas::Cache::default(),
             scroll_offset: Vector::default(),
             notes,
-            region_identifier
+            region_identifier,
+            snap_to_grid,
         }
     }
 
-    pub fn view(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier) -> Canvas<Self, Message> {
-        Canvas::new(MidiEditor::new(notes, region_identifier))
+    pub fn view(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid) -> Canvas<Self, Message> {
+        Canvas::new(MidiEditor::new(notes, region_identifier, snap_to_grid))
             .width(Length::Fill)
             .height(Length::Fill)
     }
@@ -480,13 +535,43 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, midi_seq: &MidiSeq) -> Element<'_, Message> {
-        let content = MidiEditor::view(midi_seq.notes.clone(), midi_seq.id);
-        components::module(
-            content
-            .width(self.width)
-            .height(self.height).into()
-        ).id("MidiEditor").into()
+    pub fn view(&self, midi_seq: &MidiSeq, snap_to_grid: SnapToGrid) -> Element<'_, Message> {
+        let canvas = MidiEditor::view(midi_seq.notes.clone(), midi_seq.id, snap_to_grid);
+        
+        // Create snap-to-grid selector in top right
+        let snap_selector = row![
+            text("Snap:").size(12),
+            pick_list(
+                SnapToGrid::ALL,
+                Some(snap_to_grid),
+                move |snap| Message::MidiEditor(MidiEditorMessage::SetSnapToGrid(snap))
+            )
+        ]
+        .spacing(5);
+
+        // Use a column with the selector at the top right, then the canvas
+        let content = iced::widget::column![
+            container(snap_selector)
+                .padding(5)
+                .align_x(iced::alignment::Horizontal::Right)
+                .width(Length::Fill),
+            components::module(
+                canvas
+                    .width(self.width)
+                    .height(self.height)
+                    .into()
+            ).id("MidiEditor")
+        ]
+        .width(self.width)
+        .height(self.height);
+
+        content.into()
     }
+
+}
+
+#[derive(Debug, Clone)]
+pub enum MidiEditorMessage {
+    SetSnapToGrid(SnapToGrid),
 }
 

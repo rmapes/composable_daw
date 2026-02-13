@@ -38,6 +38,7 @@ pub struct MainWindow {
     selected_track: usize,
     selected_region: Option<RegionIdentifier>,
     playhead: Tick,
+    midi_editor_snap: super::midi_editor::SnapToGrid,
     // Preferences
     width: Length,
     height: Length,
@@ -82,6 +83,7 @@ impl Default for MainWindow {
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             playhead: 0,
+            midi_editor_snap: super::midi_editor::SnapToGrid::None,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
@@ -178,6 +180,14 @@ impl MainWindow {
                 self.data = project_data;
                 Task::none()
             },
+            Message::MidiEditor(msg) => {
+                match msg {
+                    super::midi_editor::MidiEditorMessage::SetSnapToGrid(snap) => {
+                        self.midi_editor_snap = snap;
+                    }
+                }
+                Task::none()
+            },
         }
     }
 
@@ -215,8 +225,8 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
                             self.composer_window.view(&self.data.tracks, self.selected_track, self.data.ppq, self.playhead),
                         ),
                         components::module_slot(
-                            self.editor_window.view(selected_region),
-                        )
+                            self.editor_window.view(selected_region, self.midi_editor_snap)
+                        ),
                     ]
                 ]
             ].width(self.width).height(self.height)
