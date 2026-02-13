@@ -83,7 +83,7 @@ impl Default for MainWindow {
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             playhead: 0,
-            midi_editor_snap: super::midi_editor::SnapToGrid::None,
+            midi_editor_snap: super::midi_editor::SnapToGrid::Division,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
