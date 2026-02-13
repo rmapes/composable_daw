@@ -41,6 +41,7 @@ impl Output for Synth {
 }
 
 
+#[allow(dead_code)]
 fn on_tick(tick: Tick, synth: Arc<RwLock<Box<dyn Output>>>, event_stream: &EventStream)  -> Result<(), Box<dyn Error>> {
 		// println!("Tick: {tick}");
 		for priority in [EventPriority::System, EventPriority::Audio, EventPriority::Other] {
@@ -83,12 +84,14 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	Ok((synth, font_id))
 }
 
+#[allow(dead_code)]
 pub enum TrackThreadEvents {
 	Tick(Tick),
 	Update(TrackIdentifier, EventStream),
 	Synth(SynthActions),
 }
 
+#[allow(dead_code)]
 pub struct TrackThread {
 	id: TrackIdentifier,
     pub synth: Arc<RwLock<Box<dyn Output>>>, // This will actually be a Synth type which we downcast later
@@ -151,31 +154,29 @@ impl TrackSynth {
 	pub fn handle_synth_action(&mut self, action: SynthActions) -> Result<(), Box<dyn Error>> {
 		match action {
 			SynthActions::SetSoundFont(track_id, soundfont_path) => {
-				if track_id == self.id && let Some(path) = soundfont_path {
-					if let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
-						let soundfont_file = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
-						let soundfont_path = get_soundfont_path(&soundfont_file);
-						let mut file = File::open(soundfont_path)?; 
-						let font = SoundFont::load(&mut file)?; 
-						self.soundfont_id = s.add_font(font, true);
-						let _ = s.select_program(0, self.soundfont_id, self.bank_id, self.program_id);
-					}
+				if track_id == self.id 
+					&& let Some(path) = soundfont_path
+					&& let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
+					let soundfont_file = path.file_name().map(|x| { x.to_str() }).expect("File picker should return valid string").unwrap().to_string();
+					let soundfont_path = get_soundfont_path(&soundfont_file);
+					let mut file = File::open(soundfont_path)?; 
+					let font = SoundFont::load(&mut file)?; 
+					self.soundfont_id = s.add_font(font, true);
+					let _ = s.select_program(0, self.soundfont_id, self.bank_id, self.program_id);
 				}
 			}
 			SynthActions::SetBank(track_id, bank) => {
-				if track_id == self.id {
-					if let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
-						self.bank_id = bank;
-						let _ = s.select_bank(0, bank);
-					}
+				if track_id == self.id 
+					&& let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
+					self.bank_id = bank;
+					let _ = s.select_bank(0, bank);
 				}
 			}
 			SynthActions::SetProgram(track_id, program) => {
-				if track_id == self.id {
-					if let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
-						self.program_id = program;
-						let _ = s.select_program(0, self.soundfont_id, self.bank_id, program);
-					}
+				if track_id == self.id 
+					&& let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
+					self.program_id = program;
+					let _ = s.select_program(0, self.soundfont_id, self.bank_id, program);
 				}
 			}
 		}
@@ -184,6 +185,7 @@ impl TrackSynth {
 }
 
 impl TrackThread {
+	#[allow(dead_code)]
 	pub fn new<P: AsRef<Path> + ?Sized + ToString>(id: TrackIdentifier, seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
 		let bank_id = 0;
 		let program_id = 0;
@@ -193,6 +195,7 @@ impl TrackThread {
 		let event_stream = seq.to_event_stream();
 		Self { id, synth, soundfont_id, event_stream, bank_id, program_id }
 	}
+	#[allow(dead_code)]
 	pub fn run(mut self, tick_source: Receiver<TrackThreadEvents>) -> JoinHandle<()> {
 		info!("Spawning track thread");
 		thread::spawn(move || {

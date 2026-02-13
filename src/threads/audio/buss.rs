@@ -66,6 +66,7 @@ impl Output for Buss {
 
 /// Ring buffer consumer for reading audio from the ring buffer (used by CPAL audio thread)
 pub struct BussConsumer {
+    #[allow(dead_code)]
     buf_size: usize,
     left_input: HeapCons<f32>,
     right_input: HeapCons<f32>
@@ -127,10 +128,12 @@ impl BussProducer {
     }
 
     // Note Buss should not own inputs, only borrow them
+    #[allow(dead_code)]
     pub fn add_input(&mut self, input: Box<dyn Output>) {
         self.inputs.push(input);
     }
 
+    #[allow(dead_code)]
     pub fn on_tick(&mut self) {
         // Repopulate buffers
         let left_space = min(self.buf_size, self.left_output.vacant_len());

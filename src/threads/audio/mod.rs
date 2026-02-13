@@ -117,8 +117,6 @@ mod tests {
 
     use super::*;
 
-    const BUF_SIZE: usize = 512;
-
 
     // Audio Engine
     #[test]

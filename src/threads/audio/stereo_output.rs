@@ -22,8 +22,4 @@ impl StereoOutputController {
         }
     }
 
-    /// Check if the ring buffer needs more data (for more frequent polling if needed)
-    pub fn needs_data(&self) -> bool {
-        self.producer.has_capacity()
-    }
 }

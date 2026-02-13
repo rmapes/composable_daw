@@ -28,8 +28,7 @@ pub enum Actions {
 pub enum SystemActions {
     SamplesPlayed(usize),
     SetSampleRate(u32),
-    PlaybackStarted,
-    PlaybackFinished,
+
 }
 
 #[derive(Debug, Clone)]

@@ -31,7 +31,6 @@ impl EngineController {
 
 
 pub struct PlayerState {
-    pub is_preparing_to_play: bool,
     pub is_playing: bool,
     pub is_active: bool,
     pub is_audio_initialized: bool, // Only for use in this file
@@ -47,7 +46,6 @@ pub struct PlayerState {
 impl PlayerState {
     pub fn new() -> Self {
         Self { 
-            is_preparing_to_play: false, 
             is_playing: false, 
             is_active: true, 
             is_audio_initialized: false,
@@ -286,25 +284,6 @@ where
                             } 
                             ActionFollowUp::Continue                               
                         }
-                        actions::SystemActions::PlaybackStarted => {
-                            if let Ok(mut state) = player_state.write() {
-                                state.is_playing = true;
-                                state.is_audio_initialized = true;
-                                state.is_preparing_to_play = false;
-                                info!("Starting to play");
-                            }
-                            ActionFollowUp::PlayerStateUpdate
-                        },
-                        actions::SystemActions::PlaybackFinished => {
-                            if let Ok(mut state) = player_state.write() {
-                                state.is_playing = false;
-                                state.is_audio_initialized = false;
-                                info!("Audio should have been dropped at end of play");
-
-                            }
-                            info!("Playback finished");
-                            ActionFollowUp::PlayerStateUpdate
-                        },
                     }
                 }
             };
