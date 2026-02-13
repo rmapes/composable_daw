@@ -293,6 +293,19 @@ impl MidiSeq {
     pub fn add_note(&mut self, start: Tick, note: MidiNote) {
         self.notes.entry(start).or_default().push(note);
     }
+
+    pub fn remove_note(&mut self, start: Tick, note_index: usize) -> Option<MidiNote> {
+        if let Some(notes_at_tick) = self.notes.get_mut(&start) {
+            if note_index < notes_at_tick.len() {
+                let note = notes_at_tick.remove(note_index);
+                if notes_at_tick.is_empty() {
+                    self.notes.remove(&start);
+                }
+                return Some(note);
+            }
+        }
+        None
+    }
 }
 
 impl TSequence for MidiSeq {

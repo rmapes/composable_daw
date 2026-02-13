@@ -18,6 +18,8 @@ pub enum Actions {
     PatternClickNote(PatternNoteIdentifier),
     // Midi Editor
     CreateMidiNote(RegionIdentifier, Tick, MidiNote),
+    DeleteMidiNote(RegionIdentifier, Tick, usize), // region, start_tick, note_index
+    UpdateMidiNote(RegionIdentifier, Tick, usize, Tick, MidiNote), // region, old_start_tick, note_index, new_start_tick, updated_note
     // Synthesizer Actions
     Synth(SynthActions),
     // Actions local to engine itself

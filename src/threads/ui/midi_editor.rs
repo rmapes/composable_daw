@@ -91,9 +91,20 @@ pub struct PendingNote {
     pub note: MidiNote, // Track the note being dragged
 }
 
+#[derive(Clone)]
+pub struct DraggedNote {
+    pub original_start: Tick,
+    pub original_note_index: usize,
+    pub current_start: Tick,
+    pub note: MidiNote,
+    pub is_resizing: bool, // true if resizing, false if moving
+}
+
 #[derive(Default)]
 pub struct MidiEditorState {
-    pub pending_note: Option<PendingNote>, // Track the note being dragged
+    pub pending_note: Option<PendingNote>, // Track the note being created
+    pub dragged_note: Option<DraggedNote>, // Track the note being moved or resized
+    pub hovered_resize_edge: Option<(Tick, usize)>, // Track which note's right edge is being hovered
 }
 
 pub struct MidiEditor {
@@ -111,6 +122,12 @@ impl canvas::Program<Message, Theme> for MidiEditor {
 
     fn draw(&self, state: &Self::State, renderer: &iced::Renderer,
         _theme: &Theme, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
+        // Clear cache when dragging/resizing or hovering resize edge to ensure smooth visual updates
+        // This forces a redraw every frame during drag/resize
+        if state.dragged_note.is_some() || state.hovered_resize_edge.is_some() {
+            self.cache.clear();
+        }
+        
         let editor_geometry = self.cache.draw(renderer, bounds.size(), |frame| {
             // 1. Draw the UI Sections
             let ruler_rect = Rectangle::new(Point::new(KEYBOARD_WIDTH, Point::ORIGIN.y), Size::new(bounds.width - KEYBOARD_WIDTH, RULER_HEIGHT));
@@ -169,27 +186,28 @@ impl canvas::Program<Message, Theme> for MidiEditor {
 
         if let iced::Event::Mouse(mouse_event) = event {
              match mouse_event {
-                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
-                    if grid_bounds.contains(cursor_position) {
-                        // info!("State pending note is {}", state.pending_note.is_some());
-                        // 1. Calculate Pitch and Tick
-                        // Note: scroll_offset.y is usually negative when scrolling down
-                        let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
-                        let pitch = y_to_pitch(relative_y, &grid_bounds.size());
-                        
-                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                        let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
-
-                        // update internal state
-                        state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch + MIDI_BASE, length: DEFAULT_LENGTH, velocity: 100 }});
-                        // info!("Pending note set from {start_tick}");
-                        // and return message to say all handled
-                        return Some(iced::widget::Action::capture());
-                    }
-                }
-
                 iced::mouse::Event::CursorMoved { .. } => {
+                    // Only update hover state if we're not currently dragging/resizing
+                    if state.dragged_note.is_none() && state.pending_note.is_none() {
+                        // Update hover state for resize edge indicator
+                        if grid_bounds.contains(cursor_position) {
+                            state.hovered_resize_edge = self.find_note_resize_edge(
+                                cursor_position.x,
+                                cursor_position.y,
+                                &grid_bounds
+                            );
+                            // Clear cache to redraw with hover indicator
+                            if state.hovered_resize_edge.is_some() {
+                                self.cache.clear();
+                            }
+                        } else {
+                            state.hovered_resize_edge = None;
+                        }
+                    }
+                    
+                    // Handle dragging/resizing
                     if let Some(pending) = &mut state.pending_note {
+                        // Creating a new note
                         let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
                         let current_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
                         
@@ -199,11 +217,114 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         }
                         // and return message to say all handled
                         return Some(iced::widget::Action::capture());
+                    } else if let Some(dragged) = &mut state.dragged_note {
+                        if dragged.is_resizing {
+                            // Resizing an existing note - start position doesn't change
+                            let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                            let end_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
+                            
+                            // Update the note length (ensure it's at least 1 tick)
+                            // Use original_start because the start position shouldn't change when resizing
+                            if end_tick > dragged.original_start {
+                                dragged.note.length = end_tick - dragged.original_start;
+                            } else {
+                                dragged.note.length = 1;
+                            }
+                            
+                            // Ensure current_start stays the same as original_start when resizing
+                            // (start position should not change during resize)
+                            dragged.current_start = dragged.original_start;
+                            
+                            // Clear cache to force redraw
+                            self.cache.clear();
+                            return Some(iced::widget::Action::capture());
+                        } else {
+                            // Moving an existing note
+                            let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                            let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                            
+                            // Snap the new position
+                            let new_start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
+                            let new_pitch = y_to_pitch(relative_y, &grid_bounds.size()) + MIDI_BASE;
+                            
+                            // Update the dragged note's position
+                            dragged.current_start = new_start_tick;
+                            dragged.note.key = new_pitch;
+                            
+                            // Clear cache to force redraw
+                            self.cache.clear();
+                            return Some(iced::widget::Action::capture());
+                        }
+                    }
+                }
+                iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left) => {
+                    if grid_bounds.contains(cursor_position) {
+                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                        let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                        
+                        // First, check if we clicked on the resize edge of a note
+                        if let Some((start_tick, note_index)) = self.find_note_resize_edge(
+                            cursor_position.x,
+                            cursor_position.y,
+                            &grid_bounds
+                        ) {
+                            // Clicked on resize edge - start resizing
+                            if let Some(notes_at_tick) = self.notes.get(&start_tick) {
+                                if note_index < notes_at_tick.len() {
+                                    let note = notes_at_tick[note_index];
+                                    state.dragged_note = Some(DraggedNote {
+                                        original_start: start_tick,
+                                        original_note_index: note_index,
+                                        current_start: start_tick,
+                                        note,
+                                        is_resizing: true,
+                                    });
+                                    state.pending_note = None; // Clear any pending note creation
+                                    state.hovered_resize_edge = None; // Clear hover state
+                                    return Some(iced::widget::Action::capture());
+                                }
+                            }
+                        }
+                        // Then check if we clicked on an existing note (for moving)
+                        else if let Some((start_tick, note_index)) = self.find_note_at_position(
+                            cursor_position.x, 
+                            cursor_position.y, 
+                            &grid_bounds
+                        ) {
+                            // Clicked on an existing note - start dragging it
+                            if let Some(notes_at_tick) = self.notes.get(&start_tick) {
+                                if note_index < notes_at_tick.len() {
+                                    let note = notes_at_tick[note_index];
+                                    state.dragged_note = Some(DraggedNote {
+                                        original_start: start_tick,
+                                        original_note_index: note_index,
+                                        current_start: start_tick,
+                                        note,
+                                        is_resizing: false,
+                                    });
+                                    state.pending_note = None; // Clear any pending note creation
+                                    state.hovered_resize_edge = None; // Clear hover state
+                                    return Some(iced::widget::Action::capture());
+                                }
+                            }
+                        } else {
+                            // Not clicking on an existing note - start creating a new one
+                            let pitch = y_to_pitch(relative_y, &grid_bounds.size());
+                            let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
+
+                            // update internal state
+                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch + MIDI_BASE, length: DEFAULT_LENGTH, velocity: 100 }});
+                            state.dragged_note = None; // Clear any dragged note
+                            state.hovered_resize_edge = None; // Clear hover state
+                            // and return message to say all handled
+                            return Some(iced::widget::Action::capture());
+                        }
                     }
                 }
 
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
                     if let Some(pending) = &state.pending_note {
+                        // Finishing creating a new note
                         let final_note = *pending;
                         state.pending_note = None;
                         return Some(iced::widget::Action::publish(Message::Engine(Actions::CreateMidiNote (
@@ -211,6 +332,30 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             final_note.start,
                             final_note.note,
                         ))));
+                    } else if let Some(dragged) = &state.dragged_note {
+                        // Finishing moving or resizing an existing note
+                        let dragged_note = dragged.clone();
+                        state.dragged_note = None;
+                        
+                        // Check if anything changed
+                        let original_note = self.notes.get(&dragged_note.original_start)
+                            .and_then(|notes| notes.get(dragged_note.original_note_index));
+                        
+                        let position_changed = dragged_note.current_start != dragged_note.original_start || 
+                           dragged_note.note.key != original_note.map(|n| n.key).unwrap_or(0);
+                        let length_changed = dragged_note.is_resizing && 
+                           dragged_note.note.length != original_note.map(|n| n.length).unwrap_or(0);
+                        
+                        // If position or length changed, send update action
+                        if position_changed || length_changed {
+                            return Some(iced::widget::Action::publish(Message::Engine(Actions::UpdateMidiNote (
+                                self.region_identifier,
+                                dragged_note.original_start,
+                                dragged_note.original_note_index,
+                                dragged_note.current_start,
+                                dragged_note.note,
+                            ))));
+                        }
                     }
                 }
                 _ => {}
@@ -446,26 +591,133 @@ impl MidiEditor {
     }
     // 4. draw_midi_notes (Not implemented here, but this is where you draw your note blocks)
     fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState, bounds: &Rectangle) { //}, notes: BTreeMap<Tick, Vec<MidiNote>>, scroll: &Vector) { 
-        if let Some(pending) = &state.pending_note {
-            // info!("Drawing pending note at {},{}", pending.start_tick, pending.end_tick);
-            self.draw_note(frame, pending.start, &pending.note, bounds);
-        }
-        for (start, notes) in &self.notes {
-            for note in notes {
-                self.draw_note(frame, *start, note, bounds);
+        // Draw existing notes, but skip the one being dragged/resized
+        if let Some(dragged) = &state.dragged_note {
+            for (start, notes) in &self.notes {
+                for (note_index, note) in notes.iter().enumerate() {
+                    // Skip drawing the note that's being dragged/resized
+                    if *start == dragged.original_start && note_index == dragged.original_note_index {
+                        continue;
+                    }
+                    self.draw_note(frame, *start, note, bounds);
+                }
             }
+            // Draw the dragged/resized note at its current position
+            self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
+        } else {
+            // No note being dragged, draw all notes normally
+            for (start, notes) in &self.notes {
+                for (note_index, note) in notes.iter().enumerate() {
+                    self.draw_note(frame, *start, note, bounds);
+                    
+                    // Draw resize indicator on right edge if hovering
+                    if let Some((hovered_start, hovered_index)) = state.hovered_resize_edge {
+                        if *start == hovered_start && note_index == hovered_index {
+                            self.draw_resize_indicator(frame, *start, note, bounds);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Draw pending note (being created)
+        if let Some(pending) = &state.pending_note {
+            self.draw_note(frame, pending.start, &pending.note, bounds);
         }
      }
 
+    /// Draw a resize indicator (vertical line) on the right edge of a note
+    fn draw_resize_indicator(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
+        let x = self.tick_to_x(start) + self.tick_to_x(note.length);
+        let y = pitch_to_y(&note.key, &bounds.size());
+        
+        // Draw a vertical line on the right edge
+        let line = Path::line(
+            Point::new(x, y),
+            Point::new(x, y + NOTE_HEIGHT)
+        );
+        frame.stroke(
+            &line,
+            Stroke {
+                style: Style::Solid(Color::from_rgba(1.0, 1.0, 1.0, 0.8)),
+                width: 2.0,
+                line_cap: LineCap::Square,
+                ..Stroke::default()
+            }
+        );
+    }
+
     fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
+        self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.5));
+    }
+
+    fn draw_note_with_color(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, color: Color) {
         let x = self.tick_to_x(start);
         let width = self.tick_to_x(note.length);
         let y = pitch_to_y(&note.key, &bounds.size());
         
         let rect = Path::rectangle(Point::new(x, y), Size::new(width.max(5.0), NOTE_HEIGHT));
-        frame.fill(&rect, Color::from_rgba(0.0, 0.8, 1.0, 0.5));
+        frame.fill(&rect, color);
+    }
 
-        // Transparent blue ghost
+    const RESIZE_EDGE_THRESHOLD: f32 = 8.0; // Pixels from right edge to trigger resize
+
+    /// Find which note (if any) is at the given cursor position
+    /// Returns (start_tick, note_index) if found
+    /// Excludes the resize edge area to avoid conflicts with resize detection
+    fn find_note_at_position(&self, cursor_x: f32, cursor_y: f32, bounds: &Rectangle) -> Option<(Tick, usize)> {
+        let relative_x = cursor_x - KEYBOARD_WIDTH - self.scroll_offset.x;
+        let relative_y = cursor_y - RULER_HEIGHT - self.scroll_offset.y;
+        
+        let pitch = y_to_pitch(relative_y, &bounds.size()) + MIDI_BASE;
+
+        // Check all notes to find one that contains this position
+        for (start_tick, notes) in &self.notes {
+            for (note_index, note) in notes.iter().enumerate() {
+                if note.key == pitch {
+                    let note_start_x = self.tick_to_x(*start_tick);
+                    let note_end_x = note_start_x + self.tick_to_x(note.length);
+                    let note_y = pitch_to_y(&note.key, &bounds.size());
+                    
+                    // Check if cursor is within note bounds, but exclude the resize edge area
+                    // This prevents conflicts with resize detection
+                    let resize_edge_start = note_end_x - Self::RESIZE_EDGE_THRESHOLD;
+                    if relative_x >= note_start_x && relative_x < resize_edge_start &&
+                       relative_y >= note_y && relative_y <= note_y + NOTE_HEIGHT {
+                        return Some((*start_tick, note_index));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if cursor is over the right edge of a note (for resizing)
+    /// Returns (start_tick, note_index) if over resize edge
+    fn find_note_resize_edge(&self, cursor_x: f32, cursor_y: f32, bounds: &Rectangle) -> Option<(Tick, usize)> {
+        let relative_x = cursor_x - KEYBOARD_WIDTH - self.scroll_offset.x;
+        let relative_y = cursor_y - RULER_HEIGHT - self.scroll_offset.y;
+        
+        let pitch = y_to_pitch(relative_y, &bounds.size()) + MIDI_BASE;
+
+        // Check all notes to find one whose right edge is being hovered
+        for (start_tick, notes) in &self.notes {
+            for (note_index, note) in notes.iter().enumerate() {
+                if note.key == pitch {
+                    let note_start_x = self.tick_to_x(*start_tick);
+                    let note_end_x = note_start_x + self.tick_to_x(note.length);
+                    let note_y = pitch_to_y(&note.key, &bounds.size());
+                    
+                    // Check if cursor is near the right edge and within vertical bounds
+                    let distance_from_edge = note_end_x - relative_x;
+                    if distance_from_edge >= 0.0 && distance_from_edge <= Self::RESIZE_EDGE_THRESHOLD &&
+                       relative_y >= note_y && relative_y <= note_y + NOTE_HEIGHT {
+                        return Some((*start_tick, note_index));
+                    }
+                }
+            }
+        }
+        None
     }
     
     // Helper functions

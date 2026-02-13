@@ -221,6 +221,32 @@ where
                     } else {
                         ActionFollowUp::ProjectDataUpdate
                     }
+                },
+                actions::Actions::DeleteMidiNote(region_identifier, start_tick, note_index) => {
+                    let track = &mut project.tracks[region_identifier.track_id.track_id];
+                    let region = track.get_midi_by_id(&region_identifier);
+                    let _ = region.remove_note(start_tick, note_index);
+                    if let Err(e) = audio_sources.update_track(track) {
+                        error!("FATAL: Unexpected error updating track: {}", e);
+                        ActionFollowUp::Exit
+                    } else {
+                        ActionFollowUp::ProjectDataUpdate
+                    }
+                },
+                actions::Actions::UpdateMidiNote(region_identifier, old_start_tick, note_index, new_start_tick, updated_note) => {
+                    let track = &mut project.tracks[region_identifier.track_id.track_id];
+                    let region = track.get_midi_by_id(&region_identifier);
+                    // Remove note from old position
+                    if let Some(_removed_note) = region.remove_note(old_start_tick, note_index) {
+                        // Add note at new position
+                        region.add_note(new_start_tick, updated_note);
+                    }
+                    if let Err(e) = audio_sources.update_track(track) {
+                        error!("FATAL: Unexpected error updating track: {}", e);
+                        ActionFollowUp::Exit
+                    } else {
+                        ActionFollowUp::ProjectDataUpdate
+                    }
                 },    
                 actions::Actions::Synth(action) => {
                     if let Err(e) = audio_sources.handle_synth_action(action.clone()) {
