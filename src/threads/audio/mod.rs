@@ -105,7 +105,11 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer
 #[cfg(test)]
 mod tests {
 
+    use crate::threads::audio::buss::{Buss, BussProducer};
+
     use super::*;
+
+    const BUF_SIZE: usize = 512;
 
 
     // Audio Engine
@@ -120,15 +124,19 @@ mod tests {
     // Test transferring data from Buss to audio output
     const MOCK_INPUT_LEN: usize = 10; 
     struct MockInput {
-        lbuff: [f32;MOCK_INPUT_LEN],
-        rbuff: [f32;MOCK_INPUT_LEN],
+        lbuff: [f32; buss::BUF_SIZE],
+        rbuff: [f32; buss::BUF_SIZE],
     }
     impl MockInput {
         fn new() -> Self {
-            Self {
-                lbuff: [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09],
-                rbuff: [0.10, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19],
-            }
+            // Initialize with test pattern for first 10 values, rest filled with zeros
+            let mut lbuff = [0.0_f32; buss::BUF_SIZE];
+            let mut rbuff = [0.0_f32; buss::BUF_SIZE];
+            let test_left = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09];
+            let test_right = [0.10, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19];
+            lbuff[..MOCK_INPUT_LEN].copy_from_slice(&test_left);
+            rbuff[..MOCK_INPUT_LEN].copy_from_slice(&test_right);
+            Self { lbuff, rbuff }
         }
     }
     impl Output for MockInput {
@@ -141,10 +149,10 @@ mod tests {
             _roff: usize, 
             _rincr: usize,
         ) {
-            assert!(len == MOCK_INPUT_LEN); // Fixing the size for test purposes
+            // Write up to len samples, repeating the pattern if needed
             for i in 0..len {
-                left_out[i] = self.lbuff[i];
-                right_out[i] = self.rbuff[i];
+                left_out[i] = self.lbuff[i % self.lbuff.len()];
+                right_out[i] = self.rbuff[i % self.rbuff.len()];
             }
         }
     }

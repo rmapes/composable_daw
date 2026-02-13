@@ -8,7 +8,7 @@ use ringbuf::{HeapCons, HeapProd, HeapRb, traits::*};
 
 use super::interfaces::Output;
 
-const BUF_SIZE: usize = 512;
+pub const BUF_SIZE: usize = 512;
 const RING_BUF_SIZE: usize = 2 * BUF_SIZE;
 
 /// A Buss that combines multiple audio inputs into a single output
