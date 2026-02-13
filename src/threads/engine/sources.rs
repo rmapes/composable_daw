@@ -84,6 +84,25 @@ impl AudioSources {
         self.stereo_output.on_tick(&mut self.final_buss);
     }
 
+    /// Check if playback should stop (all event streams have been processed past their last note off)
+    /// This checks if we've reached or passed the maximum end tick of all event streams.
+    /// Event streams end with note off events, so once we've processed past the end, all notes are off.
+    pub fn should_stop_playback(&self, current_tick: Tick) -> bool {
+        if self.tracks.is_empty() {
+            return false;
+        }
+
+        // Find the maximum end tick across all tracks
+        let max_end_tick = self.tracks.values()
+            .map(|track_synth| track_synth.borrow().get_event_stream().get_length_in_ticks())
+            .max()
+            .unwrap_or(0);
+
+        // Stop playback once we've reached or passed the maximum end tick
+        // Event streams end with note off events, so by this point all notes should be off
+        current_tick >= max_end_tick
+    }
+
     /// Handle synth actions (soundfont, bank, program changes)
     pub fn handle_synth_action(&mut self, action: super::actions::SynthActions) -> Result<(), Box<dyn std::error::Error>> {
         for track_synth in self.tracks.values() {

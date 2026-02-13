@@ -270,6 +270,12 @@ where
                                         audio_sources.on_tick(tick);
                                     }
                                     state.playhead = new_playhead;
+                                    
+                                    // Check if playback should automatically stop (last note off processed)
+                                    if audio_sources.should_stop_playback(new_playhead) {
+                                        info!("Playback finished - last note off processed, stopping playback");
+                                        state.is_playing = false;
+                                    }
                                 }
                             }
                             ActionFollowUp::PlayerStateUpdate                             

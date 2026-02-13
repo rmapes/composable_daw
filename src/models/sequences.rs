@@ -211,7 +211,10 @@ impl MidiEventAt {
     }  
     pub fn as_midi(&self) -> oxisynth::MidiEvent {
         self.event.to_oxisynth()
-    }  
+    }
+    pub fn get_event(&self) -> MidiEvent {
+        self.event
+    }
     pub fn clone_at(&self, new_tick: u32) -> Self {
         Self {
             event: self.event, // Uses clone

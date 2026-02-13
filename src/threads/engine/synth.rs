@@ -144,6 +144,10 @@ impl TrackSynth {
 		self.event_stream = event_stream;
 	}
 
+	pub fn get_event_stream(&self) -> &EventStream {
+		&self.event_stream
+	}
+
 	pub fn handle_synth_action(&mut self, action: SynthActions) -> Result<(), Box<dyn Error>> {
 		match action {
 			SynthActions::SetSoundFont(track_id, soundfont_path) => {
