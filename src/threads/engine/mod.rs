@@ -108,7 +108,26 @@ where
     let player_state = player_state.clone();
     let mut project = project_ref.clone();
     move || {
-        let (audio, stereo_output) = audio::init_audio(&tx.clone()).expect("Failed to start audio");
+        // Try to initialize audio, but continue without it if initialization fails (e.g., in tests)
+        let (audio, stereo_output) = match audio::init_audio(&tx.clone()) {
+            Ok((audio, stereo_output)) => {
+                if let Ok(mut state) = player_state.write() {
+                    state.is_audio_initialized = true;
+                }
+                (audio, stereo_output)
+            }
+            Err(e) => {
+                error!("Failed to initialize audio: {}. Continuing without audio output.", e);
+                // Create dummy audio engine with default sample rate
+                let dummy_audio = audio::AudioEngine::dummy(44100);
+                let (_consumer, dummy_stereo_output) = audio::stereo_output::StereoOutputController::new();
+                if let Ok(mut state) = player_state.write() {
+                    state.sample_rate = 44100;
+                    state.is_audio_initialized = false;
+                }
+                (dummy_audio, dummy_stereo_output)
+            }
+        };
         let mut audio_sources = AudioSources::new(audio, stereo_output, &project.tracks);
         while let Ok(received) = rx.recv() {
             let follow_up = match received {

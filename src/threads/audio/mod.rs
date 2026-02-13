@@ -18,7 +18,7 @@ use interfaces::Output;
 use stereo_output::StereoOutputController;
 
 pub struct AudioEngine {
-	_stream: cpal::Stream,
+	_stream: Option<cpal::Stream>,
     pub sample_rate: u32,
 }
 
@@ -29,6 +29,14 @@ impl AudioEngine {
     // pub fn pause(&mut self) -> Result<(), cpal::PauseStreamError>{
     //     self._stream.pause()
     // }
+    
+    /// Create a dummy AudioEngine for use when audio initialization fails (e.g., in tests)
+    pub fn dummy(sample_rate: u32) -> Self {
+        Self {
+            _stream: None,
+            sample_rate,
+        }
+    }
 }
 
 
@@ -62,7 +70,7 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<(AudioEngine, Ste
     };
 
 
-    Ok((AudioEngine { _stream: stream, sample_rate: supported.sample_rate().0 }, stereo_output))
+    Ok((AudioEngine { _stream: Some(stream), sample_rate: supported.sample_rate().0 }, stereo_output))
 }
 
 fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer, tx: &mpsc::Sender<Actions>) {
