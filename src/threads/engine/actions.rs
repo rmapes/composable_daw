@@ -19,6 +19,7 @@ pub enum Actions {
     // Midi Editor
     CreateMidiNote(RegionIdentifier, Tick, MidiNote),
     DeleteMidiNote(RegionIdentifier, Tick, usize), // region, start_tick, note_index
+    DeleteMultipleMidiNotes(RegionIdentifier, Vec<(Tick, usize)>), // region, vec of (start_tick, note_index) pairs
     UpdateMidiNote(RegionIdentifier, Tick, usize, Tick, MidiNote), // region, old_start_tick, note_index, new_start_tick, updated_note
     // Synthesizer Actions
     Synth(SynthActions),

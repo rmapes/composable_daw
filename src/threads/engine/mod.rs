@@ -233,6 +233,32 @@ where
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },
+                actions::Actions::DeleteMultipleMidiNotes(region_identifier, notes_to_delete) => {
+                    let track = &mut project.tracks[region_identifier.track_id.track_id];
+                    let region = track.get_midi_by_id(&region_identifier);
+                    
+                    // Sort by tick descending, then by note_index descending
+                    // This ensures we delete from highest index to lowest, avoiding index shifting
+                    let mut sorted_notes = notes_to_delete;
+                    sorted_notes.sort_by(|(tick_a, idx_a), (tick_b, idx_b)| {
+                        match tick_b.cmp(tick_a) {
+                            std::cmp::Ordering::Equal => idx_b.cmp(idx_a),
+                            other => other,
+                        }
+                    });
+                    
+                    // Delete all notes
+                    for (start_tick, note_index) in sorted_notes {
+                        let _ = region.remove_note(start_tick, note_index);
+                    }
+                    
+                    if let Err(e) = audio_sources.update_track(track) {
+                        error!("FATAL: Unexpected error updating track: {}", e);
+                        ActionFollowUp::Exit
+                    } else {
+                        ActionFollowUp::ProjectDataUpdate
+                    }
+                },
                 actions::Actions::UpdateMidiNote(region_identifier, old_start_tick, note_index, new_start_tick, updated_note) => {
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);

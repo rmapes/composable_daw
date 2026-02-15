@@ -185,7 +185,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
     ) -> Option<iced::widget::Action<Message>> {
         let cursor_position = cursor.position_in(bounds)?;
         
-        // Handle keyboard events to track shift key state
+        // Handle keyboard events to track shift key state and delete selected notes
         if let iced::Event::Keyboard(keyboard_event) = event {
             match keyboard_event {
                 iced::keyboard::Event::KeyPressed { 
@@ -199,6 +199,30 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     .. 
                 } => {
                     state.shift_pressed = false;
+                }
+                iced::keyboard::Event::KeyPressed { 
+                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Backspace), 
+                    .. 
+                } => {
+                    // Delete all selected notes
+                    if !state.selected_notes.is_empty() {
+                        // Collect selected notes into a vector (we need to clone because we'll be modifying the HashSet)
+                        let selected_notes: Vec<(Tick, usize)> = state.selected_notes.iter().cloned().collect();
+                        
+                        // Clear selection
+                        state.selected_notes.clear();
+                        
+                        // Clear cache to update display
+                        self.cache.clear();
+                        
+                        // Send batch delete action
+                        return Some(iced::widget::Action::publish(Message::Engine(
+                            Actions::DeleteMultipleMidiNotes(
+                                self.region_identifier,
+                                selected_notes,
+                            )
+                        )));
+                    }
                 }
                 _ => {}
             }
@@ -259,7 +283,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 if let Some(notes_at_tick) = self.notes.get(&click_start_tick) {
                                     if click_note_index < notes_at_tick.len() {
                                         let note = notes_at_tick[click_note_index];
-                                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
                                         let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
                                         
                                         // Calculate the offset from the note's start position where user clicked
@@ -283,7 +307,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                         state.click_start_position = None;
                                         state.click_start_note = None;
                                         self.cache.clear();
-                                        return Some(iced::widget::Action::capture());
+                        return Some(iced::widget::Action::capture());
                                     }
                                 }
                             }
@@ -885,7 +909,7 @@ impl MidiEditor {
                 ..Stroke::default()
             }
         );
-    }
+     }
 
     fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
         self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.5));
@@ -1052,14 +1076,14 @@ impl Component {
                 .padding(5)
                 .align_x(iced::alignment::Horizontal::Right)
                 .width(Length::Fill),
-            components::module(
+        components::module(
                 canvas
                     .width(self.width)
                     .height(self.height)
                     .into()
             ).id("MidiEditor")
         ]
-        .width(self.width)
+            .width(self.width)
         .height(self.height);
 
         content.into()
