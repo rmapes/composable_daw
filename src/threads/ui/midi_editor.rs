@@ -27,6 +27,8 @@ const NOTE_HEIGHT: f32 = 18.0; // Height of one row (MIDI Note)
 const BEAT_WIDTH: f32 = 100.0; // Width of one beat
 
 const DEFAULT_LENGTH: Tick = 960; // TODO: calculate from PPQ
+const DRAG_EDGE_SCROLL_THRESHOLD: f32 = 2.0 * NOTE_HEIGHT; // Pixels from top/bottom to trigger auto-scroll
+const DRAG_EDGE_SCROLL_THROTTLE: u8 = 3; // Only scroll every Nth CursorMoved at edge
 
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -111,6 +113,7 @@ pub struct MidiEditorState {
     pub pending_update: Option<(Tick, usize, Tick, MidiNote)>, // Track pending note update (old_start, note_index, new_start, note) to show at new position
     pub click_start_position: Option<(f32, f32)>, // Track initial click position for debounce (x, y)
     pub click_start_note: Option<(Tick, usize)>, // Track which note was clicked for debounce
+    pub drag_edge_scroll_counter: u8, // Throttle for auto-scroll when dragging note to edge
 }
 
 pub struct MidiEditor {
@@ -393,6 +396,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             // Moving an existing note - use relative movement from click position
                             let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
                             let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                            let grid_height = grid_bounds.size().height;
                             
                             // Calculate the new position based on mouse position minus the click offset
                             let mouse_tick = self.x_to_tick(relative_x);
@@ -412,9 +416,40 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             dragged.current_start = snapped_start_tick;
                             dragged.note.key = snapped_pitch;
                             
+                            // Auto-scroll when note is dragged to top or bottom of visible range
+                            let at_top = relative_y < DRAG_EDGE_SCROLL_THRESHOLD;
+                            let at_bottom = relative_y > grid_height - DRAG_EDGE_SCROLL_THRESHOLD;
+                            let scroll_delta = if at_top && self.midi_offset < 127 {
+                                state.drag_edge_scroll_counter = state.drag_edge_scroll_counter.saturating_add(1);
+                                if state.drag_edge_scroll_counter >= DRAG_EDGE_SCROLL_THROTTLE {
+                                    state.drag_edge_scroll_counter = 0;
+                                    Some(1i16) // Scroll up to see higher notes
+                                } else {
+                                    None
+                                }
+                            } else if at_bottom && self.midi_offset > 0 {
+                                state.drag_edge_scroll_counter = state.drag_edge_scroll_counter.saturating_add(1);
+                                if state.drag_edge_scroll_counter >= DRAG_EDGE_SCROLL_THROTTLE {
+                                    state.drag_edge_scroll_counter = 0;
+                                    Some(-1i16) // Scroll down to see lower notes
+                                } else {
+                                    None
+                                }
+                            } else {
+                                state.drag_edge_scroll_counter = 0;
+                                None
+                            };
+                            
                             // Clear cache to force redraw
                             self.cache.clear();
-                            return Some(iced::widget::Action::capture());
+                            return Some(if let Some(delta) = scroll_delta {
+                                iced::widget::Action::publish(Message::MidiEditor(
+                                    MidiEditorMessage::ScrollPitch(delta),
+                                ))
+                                .and_capture()
+                            } else {
+                                iced::widget::Action::capture()
+                            });
                         }
                     }
                 }
@@ -614,6 +649,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             
                             // Clear dragged state now that we have pending update
                             state.dragged_note = None;
+                            state.drag_edge_scroll_counter = 0;
                             
                             return Some(iced::widget::Action::publish(Message::Engine(Actions::UpdateMidiNote (
                                 self.region_identifier,
@@ -625,6 +661,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         } else {
                             // Nothing changed, just clear dragged state
                             state.dragged_note = None;
+                            state.drag_edge_scroll_counter = 0;
                         }
                     }
                 }
