@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 
-use iced::mouse::Cursor;
+use iced::mouse::{Cursor, ScrollDelta};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 use super::super::engine::actions::Actions;
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
@@ -26,7 +26,6 @@ const KEYBOARD_WIDTH: f32 = 75.0;
 const NOTE_HEIGHT: f32 = 18.0; // Height of one row (MIDI Note)
 const BEAT_WIDTH: f32 = 100.0; // Width of one beat
 
-const MIDI_BASE: u8 = 48;
 const DEFAULT_LENGTH: Tick = 960; // TODO: calculate from PPQ
 
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -116,8 +115,8 @@ pub struct MidiEditorState {
 
 pub struct MidiEditor {
     cache: canvas::Cache,
-    scroll_offset: Vector, // Scroll state (x, y)
-    // Add your MIDI note data structure here
+    scroll_offset: Vector, // Scroll state (x, y) for horizontal
+    midi_offset: u8,      // Lowest visible MIDI note at bottom of grid (replaces MIDI_BASE)
     notes: BTreeMap<Tick, Vec<MidiNote>>,
     region_identifier: RegionIdentifier,
     snap_to_grid: SnapToGrid,
@@ -156,15 +155,15 @@ impl canvas::Program<Message, Theme> for MidiEditor {
             // 2. Draw the Piano Keyboard
             frame.with_save(|frame| {
                 frame.translate(Vector::new(0.0, RULER_HEIGHT));
-                self.draw_keyboard(frame, &keyboard_rect, &self.scroll_offset);
+                self.draw_keyboard(frame, &keyboard_rect, &self.scroll_offset, self.midi_offset);
             });
 
             // 3. Draw the Note Grid and Notes
             // We use a separate sub-frame for the grid to easily apply scroll offset
             frame.with_save(|frame| {
                 frame.translate(Vector::new(KEYBOARD_WIDTH, RULER_HEIGHT));
-                self.draw_grid(frame, &grid_rect.size(), &self.scroll_offset);
-                self.draw_midi_notes(frame, state, &grid_rect);//, self.notes, &self.scroll_offset); 
+                self.draw_grid(frame, &grid_rect.size(), &self.scroll_offset, self.midi_offset);
+                self.draw_midi_notes(frame, state, &grid_rect, self.midi_offset);
             });
 
             // 4. Draw the Ruler
@@ -183,9 +182,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
         bounds: Rectangle,
         cursor: Cursor,
     ) -> Option<iced::widget::Action<Message>> {
-        let cursor_position = cursor.position_in(bounds)?;
-        
-        // Handle keyboard events to track shift key state and delete selected notes
+        // Handle keyboard events first (don't need cursor position)
         if let iced::Event::Keyboard(keyboard_event) = event {
             match keyboard_event {
                 iced::keyboard::Event::KeyPressed { 
@@ -199,6 +196,26 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     .. 
                 } => {
                     state.shift_pressed = false;
+                }
+                iced::keyboard::Event::KeyPressed { 
+                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::PageUp), 
+                    .. 
+                } => {
+                    // Logic Pro: Page Up = scroll to see higher notes
+                    self.cache.clear();
+                    return Some(iced::widget::Action::publish(Message::MidiEditor(
+                        MidiEditorMessage::ScrollPitch(12), // One octave up
+                    )));
+                }
+                iced::keyboard::Event::KeyPressed { 
+                    key: iced::keyboard::Key::Named(iced::keyboard::key::Named::PageDown), 
+                    .. 
+                } => {
+                    // Logic Pro: Page Down = scroll to see lower notes
+                    self.cache.clear();
+                    return Some(iced::widget::Action::publish(Message::MidiEditor(
+                        MidiEditorMessage::ScrollPitch(-12), // One octave down
+                    )));
                 }
                 iced::keyboard::Event::KeyPressed { 
                     key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Backspace), 
@@ -226,7 +243,14 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                 }
                 _ => {}
             }
+            return None; // Keyboard event handled (or no action needed)
         }
+
+        // Mouse events require cursor position
+        let cursor_position = match cursor.position_in(bounds) {
+            Some(p) => p,
+            None => return None,
+        };
 
         // Calculate if the cursor is within the Grid area
         let grid_bounds = Rectangle::new(
@@ -288,7 +312,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                         
                                         // Calculate the offset from the note's start position where user clicked
                                         let click_tick = self.x_to_tick(relative_x);
-                                        let click_pitch = y_to_pitch(relative_y, &grid_bounds.size()) + MIDI_BASE;
+                                        let click_pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
                                         
                                         // Calculate offset: how far into the note the user clicked
                                         let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
@@ -372,7 +396,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             
                             // Calculate the new position based on mouse position minus the click offset
                             let mouse_tick = self.x_to_tick(relative_x);
-                            let mouse_pitch = y_to_pitch(relative_y, &grid_bounds.size()) + MIDI_BASE;
+                            let mouse_pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
                             
                             // Apply the offset: new position = mouse position - click offset
                             // This keeps the note aligned with where the user originally clicked
@@ -476,11 +500,11 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 self.cache.clear(); // Redraw to update selection
                             }
                             // Not clicking on an existing note - start creating a new one
-                            let pitch = y_to_pitch(relative_y, &grid_bounds.size());
+                            let pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
                             let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
 
                             // update internal state
-                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch + MIDI_BASE, length: DEFAULT_LENGTH, velocity: 100 }});
+                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: 100 }});
                             state.dragged_note = None; // Clear any dragged note
                             state.hovered_resize_edge = None; // Clear hover state
                             // and return message to say all handled
@@ -489,6 +513,20 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     }
                 }
 
+                iced::mouse::Event::WheelScrolled { delta } => {
+                    // Logic Pro: mouse wheel (no modifier) = vertical scroll of pitch range
+                    // Positive y = scroll up (see lower notes), negative y = scroll down (see higher notes)
+                    let delta_y = match delta {
+                        ScrollDelta::Lines { y, .. } => -*y as i16, // 1 line ≈ 1 semitone
+                        ScrollDelta::Pixels { y, .. } => -((*y / NOTE_HEIGHT).round() as i16),
+                    };
+                    if delta_y != 0 {
+                        self.cache.clear();
+                        return Some(iced::widget::Action::publish(Message::MidiEditor(
+                            MidiEditorMessage::ScrollPitch(delta_y),
+                        )));
+                    }
+                }
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
                     // Handle click without drag (selection only)
                     if let (Some((click_x, click_y)), Some(_click_note)) = 
@@ -663,29 +701,23 @@ impl MidiEditor {
         }
     }
 
-    // 2. Draw the Piano Keyboard
-    fn draw_keyboard(&self, frame: &mut Frame, bounds: &Rectangle, scroll: &Vector) {
+    // 2. Draw the Piano Keyboard (scrolls with grid via midi_offset)
+    fn draw_keyboard(&self, frame: &mut Frame, bounds: &Rectangle, _scroll: &Vector, midi_offset: u8) {
         frame.fill(
             &Path::rectangle(bounds.position(), bounds.size()),
             Color::from_rgb(0.2, 0.2, 0.2), // Keyboard background
         );
 
-        // Clip to the keyboard area
-        // frame.with_save(|frame| {
-        // frame.with_clip(*bounds, |frame| {
-
             let visible_notes = (bounds.size().height / NOTE_HEIGHT).floor() as u8;
-            let start_note_index = (-scroll.y / NOTE_HEIGHT).floor() as u8;
-            let end_note_index = start_note_index + visible_notes + 1;
+            let end_pitch = (midi_offset as u16 + visible_notes as u16 + 1).min(128) as u8;
 
-            for i in start_note_index..end_note_index {
-                let pitch = i + MIDI_BASE; 
-                let y = pitch_to_y(&pitch, &bounds.size());
+            for pitch in midi_offset..end_pitch {
+                let y = pitch_to_y(pitch, &bounds.size(), midi_offset);
                 let is_sharp = match pitch % 12 {
                     1 | 3 | 6 | 8 | 10 => true, // C#, D#, F#, G#, A#
                     _ => false,
                 };
-                let is_octave_c = pitch.is_multiple_of(12); // C notes
+                let is_octave_c = pitch % 12 == 0; // C notes
 
                 // Draw the key background
                 let key_color = if is_sharp {
@@ -738,22 +770,23 @@ impl MidiEditor {
         // });
     }
 
-    // 3. Draw the Note Grid
-    fn draw_grid(&self, frame: &mut Frame, bounds: &Size, scroll: &Vector) {
-        // Apply scroll offset to the grid drawing
-        // frame.translate(*scroll);
-
+    // 3. Draw the Note Grid (scrolls with midi_offset)
+    fn draw_grid(&self, frame: &mut Frame, bounds: &Size, _scroll: &Vector, midi_offset: u8) {
         let total_time_span = 16_f32 * BEAT_WIDTH; // Example: 16 beats
 
         let visible_notes = (bounds.height / NOTE_HEIGHT).floor() as u8;
         let num_rows = visible_notes + 1;
 
-        // Draw horizontal note lines
+        // Draw horizontal note lines (from midi_offset upward)
         for i in 0..num_rows {
-            let y = pitch_to_y(&(i + MIDI_BASE), bounds);
+            let pitch = midi_offset + i;
+            if pitch > 127 {
+                break;
+            }
+            let y = pitch_to_y(pitch, bounds, midi_offset);
             let line = Path::line(Point::new(0.0, y), Point::new(total_time_span, y));
 
-            let is_octave_c_row = (i + (-scroll.y / NOTE_HEIGHT).round() as u8).is_multiple_of(12);
+            let is_octave_c_row = pitch % 12 == 0;
 
             let stroke_style = if is_octave_c_row {
                 Color::from_rgb(0.4, 0.0, 0.0) // Stronger line for C notes
@@ -821,8 +854,8 @@ impl MidiEditor {
             }
         }
     }
-    // 4. draw_midi_notes (Not implemented here, but this is where you draw your note blocks)
-    fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState, bounds: &Rectangle) { //}, notes: BTreeMap<Tick, Vec<MidiNote>>, scroll: &Vector) { 
+    // 4. draw_midi_notes
+    fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState, bounds: &Rectangle, midi_offset: u8) { 
         // Determine which note to skip (being dragged or pending update)
         let skip_note = if let Some(dragged) = &state.dragged_note {
             Some((dragged.original_start, dragged.original_note_index))
@@ -843,9 +876,9 @@ impl MidiEditor {
                 }
                 // Draw selected notes with brighter color
                 if state.selected_notes.contains(&(*start, note_index)) {
-                    self.draw_note_selected(frame, *start, note, bounds);
+                    self.draw_note_selected(frame, *start, note, bounds, midi_offset);
                 } else {
-                    self.draw_note(frame, *start, note, bounds);
+                    self.draw_note(frame, *start, note, bounds, midi_offset);
                 }
             }
         }
@@ -854,9 +887,9 @@ impl MidiEditor {
         if let Some(dragged) = &state.dragged_note {
             let was_selected = state.selected_notes.contains(&(dragged.original_start, dragged.original_note_index));
             if was_selected {
-                self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9));
+                self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9), midi_offset);
             } else {
-                self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
+                self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7), midi_offset);
             }
         }
         // Draw pending update note at its new position (until actual update comes through)
@@ -865,9 +898,9 @@ impl MidiEditor {
             // Check if the note is selected at the new position (selection was updated in ButtonReleased)
             let is_selected = state.selected_notes.contains(&(*new_start, *note_index));
             if is_selected {
-                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9));
+                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9), midi_offset);
             } else {
-                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
+                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7), midi_offset);
             }
         }
         
@@ -877,7 +910,7 @@ impl MidiEditor {
                 for (note_index, note) in notes.iter().enumerate() {
                     if let Some((hovered_start, hovered_index)) = state.hovered_resize_edge {
                         if *start == hovered_start && note_index == hovered_index {
-                            self.draw_resize_indicator(frame, *start, note, bounds);
+                            self.draw_resize_indicator(frame, *start, note, bounds, midi_offset);
                         }
                     }
                 }
@@ -886,14 +919,14 @@ impl MidiEditor {
         
         // Draw pending note (being created)
         if let Some(pending) = &state.pending_note {
-            self.draw_note(frame, pending.start, &pending.note, bounds);
+            self.draw_note(frame, pending.start, &pending.note, bounds, midi_offset);
         }
      }
 
     /// Draw a resize indicator (vertical line) on the right edge of a note
-    fn draw_resize_indicator(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
+    fn draw_resize_indicator(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, midi_offset: u8) {
         let x = self.tick_to_x(start) + self.tick_to_x(note.length);
-        let y = pitch_to_y(&note.key, &bounds.size());
+        let y = pitch_to_y(note.key, &bounds.size(), midi_offset);
         
         // Draw a vertical line on the right edge
         let line = Path::line(
@@ -911,19 +944,23 @@ impl MidiEditor {
         );
      }
 
-    fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
-        self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.5));
+    fn draw_note(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, midi_offset: u8) {
+        self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.5), midi_offset);
     }
 
-    fn draw_note_selected(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle) {
+    fn draw_note_selected(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, midi_offset: u8) {
         // Brighter color for selected notes
-        self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.8));
+        self.draw_note_with_color(frame, start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.8), midi_offset);
     }
 
-    fn draw_note_with_color(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, color: Color) {
+    fn draw_note_with_color(&self, frame: &mut Frame, start: Tick, note: &MidiNote, bounds: &Rectangle, color: Color, midi_offset: u8) {
+        // Skip if note is out of visible range
+        if note.key < midi_offset {
+            return;
+        }
         let x = self.tick_to_x(start);
         let width = self.tick_to_x(note.length);
-        let y = pitch_to_y(&note.key, &bounds.size());
+        let y = pitch_to_y(note.key, &bounds.size(), midi_offset);
         
         let rect = Path::rectangle(Point::new(x, y), Size::new(width.max(5.0), NOTE_HEIGHT));
         frame.fill(&rect, color);
@@ -938,7 +975,7 @@ impl MidiEditor {
         let relative_x = cursor_x - KEYBOARD_WIDTH - self.scroll_offset.x;
         let relative_y = cursor_y - RULER_HEIGHT - self.scroll_offset.y;
         
-        let pitch = y_to_pitch(relative_y, &bounds.size()) + MIDI_BASE;
+        let pitch = y_to_pitch(relative_y, &bounds.size(), self.midi_offset);
 
         // Check all notes to find one that contains this position
         for (start_tick, notes) in &self.notes {
@@ -946,7 +983,7 @@ impl MidiEditor {
                 if note.key == pitch {
                     let note_start_x = self.tick_to_x(*start_tick);
                     let note_end_x = note_start_x + self.tick_to_x(note.length);
-                    let note_y = pitch_to_y(&note.key, &bounds.size());
+                    let note_y = pitch_to_y(note.key, &bounds.size(), self.midi_offset);
                     
                     // Check if cursor is within note bounds, but exclude the resize edge area
                     // This prevents conflicts with resize detection
@@ -967,7 +1004,7 @@ impl MidiEditor {
         let relative_x = cursor_x - KEYBOARD_WIDTH - self.scroll_offset.x;
         let relative_y = cursor_y - RULER_HEIGHT - self.scroll_offset.y;
         
-        let pitch = y_to_pitch(relative_y, &bounds.size()) + MIDI_BASE;
+        let pitch = y_to_pitch(relative_y, &bounds.size(), self.midi_offset);
 
         // Check all notes to find one whose right edge is being hovered
         for (start_tick, notes) in &self.notes {
@@ -975,7 +1012,7 @@ impl MidiEditor {
                 if note.key == pitch {
                     let note_start_x = self.tick_to_x(*start_tick);
                     let note_end_x = note_start_x + self.tick_to_x(note.length);
-                    let note_y = pitch_to_y(&note.key, &bounds.size());
+                    let note_y = pitch_to_y(note.key, &bounds.size(), self.midi_offset);
                     
                     // Check if cursor is near the right edge and within vertical bounds
                     let distance_from_edge = note_end_x - relative_x;
@@ -1004,31 +1041,34 @@ impl MidiEditor {
     }
 }
 
-fn pitch_to_y(key: &u8, bounds: &Size) -> f32 {
-    let y = (key - MIDI_BASE) as f32 * NOTE_HEIGHT;
+fn pitch_to_y(key: u8, bounds: &Size, midi_offset: u8) -> f32 {
+    let y = (key - midi_offset) as f32 * NOTE_HEIGHT;
     bounds.height - y
 }
 
-fn y_to_pitch(relative_y: f32, bounds: &Size) -> u8 {
-    ((bounds.height - relative_y) / NOTE_HEIGHT).ceil() as u8
+/// Convert Y position (relative to grid) to MIDI pitch. Uses midi_offset as the lowest visible note.
+fn y_to_pitch(relative_y: f32, bounds: &Size, midi_offset: u8) -> u8 {
+    let row = ((bounds.height - relative_y) / NOTE_HEIGHT).ceil() as u8;
+    (midi_offset as u16 + row as u16).min(127) as u8
 }
 
 
 // --- CONTAINER WIDGET ---
 // This is what you actually put in your Iced layout.
 impl MidiEditor {
-    pub fn new(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid) -> Self {
+    pub fn new(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid, midi_offset: u8) -> Self {
         Self {
             cache: canvas::Cache::default(),
             scroll_offset: Vector::default(),
+            midi_offset,
             notes,
             region_identifier,
             snap_to_grid,
         }
     }
 
-    pub fn view(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid) -> Canvas<Self, Message> {
-        Canvas::new(MidiEditor::new(notes, region_identifier, snap_to_grid))
+    pub fn view(notes: BTreeMap<Tick, Vec<MidiNote>>, region_identifier: RegionIdentifier, snap_to_grid: SnapToGrid, midi_offset: u8) -> Canvas<Self, Message> {
+        Canvas::new(MidiEditor::new(notes, region_identifier, snap_to_grid, midi_offset))
             .width(Length::Fill)
             .height(Length::Fill)
     }
@@ -1056,8 +1096,8 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, midi_seq: &MidiSeq, snap_to_grid: SnapToGrid) -> Element<'_, Message> {
-        let canvas = MidiEditor::view(midi_seq.notes.clone(), midi_seq.id, snap_to_grid);
+    pub fn view(&self, midi_seq: &MidiSeq, snap_to_grid: SnapToGrid, midi_offset: u8) -> Element<'_, Message> {
+        let canvas = MidiEditor::view(midi_seq.notes.clone(), midi_seq.id, snap_to_grid, midi_offset);
         
         // Create snap-to-grid selector in top right
         let snap_selector = row![
@@ -1094,5 +1134,7 @@ impl Component {
 #[derive(Debug, Clone)]
 pub enum MidiEditorMessage {
     SetSnapToGrid(SnapToGrid),
+    /// Scroll pitch view: positive = see higher notes, negative = see lower notes (Logic Pro: wheel, Page Up/Down)
+    ScrollPitch(i16),
 }
 

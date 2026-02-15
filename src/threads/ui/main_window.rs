@@ -39,6 +39,7 @@ pub struct MainWindow {
     selected_region: Option<RegionIdentifier>,
     playhead: Tick,
     midi_editor_snap: super::midi_editor::SnapToGrid,
+    midi_editor_offset: u8, // Lowest visible MIDI note (pitch at bottom of grid), default 48 (C3)
     // Preferences
     width: Length,
     height: Length,
@@ -84,6 +85,7 @@ impl Default for MainWindow {
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             playhead: 0,
             midi_editor_snap: super::midi_editor::SnapToGrid::Division,
+            midi_editor_offset: 48,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
             control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
@@ -185,6 +187,10 @@ impl MainWindow {
                     super::midi_editor::MidiEditorMessage::SetSnapToGrid(snap) => {
                         self.midi_editor_snap = snap;
                     }
+                    super::midi_editor::MidiEditorMessage::ScrollPitch(delta) => {
+                        let new_offset = (self.midi_editor_offset as i16 + delta).clamp(0, 127);
+                        self.midi_editor_offset = new_offset as u8;
+                    }
                 }
                 Task::none()
             },
@@ -225,7 +231,7 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
                             self.composer_window.view(&self.data.tracks, self.selected_track, self.data.ppq, self.playhead),
                         ),
                         components::module_slot(
-                            self.editor_window.view(selected_region, self.midi_editor_snap)
+                            self.editor_window.view(selected_region, self.midi_editor_snap, self.midi_editor_offset)
                         ),
                     ]
                 ]
