@@ -109,6 +109,7 @@ pub struct MidiEditorState {
     pub hovered_resize_edge: Option<(Tick, usize)>, // Track which note's right edge is being hovered
     pub selected_notes: HashSet<(Tick, usize)>, // Track selected notes (start_tick, note_index)
     pub shift_pressed: bool, // Track if shift key is currently pressed
+    pub pending_update: Option<(Tick, usize, Tick, MidiNote)>, // Track pending note update (old_start, note_index, new_start, note) to show at new position
 }
 
 pub struct MidiEditor {
@@ -126,9 +127,9 @@ impl canvas::Program<Message, Theme> for MidiEditor {
 
     fn draw(&self, state: &Self::State, renderer: &iced::Renderer,
         _theme: &Theme, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
-        // Clear cache when dragging/resizing or hovering resize edge to ensure smooth visual updates
-        // This forces a redraw every frame during drag/resize
-        if state.dragged_note.is_some() || state.hovered_resize_edge.is_some() {
+        // Clear cache when dragging/resizing, hovering resize edge, or pending update to ensure smooth visual updates
+        // This forces a redraw every frame during drag/resize and while waiting for update
+        if state.dragged_note.is_some() || state.hovered_resize_edge.is_some() || state.pending_update.is_some() {
             self.cache.clear();
         }
         
@@ -210,6 +211,24 @@ impl canvas::Program<Message, Theme> for MidiEditor {
         if let iced::Event::Mouse(mouse_event) = event {
              match mouse_event {
                 iced::mouse::Event::CursorMoved { .. } => {
+                    // Check if pending update has been applied and clear it
+                    // We check on every cursor move to detect updates quickly
+                    if let Some((old_start, note_index, new_start, note)) = &state.pending_update {
+                        // Check if the note at the old position is gone or changed
+                        // (indicating update has been applied)
+                        let old_note_matches = self.notes.get(old_start)
+                            .and_then(|notes| notes.get(*note_index))
+                            .map(|n| n.key == note.key && n.length == note.length && n.velocity == note.velocity)
+                            .unwrap_or(false);
+                        
+                        // If the old note doesn't match (or is gone), the update has likely been applied
+                        // We can clear the pending update - the note should now be in self.notes at the new position
+                        if !old_note_matches {
+                            state.pending_update = None;
+                            self.cache.clear();
+                        }
+                    }
+                    
                     // Only update hover state if we're not currently dragging/resizing
                     if state.dragged_note.is_none() && state.pending_note.is_none() {
                         // Update hover state for resize edge indicator
@@ -419,7 +438,6 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     } else if let Some(dragged) = &state.dragged_note {
                         // Finishing moving or resizing an existing note
                         let dragged_note = dragged.clone();
-                        state.dragged_note = None;
                         
                         // Check if anything changed
                         let original_note = self.notes.get(&dragged_note.original_start)
@@ -430,8 +448,22 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         let length_changed = dragged_note.is_resizing && 
                            dragged_note.note.length != original_note.map(|n| n.length).unwrap_or(0);
                         
-                        // If position or length changed, send update action
+                        // If position or length changed, store pending update and send action
                         if position_changed || length_changed {
+                            // Store the pending update BEFORE clearing dragged_note to avoid visual gap
+                            state.pending_update = Some((
+                                dragged_note.original_start,
+                                dragged_note.original_note_index,
+                                dragged_note.current_start,
+                                dragged_note.note,
+                            ));
+                            
+                            // Clear cache to redraw with pending update (before clearing dragged_note)
+                            self.cache.clear();
+                            
+                            // Clear dragged state now that we have pending update
+                            state.dragged_note = None;
+                            
                             return Some(iced::widget::Action::publish(Message::Engine(Actions::UpdateMidiNote (
                                 self.region_identifier,
                                 dragged_note.original_start,
@@ -439,6 +471,9 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 dragged_note.current_start,
                                 dragged_note.note,
                             ))));
+                        } else {
+                            // Nothing changed, just clear dragged state
+                            state.dragged_note = None;
                         }
                     }
                 }
@@ -675,42 +710,57 @@ impl MidiEditor {
     }
     // 4. draw_midi_notes (Not implemented here, but this is where you draw your note blocks)
     fn draw_midi_notes(&self, frame: &mut Frame, state: &MidiEditorState, bounds: &Rectangle) { //}, notes: BTreeMap<Tick, Vec<MidiNote>>, scroll: &Vector) { 
-        // Draw existing notes, but skip the one being dragged/resized
-        if let Some(dragged) = &state.dragged_note {
-            for (start, notes) in &self.notes {
-                for (note_index, note) in notes.iter().enumerate() {
-                    // Skip drawing the note that's being dragged/resized
-                    if *start == dragged.original_start && note_index == dragged.original_note_index {
+        // Determine which note to skip (being dragged or pending update)
+        let skip_note = if let Some(dragged) = &state.dragged_note {
+            Some((dragged.original_start, dragged.original_note_index))
+        } else if let Some((old_start, note_index, _, _)) = &state.pending_update {
+            Some((*old_start, *note_index))
+        } else {
+            None
+        };
+        
+        // Draw all notes except the one being dragged or pending update
+        for (start, notes) in &self.notes {
+            for (note_index, note) in notes.iter().enumerate() {
+                // Skip drawing the note that's being dragged/resized or has pending update
+                if let Some((skip_start, skip_idx)) = skip_note {
+                    if *start == skip_start && note_index == skip_idx {
                         continue;
                     }
-                    // Draw selected notes with brighter color
-                    if state.selected_notes.contains(&(*start, note_index)) {
-                        self.draw_note_selected(frame, *start, note, bounds);
-                    } else {
-                        self.draw_note(frame, *start, note, bounds);
-                    }
+                }
+                // Draw selected notes with brighter color
+                if state.selected_notes.contains(&(*start, note_index)) {
+                    self.draw_note_selected(frame, *start, note, bounds);
+                } else {
+                    self.draw_note(frame, *start, note, bounds);
                 }
             }
-            // Draw the dragged/resized note at its current position
-            // If it was selected, keep it bright
+        }
+        
+        // Draw the dragged/resized note at its current position
+        if let Some(dragged) = &state.dragged_note {
             let was_selected = state.selected_notes.contains(&(dragged.original_start, dragged.original_note_index));
             if was_selected {
                 self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9));
             } else {
                 self.draw_note_with_color(frame, dragged.current_start, &dragged.note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
             }
-        } else {
-            // No note being dragged, draw all notes normally
+        }
+        // Draw pending update note at its new position (until actual update comes through)
+        // Always draw it to avoid visual gaps - it will be cleared when update is confirmed
+        else if let Some((old_start, note_index, new_start, note)) = &state.pending_update {
+            let was_selected = state.selected_notes.contains(&(*old_start, *note_index));
+            if was_selected {
+                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9));
+            } else {
+                self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
+            }
+        }
+        
+        // Draw resize indicator on right edge if hovering (only when not dragging)
+        if state.dragged_note.is_none() && state.pending_update.is_none() {
             for (start, notes) in &self.notes {
                 for (note_index, note) in notes.iter().enumerate() {
-                    // Draw selected notes with brighter color
-                    if state.selected_notes.contains(&(*start, note_index)) {
-                        self.draw_note_selected(frame, *start, note, bounds);
-                    } else {
-                        self.draw_note(frame, *start, note, bounds);
-                    }
-                    
-                    // Draw resize indicator on right edge if hovering
                     if let Some((hovered_start, hovered_index)) = state.hovered_resize_edge {
                         if *start == hovered_start && note_index == hovered_index {
                             self.draw_resize_indicator(frame, *start, note, bounds);
