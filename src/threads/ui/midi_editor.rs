@@ -110,6 +110,8 @@ pub struct MidiEditorState {
     pub selected_notes: HashSet<(Tick, usize)>, // Track selected notes (start_tick, note_index)
     pub shift_pressed: bool, // Track if shift key is currently pressed
     pub pending_update: Option<(Tick, usize, Tick, MidiNote)>, // Track pending note update (old_start, note_index, new_start, note) to show at new position
+    pub click_start_position: Option<(f32, f32)>, // Track initial click position for debounce (x, y)
+    pub click_start_note: Option<(Tick, usize)>, // Track which note was clicked for debounce
 }
 
 pub struct MidiEditor {
@@ -224,8 +226,67 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         // If the old note doesn't match (or is gone), the update has likely been applied
                         // We can clear the pending update - the note should now be in self.notes at the new position
                         if !old_note_matches {
+                            // Update selection to the actual note position if it was selected
+                            let old_key = (*old_start, *note_index);
+                            if state.selected_notes.remove(&old_key) {
+                                // Find the note at the new position by matching key and length
+                                if let Some(notes_at_new_tick) = self.notes.get(new_start) {
+                                    if let Some((actual_index, _)) = notes_at_new_tick.iter()
+                                        .enumerate()
+                                        .find(|(_, n)| n.key == note.key && n.length == note.length && n.velocity == note.velocity) {
+                                        state.selected_notes.insert((*new_start, actual_index));
+                                    }
+                                }
+                            }
                             state.pending_update = None;
                             self.cache.clear();
+                        }
+                    }
+                    
+                    // Handle debounce: check if mouse has moved enough to start dragging
+                    if let (Some((click_x, click_y)), Some((click_start_tick, click_note_index))) = 
+                        (state.click_start_position, state.click_start_note) {
+                        if state.dragged_note.is_none() && state.pending_note.is_none() {
+                            // Calculate distance moved
+                            let dx = cursor_position.x - click_x;
+                            let dy = cursor_position.y - click_y;
+                            let distance = (dx * dx + dy * dy).sqrt();
+                            
+                            const DRAG_THRESHOLD: f32 = 3.0; // Pixels - minimum movement to start drag
+                            
+                            if distance > DRAG_THRESHOLD {
+                                // Mouse moved enough - start dragging
+                                if let Some(notes_at_tick) = self.notes.get(&click_start_tick) {
+                                    if click_note_index < notes_at_tick.len() {
+                                        let note = notes_at_tick[click_note_index];
+                                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                                        let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                                        
+                                        // Calculate the offset from the note's start position where user clicked
+                                        let click_tick = self.x_to_tick(relative_x);
+                                        let click_pitch = y_to_pitch(relative_y, &grid_bounds.size()) + MIDI_BASE;
+                                        
+                                        // Calculate offset: how far into the note the user clicked
+                                        let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
+                                        let click_offset_y_pitch = (click_pitch as i16 - note.key as i16) as f32;
+                                        
+                                        state.dragged_note = Some(DraggedNote {
+                                            original_start: click_start_tick,
+                                            original_note_index: click_note_index,
+                                            current_start: click_start_tick,
+                                            note,
+                                            is_resizing: false,
+                                            click_offset_x: click_offset_x_ticks as f32,
+                                            click_offset_y: click_offset_y_pitch,
+                                        });
+                                        // Clear click tracking now that we're dragging
+                                        state.click_start_position = None;
+                                        state.click_start_note = None;
+                                        self.cache.clear();
+                                        return Some(iced::widget::Action::capture());
+                                    }
+                                }
+                            }
                         }
                     }
                     
@@ -361,7 +422,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             cursor_position.y, 
                             &grid_bounds
                         ) {
-                            // Handle selection
+                            // Handle selection immediately on click
                             let note_key = (start_tick, note_index);
                             if state.shift_pressed {
                                 // Shift+click: add to selection (toggle if already selected)
@@ -376,35 +437,14 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 state.selected_notes.insert(note_key);
                             }
                             
-                            // Clicked on an existing note - start dragging it
-                            if let Some(notes_at_tick) = self.notes.get(&start_tick) {
-                                if note_index < notes_at_tick.len() {
-                                    let note = notes_at_tick[note_index];
-                                    
-                                    // Calculate the offset from the note's start position where user clicked
-                                    // Convert click position to ticks and pitch
-                                    let click_tick = self.x_to_tick(relative_x);
-                                    let click_pitch = y_to_pitch(relative_y, &grid_bounds.size()) + MIDI_BASE;
-                                    
-                                    // Calculate offset: how far into the note the user clicked
-                                    let click_offset_x_ticks = click_tick.saturating_sub(start_tick);
-                                    let click_offset_y_pitch = (click_pitch as i16 - note.key as i16) as f32;
-                                    
-                                    state.dragged_note = Some(DraggedNote {
-                                        original_start: start_tick,
-                                        original_note_index: note_index,
-                                        current_start: start_tick,
-                                        note,
-                                        is_resizing: false,
-                                        click_offset_x: click_offset_x_ticks as f32,
-                                        click_offset_y: click_offset_y_pitch,
-                                    });
-                                    state.pending_note = None; // Clear any pending note creation
-                                    state.hovered_resize_edge = None; // Clear hover state
-                                    self.cache.clear(); // Redraw to show selection
-                                    return Some(iced::widget::Action::capture());
-                                }
-                            }
+                            // Store click position for debounce - don't start dragging immediately
+                            // Dragging will start in CursorMoved if mouse moves beyond threshold
+                            state.click_start_position = Some((cursor_position.x, cursor_position.y));
+                            state.click_start_note = Some((start_tick, note_index));
+                            state.pending_note = None; // Clear any pending note creation
+                            state.hovered_resize_edge = None; // Clear hover state
+                            self.cache.clear(); // Redraw to show selection
+                            return Some(iced::widget::Action::capture());
                         } else {
                             // Clicked on empty space - clear selection unless shift is held
                             if !state.shift_pressed {
@@ -426,6 +466,31 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                 }
 
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                    // Handle click without drag (selection only)
+                    if let (Some((click_x, click_y)), Some(_click_note)) = 
+                        (state.click_start_position, state.click_start_note) {
+                        if state.dragged_note.is_none() {
+                            // Check if mouse moved significantly
+                            let dx = cursor_position.x - click_x;
+                            let dy = cursor_position.y - click_y;
+                            let distance = (dx * dx + dy * dy).sqrt();
+                            
+                            const DRAG_THRESHOLD: f32 = 3.0; // Same threshold as in CursorMoved
+                            
+                            if distance <= DRAG_THRESHOLD {
+                                // Click without drag - selection already handled in ButtonPressed
+                                // Just clear the click tracking
+                                state.click_start_position = None;
+                                state.click_start_note = None;
+                                return None; // Let selection update be handled
+                            }
+                        }
+                    }
+                    
+                    // Clear click tracking on release
+                    state.click_start_position = None;
+                    state.click_start_note = None;
+                    
                     if let Some(pending) = &state.pending_note {
                         // Finishing creating a new note
                         let final_note = *pending;
@@ -450,6 +515,30 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         
                         // If position or length changed, store pending update and send action
                         if position_changed || length_changed {
+                            // Update selection to new position if note was selected
+                            let old_note_key = (dragged_note.original_start, dragged_note.original_note_index);
+                            if state.selected_notes.remove(&old_note_key) {
+                                // Note was selected - find the note at the new position and update selection
+                                // Since notes are stored by start_tick, we need to find the matching note
+                                if let Some(notes_at_new_tick) = self.notes.get(&dragged_note.current_start) {
+                                    // Try to find the note by matching key and length
+                                    if let Some((new_index, _)) = notes_at_new_tick.iter()
+                                        .enumerate()
+                                        .find(|(_, n)| n.key == dragged_note.note.key && n.length == dragged_note.note.length) {
+                                        state.selected_notes.insert((dragged_note.current_start, new_index));
+                                    } else {
+                                        // Fallback: use original index if available
+                                        if dragged_note.original_note_index < notes_at_new_tick.len() {
+                                            state.selected_notes.insert((dragged_note.current_start, dragged_note.original_note_index));
+                                        }
+                                    }
+                                } else {
+                                    // New position doesn't exist yet - will be created by the update
+                                    // Store selection for new position (will be validated when update is applied)
+                                    state.selected_notes.insert((dragged_note.current_start, dragged_note.original_note_index));
+                                }
+                            }
+                            
                             // Store the pending update BEFORE clearing dragged_note to avoid visual gap
                             state.pending_update = Some((
                                 dragged_note.original_start,
@@ -748,9 +837,10 @@ impl MidiEditor {
         }
         // Draw pending update note at its new position (until actual update comes through)
         // Always draw it to avoid visual gaps - it will be cleared when update is confirmed
-        else if let Some((old_start, note_index, new_start, note)) = &state.pending_update {
-            let was_selected = state.selected_notes.contains(&(*old_start, *note_index));
-            if was_selected {
+        else if let Some((_old_start, note_index, new_start, note)) = &state.pending_update {
+            // Check if the note is selected at the new position (selection was updated in ButtonReleased)
+            let is_selected = state.selected_notes.contains(&(*new_start, *note_index));
+            if is_selected {
                 self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.2, 1.0, 1.0, 0.9));
             } else {
                 self.draw_note_with_color(frame, *new_start, note, bounds, Color::from_rgba(0.0, 0.8, 1.0, 0.7));
