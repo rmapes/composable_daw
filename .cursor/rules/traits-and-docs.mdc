@@ -1,0 +1,17 @@
+---
+description: Traits and documentation conventions
+globs: src/models/**/*.rs, src/threads/**/*.rs
+alwaysApply: false
+---
+
+# Traits & Documentation
+
+## Traits
+- **Naming**: Prefix trait with `T` when it defines core behavior (e.g., `TSequence`)
+- Implement for multiple types; use `match` in enum impls to delegate
+- Example: `TSequence::length_in_ticks()`, `EventStreamSource::to_event_stream()`
+
+## Documentation
+- Block comments (`/* ... */`) for module-level design notes
+- `///` for public API and important structs
+- Inline comments for non-obvious logic (e.g., sort order for batch delete)

@@ -1,0 +1,33 @@
+---
+description: Module and architecture structure
+globs: src/**/*.rs
+alwaysApply: false
+---
+
+# Architecture & Module Structure
+
+## Top-Level Layout
+```
+src/
+├── main.rs          # Minimal entry: mod declarations, ui::run()
+├── models/          # Pure data structures, no UI/audio
+└── threads/         # Engine, audio, UI
+    ├── engine/      # Main loop, actions, synth
+    ├── audio/       # cpal, buss, output
+    └── ui/          # iced views, actions, components
+```
+
+## Models (Data Layer)
+- **shared.rs**: Identifier types (`TrackIdentifier`, `RegionIdentifier`), `ProjectData`
+- **components.rs**: Domain entities (Track, VirtualInstrument, etc.)
+- **sequences.rs**: Sequence types, event streams, MIDI
+- No dependencies on `threads` or `iced`
+
+## Threads (Engine/Audio/UI)
+- **Engine**: Receives `Actions` via mpsc, owns project data, sends `ProjectData` via flume
+- **Audio**: `init_audio()` returns `(AudioEngine, StereoOutputController)`; uses `Output` trait
+- **UI**: Iced application; subcomponents are structs with `view()` methods
+
+## Identifier Pattern
+- Newtype structs for IDs: `TrackIdentifier { track_id: usize }`
+- Compose for nested IDs: `RegionIdentifier { track_id, region_id }`

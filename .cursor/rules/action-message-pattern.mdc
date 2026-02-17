@@ -1,0 +1,34 @@
+---
+description: Action and message enum patterns for engine and UI
+globs: src/threads/**/*.rs
+alwaysApply: false
+---
+
+# Action & Message Pattern
+
+## Engine Actions
+- Single `Actions` enum in `threads/engine/actions.rs` for all commands
+- Variants: `Play`, `Pause`, `Quit`, `AddTrack`, `AddRegionAt(...)`, `CreateMidiNote(...)`, etc.
+- Internal/system actions: `Actions::Internal(SystemActions)`
+- Sub-enums for domains: `Synth(SynthActions)`
+
+```rust
+// Example structure
+pub enum Actions {
+    Play, Pause, Quit,
+    AddTrack,
+    AddRegionAt(TrackIdentifier, Tick, RegionType),
+    PatternClickNote(PatternNoteIdentifier),
+    Synth(SynthActions),
+    Internal(SystemActions),
+}
+```
+
+## UI Messages
+- Single `Message` enum in `threads/ui/actions.rs` for all events
+- Group: `WindowEvent`, `Engine(Actions)`, `ProjectDataChanged(ProjectData)`, local messages
+- Subcomponents: `MidiEditor(MidiEditorMessage)`, `Synth(SynthMessage)`
+
+## Data Flow
+- UI sends `Message::Engine(action)` → engine processes → `data_change_sender.send(project.clone())`
+- UI subscribes to `ProjectDataListener` → receives `Message::ProjectDataChanged(data)`

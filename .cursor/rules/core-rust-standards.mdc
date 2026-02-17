@@ -1,0 +1,25 @@
+---
+description: Core Rust coding standards for composable_daw
+alwaysApply: true
+---
+
+# Core Rust Standards
+
+## Naming Conventions
+- **Structs/Enums**: PascalCase (`ProjectData`, `TrackIdentifier`, `MidiEditorMessage`)
+- **Functions/Methods**: snake_case (`add_midi_region_at`, `get_events`)
+- **Constants**: SCREAMING_SNAKE_CASE (`DEFAULT_PPQ`, `BEATS_PER_BAR`, `RULER_HEIGHT`)
+- **Type aliases**: PascalCase (`Tick = u32`)
+
+## Derives
+- Identifiers: `#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]`
+- Data structs: `#[derive(Debug, Clone)]` (add `Default` where appropriate)
+- Enums: `#[derive(Debug, Clone)]`
+
+## Imports
+- Group order: `std`, external crates, `crate::`, `super::`
+- Use full module paths when crossing domain boundaries: `super::super::engine::actions::Actions`
+
+## Constants
+- Extract magic numbers to module-level `const` (e.g., `DEFAULT_PPQ`, `SUBDIVISIONS_PER_BEAT`)
+- Prefer named constants over literals in logic

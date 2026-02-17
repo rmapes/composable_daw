@@ -1,0 +1,27 @@
+---
+description: Iced UI framework patterns
+globs: src/threads/ui/**/*.rs
+alwaysApply: false
+---
+
+# Iced UI Patterns
+
+## Application Structure
+- `ui::run()`: `iced::application(state, update, view).title(...).subscription(...).run()`
+- State: `MainWindow` with `Default` impl
+- Update: `fn update(&mut self, msg: Message) -> Task<Message>`
+- View: `fn view(&self) -> Element<'_, Message>`
+
+## Subcomponents
+- Struct per window/panel with `view()` returning `Element<'_, Message>`
+- Component constructor: `Component::new(Length::Fill, Length::Fixed(50_f32))`
+- Use `components::rack()` and `components::module_slot()` for layout
+
+## Styling
+- `threads/ui/style/mod.rs`: Theme functions `rack`, `module_slot`, `module`, `display`, `control`, `label`
+- Color constants at top: `LIGHT_GRAY`, `DARK_GRAY`, `CASING_BLACK`, etc.
+- `color!(0x968B86)` for hex colors
+
+## Subscriptions
+- Combine: `Subscription::batch(vec![window_events, tick, data_change])`
+- Custom: implement `Recipe` with `hash()` and `stream()` for async sources (e.g., flume receiver)

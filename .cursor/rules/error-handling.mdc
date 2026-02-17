@@ -1,0 +1,36 @@
+---
+description: Error handling and logging conventions
+globs: src/**/*.rs
+alwaysApply: false
+---
+
+# Error Handling
+
+## Custom Errors
+- Implement `std::error::Error` and `std::fmt::Display`
+- Use `Result<T, E>` for operations that can fail
+
+```rust
+// ✅ From components.rs
+#[derive(Debug, Clone)]
+pub struct CollisionError;
+impl Error for CollisionError {}
+impl fmt::Display for CollisionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "overlapping regions not allowed")
+    }
+}
+```
+
+## Main Entry
+- `main() -> Result<(), Box<dyn Error>>`
+- Map errors: `.map_err(|err| Box::new(err) as Box<dyn Error>)`
+
+## Logging
+- Use `log::info!`, `log::error!` (with `pretty_env_logger::init()` in main)
+- Fatal engine errors: `error!("FATAL: Unexpected error..."); ActionFollowUp::Exit`
+
+## Graceful Degradation
+- When init fails (e.g., audio), continue with fallback: `AudioEngine::dummy(sample_rate)`
+- Log the failure but don’t panic
+- The user should always be informed of the error and given the option to quit or try and recover

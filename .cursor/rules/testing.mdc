@@ -1,0 +1,31 @@
+---
+description: Testing conventions
+globs: src/**/*.rs
+alwaysApply: false
+---
+
+# Testing
+
+## Unit Tests
+- `#[cfg(test)] mod tests` in same file as implementation
+- `use super::*` and `use crate::...` for imports
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::shared::TrackIdentifier;
+
+    #[test]
+    fn pattern_seq_can_be_created() { ... }
+}
+```
+
+## Integration Tests (UI)
+- Emulator pattern: struct holding `&mut MainWindow`, helper methods (`click`, `click_menu_item`, `tracks_present`)
+- Use `iced_test` simulator for `find`, `click`, `into_messages`
+- Handle async engine updates: `thread::sleep` + `data_change_receiver.try_recv` in `process_messages`
+
+## Test Helpers
+- `assert_approx_eq!` macro for float comparisons in audio tests
+- Mock implementations (e.g., `MockInput` impl `Output`) for audio pipeline tests
