@@ -9,7 +9,7 @@ use iced::Element;
 use iced::time;
 use iced::{Subscription, window, Task};
 use log::{error, info};
-use crate::models::sequences::{Sequence, Tick};
+use crate::models::sequences::{Sequence, TSequence, Tick};
 use crate::models::shared::{RegionIdentifier, ProjectData, TrackIdentifier};
 use super::super::engine::{self, PlayerState};
 use super::super::engine::actions::{Actions, SynthActions};
@@ -25,6 +25,19 @@ use super::file_picker::pick_file;
 
 use std::sync::{Arc, RwLock};
 
+/// State for an in-progress region drag.
+#[derive(Debug, Clone)]
+pub struct DragState {
+    pub region_id: RegionIdentifier,
+    pub region_length: Tick,
+    pub initial_track_index: usize,
+    pub initial_tick: Tick,
+    pub initial_mouse_x: f32,
+    pub current_track_index: usize,
+    pub current_tick: Tick,
+    pub is_valid_drop: bool,
+}
+
 //////////////////////
 /// Entry point for iced ui
 /// 
@@ -37,6 +50,7 @@ pub struct MainWindow {
     // Mutable state
     selected_track: usize,
     selected_region: Option<RegionIdentifier>,
+    dragging_region: Option<DragState>,
     playhead: Tick,
     midi_editor_snap: super::midi_editor::SnapToGrid,
     midi_editor_offset: u8, // Lowest visible MIDI note (pitch at bottom of grid), default 48 (C3)
@@ -83,6 +97,7 @@ impl Default for MainWindow {
             data,
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
+            dragging_region: None,
             playhead: 0,
             midi_editor_snap: super::midi_editor::SnapToGrid::Division,
             midi_editor_offset: 48,
@@ -122,6 +137,75 @@ impl MainWindow {
             }
             Message::SelectRegion(id, _is_multi_select) => {
                 self.selected_region = Some(id);
+                Task::none()
+            }
+            Message::RegionClick(region_id) => {
+                self.selected_region = Some(region_id);
+                self.dragging_region = None;
+                Task::none()
+            }
+            Message::StartRegionDrag(region_id, initial_x, initial_y, current_x, current_y) => {
+                if let Some(length) = Self::get_region_length(&self.data, &region_id) {
+                    self.selected_region = Some(region_id);
+                    let track_idx = region_id.track_id.track_id;
+                    let initial_tick = region_id.region_id;
+                    let current_track = Self::y_to_track_index(current_y).unwrap_or(track_idx).min(self.data.tracks.len().saturating_sub(1));
+                    let length_per_tick = Self::length_per_tick(self.data.ppq);
+                    let delta_x = current_x - initial_x;
+                    let current_tick = (initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
+                    let is_valid = Self::check_drop_valid(&self.data, region_id, track_idx, initial_tick, length, current_track, current_tick);
+                    self.dragging_region = Some(DragState {
+                        region_id,
+                        region_length: length,
+                        initial_track_index: track_idx,
+                        initial_tick,
+                        initial_mouse_x: initial_x,
+                        current_track_index: current_track,
+                        current_tick,
+                        is_valid_drop: is_valid,
+                    });
+                }
+                Task::none()
+            }
+            Message::UpdateRegionDrag(mouse_x, mouse_y) => {
+                if let Some(ref mut drag) = self.dragging_region {
+                    let length_per_tick = Self::length_per_tick(self.data.ppq);
+                    let delta_x = mouse_x - drag.initial_mouse_x;
+                    drag.current_tick = (drag.initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
+                    drag.current_track_index = Self::y_to_track_index(mouse_y)
+                        .unwrap_or(drag.initial_track_index)
+                        .min(self.data.tracks.len().saturating_sub(1));
+                    drag.is_valid_drop = Self::check_drop_valid(
+                        &self.data,
+                        drag.region_id,
+                        drag.initial_track_index,
+                        drag.initial_tick,
+                        drag.region_length,
+                        drag.current_track_index,
+                        drag.current_tick,
+                    );
+                }
+                Task::none()
+            }
+            Message::EndRegionDrag => {
+                if let Some(drag) = self.dragging_region.take() && drag.is_valid_drop {
+                    let target_id = TrackIdentifier {
+                        track_id: drag.current_track_index,
+                    };
+                    let _ = self.engine.send(Actions::MoveRegion(
+                        drag.region_id,
+                        target_id,
+                        drag.current_tick,
+                    ));
+                    self.selected_region = Some(RegionIdentifier {
+                        track_id: target_id,
+                        region_id: drag.current_tick,
+                    });
+                }
+                Task::none()
+            }
+            Message::CancelRegionDrag => {
+                self.dragging_region = None;
                 Task::none()
             }
             Message::DeselectAllRegions() => {
@@ -197,6 +281,50 @@ impl MainWindow {
         }
     }
 
+    fn length_per_tick(ppq: u32) -> f32 {
+        const TIMELINE_WIDTH: f32 = 950.0;
+        const BARS_IN_TIMELINE: u32 = 16;
+        let length_in_ticks = ppq * 4 * BARS_IN_TIMELINE;
+        TIMELINE_WIDTH / length_in_ticks as f32
+    }
+
+    fn y_to_track_index(y: f32) -> Option<usize> {
+        const RULER_HEIGHT: f32 = 10.0;
+        const TRACK_HEIGHT: f32 = 50.0;
+        if y < RULER_HEIGHT {
+            return Some(0);
+        }
+        let track = ((y - RULER_HEIGHT) / TRACK_HEIGHT).floor() as usize;
+        Some(track)
+    }
+
+    fn get_region_length(data: &ProjectData, id: &RegionIdentifier) -> Option<Tick> {
+        data.tracks
+            .get(id.track_id.track_id)
+            .and_then(|t| t.midi.as_ref())
+            .and_then(|c| c.sequences.get(&id.region_id))
+            .map(|s| s.length_in_ticks())
+    }
+
+    fn check_drop_valid(
+        data: &ProjectData,
+        _region_id: RegionIdentifier,
+        initial_track_index: usize,
+        initial_tick: Tick,
+        region_length: Tick,
+        current_track_index: usize,
+        current_tick: Tick,
+    ) -> bool {
+        let Some(track) = data.tracks.get(current_track_index) else {
+            return false;
+        };
+        let Some(container) = track.midi.as_ref() else {
+            return true;
+        };
+        let exclude = (current_track_index == initial_track_index).then_some(initial_tick);
+        !container.region_collides_with_existing_excluding(current_tick, region_length, exclude)
+    }
+
 fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message> {
         if let Err(err) = self.engine.send(action) {
             //TODO: Restart gracefully.
@@ -228,7 +356,13 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
                     ).width(Length::Shrink), // Shrink to fit channel strips
                     column![
                         components::module_slot(
-                            self.composer_window.view(&self.data.tracks, self.selected_track, self.data.ppq, self.playhead),
+                            self.composer_window.view(
+                                &self.data.tracks,
+                                self.selected_track,
+                                self.data.ppq,
+                                self.playhead,
+                                self.dragging_region.as_ref(),
+                            ),
                         ),
                         components::module_slot(
                             self.editor_window.view(selected_region, self.midi_editor_snap, self.midi_editor_offset)
@@ -311,7 +445,7 @@ mod integration_tests {
 
     use std::{collections::VecDeque, thread, time::Duration};
 
-    use crate::models::{sequences::MidiNote, shared::{PatternNoteIdentifier, RegionType}};
+    use crate::models::{sequences::MidiNote, shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier}};
 
     use super::*;
     use iced::widget::Id;
@@ -360,10 +494,9 @@ mod integration_tests {
         test.click(Id::new("TimelineBackground"))?; 
         assert!(!test.has_selection(), "Region should be deselected after clicking background");
 
-        // 3. Check that clicking on the midi region selects it
-        // Note: Default region in Track 1 usually named "Region 1" or similar
-        test.click(Id::new("Region 1"))?;
-        assert!(test.has_selection(), "Region should be selected after clicking it");
+        // 3. Check that selecting the first region selects it
+        test.select_first_region_in_selected_track()?;
+        assert!(test.has_selection(), "Region should be selected after selecting it");
 
         // 4. Check "Edit"/"Delete Region" removes it
         test.click_menu_item("Edit", "Delete Region")?;
@@ -374,8 +507,7 @@ mod integration_tests {
 
         // 6. Add MIDI region at tick 0 via menu
         test.click_menu_item("Edit", "Add Midi Region")?;
-        // Selecting it to ensure it's the active one
-        test.click(Id::new("Region 1"))?; 
+        test.select_first_region_in_selected_track()?;
 
         // 7. Check selecting displays MIDI editor
         // We check if the editor window is viewing a sequence (non-None)
@@ -403,12 +535,11 @@ mod integration_tests {
         // 3. Check playhead is at 0
         assert_eq!(test.get_playhead(), 0);
 
-        // 4. Add MIDI region at tick 0 via menu
+        // 4. Add Pattern region at tick 0 via menu
         test.click_menu_item("Edit", "Add Pattern Region")?;
-        // Selecting it to ensure it's the active one
-        test.click(Id::new("Region 1"))?; 
+        test.select_first_region_in_selected_track()?;
 
-        // 5. Check selecting displays MIDI editor
+        // 5. Check selecting displays pattern editor
         // We check if the editor window is viewing a sequence (non-None)
         assert!(test.is_pattern_editor_visible(), "Editor should be visible for Pattern region");
 
@@ -527,6 +658,28 @@ mod integration_tests {
         }
 
         // --- New Helper Methods ---
+
+        /// Select the first region (by tick) in the currently selected track.
+        fn select_first_region_in_selected_track(&mut self) -> Result<(), Error> {
+            let track_idx = self.app.selected_track;
+            let track = self.app.data.tracks.get(track_idx).ok_or_else(|| {
+                Error::SelectorNotFound { selector: "selected track".to_string() }
+            })?;
+            let container = track.midi.as_ref().ok_or_else(|| {
+                Error::SelectorNotFound { selector: "track midi container".to_string() }
+            })?;
+            let first_tick = container.sequences.keys().min().ok_or_else(|| {
+                Error::SelectorNotFound { selector: "first region in selected track".to_string() }
+            })?;
+            let region_id = RegionIdentifier {
+                track_id: TrackIdentifier { track_id: track_idx },
+                region_id: *first_tick,
+            };
+            let mut messages = VecDeque::new();
+            messages.push_back(Message::SelectRegion(region_id, false));
+            self.process_messages(messages);
+            Ok(())
+        }
 
         fn has_selection(&self) -> bool {
             self.app.selected_region.is_some()

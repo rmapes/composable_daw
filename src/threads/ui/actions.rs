@@ -17,7 +17,14 @@ pub enum Message {
     // Local Messages
     GoToStart,
     SelectTrack(TrackIdentifier),
-    SelectRegion(RegionIdentifier, bool), 
+    SelectRegion(RegionIdentifier, bool),
+    /// Click on a region without dragging (press + release within threshold).
+    RegionClick(RegionIdentifier),
+    // Region drag. When threshold passed: (region_id, initial_mouse_x, initial_mouse_y, current_mouse_x, current_mouse_y).
+    StartRegionDrag(RegionIdentifier, f32, f32, f32, f32),
+    UpdateRegionDrag(f32, f32),
+    EndRegionDrag,
+    CancelRegionDrag,
     DeleteSelectedRegion,
     DeselectAllRegions(),
     // Playhead

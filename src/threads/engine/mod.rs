@@ -185,6 +185,45 @@ where
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },
+                actions::Actions::MoveRegion(region_id, target_track_id, new_tick) => {
+                    let src_idx = region_id.track_id.track_id;
+                    let tgt_idx = target_track_id.track_id;
+                    match project.tracks[src_idx].remove_region(&region_id) {
+                        Some(sequence) => {
+                            let target_track = &mut project.tracks[tgt_idx];
+                            match target_track.insert_region(new_tick, sequence) {
+                                Ok(()) => {
+                                    if let Err(e) = audio_sources.update_track(&mut project.tracks[src_idx]) {
+                                        error!("FATAL: Unexpected error updating source track: {}", e);
+                                        ActionFollowUp::Exit
+                                    } else if src_idx != tgt_idx
+                                        && audio_sources.update_track(&mut project.tracks[tgt_idx]).is_err()
+                                    {
+                                        error!("FATAL: Unexpected error updating target track");
+                                        ActionFollowUp::Exit
+                                    } else {
+                                        ActionFollowUp::ProjectDataUpdate
+                                    }
+                                }
+                                Err((_, sequence)) => {
+                                    if project.tracks[src_idx].insert_region(region_id.region_id, sequence).is_err() {
+                                        error!("FATAL: Failed to restore region after move collision");
+                                        ActionFollowUp::Exit
+                                    } else if let Err(e) = audio_sources.update_track(&mut project.tracks[src_idx]) {
+                                        error!("FATAL: Unexpected error restoring track: {}", e);
+                                        ActionFollowUp::Exit
+                                    } else {
+                                        ActionFollowUp::Continue
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            error!("MoveRegion: region not found");
+                            ActionFollowUp::Continue
+                        }
+                    }
+                },
                 actions::Actions::DeleteRegion(region_id) => {
                     let track = &mut project.tracks[region_id.track_id.track_id];
                     track.delete_pattern(&region_id);

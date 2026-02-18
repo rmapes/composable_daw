@@ -13,6 +13,7 @@ pub enum Actions {
     // Track Actions
     AddTrack,
     AddRegionAt(TrackIdentifier, Tick, RegionType),
+    MoveRegion(RegionIdentifier, TrackIdentifier, Tick),
     DeleteRegion(RegionIdentifier),
     // Pattern Actions
     PatternClickNote(PatternNoteIdentifier),

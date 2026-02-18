@@ -1,5 +1,5 @@
 use iced::mouse::{Button, Cursor, Event};
-use iced::widget::{ Container, MouseArea, Stack, stack, button, column, container, Space, row, scrollable, text};
+use iced::widget::{Container, MouseArea, stack, button, column, container, Space, row, scrollable, text};
 use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
 use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
 use iced::widget::container::Style;
@@ -9,6 +9,7 @@ use crate::models::sequences::{TSequence, Tick};
 use crate::models::shared::RegionIdentifier;
 use super::components;
 use super::actions::Message;
+use super::main_window::DragState;
 
 
 // Define styling
@@ -44,7 +45,14 @@ impl Component {
         }
     } 
 
-    pub fn view(&self, tracks: &[Track], selected_track: usize, ppq: u32, playhead: Tick) -> Element<'_, Message> {
+    pub fn view(
+        &self,
+        tracks: &[Track],
+        selected_track: usize,
+        ppq: u32,
+        playhead: Tick,
+        dragging_region: Option<&DragState>,
+    ) -> Element<'_, Message> {
         const BARS_IN_TIMELINE: u32 = 16;
         let length_in_ticks = ppq * 4 * BARS_IN_TIMELINE;
         let length_per_tick = TIMELINE_WIDTH / length_in_ticks as f32;
@@ -61,7 +69,7 @@ impl Component {
                 stack![
                     column![
                     ruler_layer,
-                    self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE),
+                    self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE, RULER_HEIGHT, dragging_region),
                     ],
                     row![
                         Space::new().width(Length::Fixed(100.0)),
@@ -81,18 +89,35 @@ impl Component {
             button("+").on_press(Message::Engine(Actions::AddTrack)),
         ].into()
     }
-    fn track_list(&self, tracks: &[Track], selected_track: usize, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Element<'_, Message> {
+    fn track_list(
+        &self,
+        tracks: &[Track],
+        selected_track: usize,
+        length_per_tick: f32,
+        ppq: u32,
+        beats_per_bar: u8,
+        bars_in_timeline: u32,
+        ruler_height: f32,
+        dragging_region: Option<&DragState>,
+    ) -> Element<'_, Message> {
+        const TRACK_HEIGHT: f32 = 50.0;
         let mut track_list = column![].spacing(1);
 
-        // Iterate over our tasks and create a widget for each one
         for (id, track) in tracks.iter().enumerate() {
-            // `id` is the index (0, 1, 2, ...)
-            // `task` is a &Task
-
             let selected = id == selected_track;
-            let track_view = self.track(track, selected, length_per_tick, ppq, beats_per_bar, bars_in_timeline);
+            let track_view = self.track(
+                track,
+                selected,
+                length_per_tick,
+                ppq,
+                beats_per_bar,
+                bars_in_timeline,
+                ruler_height,
+                TRACK_HEIGHT,
+                id,
+                dragging_region,
+            );
 
-            // Add the track
             track_list = track_list.push(track_view);
         }
 
@@ -108,13 +133,36 @@ impl Component {
             .into()       
     }
 
-    fn track(&self, track: &Track, is_selected: bool, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Element<'_, Message> {
+    fn track(
+        &self,
+        track: &Track,
+        is_selected: bool,
+        length_per_tick: f32,
+        ppq: u32,
+        beats_per_bar: u8,
+        bars_in_timeline: u32,
+        ruler_height: f32,
+        track_height: f32,
+        track_index: usize,
+        dragging_region: Option<&DragState>,
+    ) -> Element<'_, Message> {
         container(row![
             self.track_settings(track),
-            // Timeline view
-            self.timeline_view(track, length_per_tick, ppq, beats_per_bar, bars_in_timeline).width(Length::Fill),
-        ]).height(Length::Fixed(50.0))
-        .align_y(iced::alignment::Vertical::Top) // You can also set a fixed height, e.g., `Length::Fixed(400.0)`
+            self.timeline_view(
+                track,
+                length_per_tick,
+                ppq,
+                beats_per_bar,
+                bars_in_timeline,
+                ruler_height,
+                track_height,
+                track_index,
+                dragging_region,
+            )
+            .width(Length::Fill),
+        ])
+        .height(Length::Fixed(track_height))
+        .align_y(iced::alignment::Vertical::Top)
         .style(track_style(is_selected))
         .into()
     }
@@ -129,47 +177,38 @@ impl Component {
         MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
     }
 
-    fn timeline_view(&self, track: &Track, length_per_tick: f32, ppq: u32,  beats_per_bar: u8, bars_in_timeline: u32) -> Container<'_, Message> {
-        // Total width of the stack
-        // 1. Timeline Canvas (Background Layer)
-        let timeline_layer = iced::widget::canvas(timeline(length_per_tick, ppq, beats_per_bar, bars_in_timeline))
-        .width(Length::Fixed(TIMELINE_WIDTH))
-        .height(Length::Fill);
-
-        // 2. Interactive Markers (Foreground Layer)
-        let regions: Vec<Element<'_, Message>> = self.get_regions(track).into_iter()
-        .filter(|(_, _, id)| {id.is_some()} )
-        .enumerate()
-        .map(|(i, (start, length, id))| {
-        // Assuming 16 bars in the timeline, convert to length per tick
-        let x = start as f32 * length_per_tick;
-        let w = length as f32 * length_per_tick;
- 
-        // Create the button widget
-        let button = self.region(w, id.unwrap(), format!("Region {}", i + 1));
-
-        row![
-            Space::new().width(Length::Fixed(x)),
-            button,
-        ].into()
-
-        }).collect();
-
-        // 3. Combine Layers
-        let mut layers: Vec<Element<'_, Message>> = Vec::new();
-        layers.push(timeline_layer.into());
-        layers.extend(regions);
-
-        let content = Stack::with_children(layers)
+    fn timeline_view(
+        &self,
+        track: &Track,
+        length_per_tick: f32,
+        ppq: u32,
+        beats_per_bar: u8,
+        bars_in_timeline: u32,
+        ruler_height: f32,
+        track_height: f32,
+        track_index: usize,
+        dragging_region: Option<&DragState>,
+    ) -> Container<'_, Message> {
+        let regions: Vec<(Tick, Tick, RegionIdentifier)> = self
+            .get_regions(track)
+            .into_iter()
+            .filter_map(|(start, length, id)| id.map(|id| (start, length, id)))
+            .collect();
+        let program = InteractiveTimelineCanvas {
+            regions,
+            length_per_tick,
+            ppq,
+            beats_per_bar,
+            bars_in_timeline,
+            track_index,
+            ruler_height,
+            track_height,
+            drag_state: dragging_region.cloned(),
+        };
+        let content = iced::widget::canvas(program)
             .width(Length::Fixed(TIMELINE_WIDTH))
-            .height(Length::Fixed(50.0)) // Assuming track height is 50px
-            ;
-
-        let clickable_content: MouseArea<'_, Message, _, _> = MouseArea::new(
-            content
-        ).on_press(Message::DeselectAllRegions());
-
-        components::display(clickable_content.into()).id("TimelineBackground")
+            .height(Length::Fixed(track_height));
+        components::display(content.into()).id("TimelineBackground")
     }
 
     fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<RegionIdentifier>)> {
@@ -186,23 +225,161 @@ impl Component {
     }
 
     fn region<'a>(&self, width: f32, region_id: RegionIdentifier, debug_id: String) -> Element<'a, Message> {
-        // 1. Visual Element (The thin, tall "rectangle")
         let region_marker = container(text(""))
-            .width(iced::Length::Fixed(width)) 
-            .height(iced::Length::Fill)    
+            .width(iced::Length::Fixed(width))
+            .height(iced::Length::Fill)
             .style(|_theme: &Theme| container::Style {
-                background: Some(Color::from_rgb(0.0, 0.4, 0.6).into()), 
+                background: Some(Color::from_rgb(0.0, 0.4, 0.6).into()),
                 border: border::rounded(5),
                 ..Default::default()
-            }).id(debug_id);
-    
-        // 2. Interactive Element
-        // Wrap it in a button and handle the press action
+            })
+            .id(debug_id);
         button(region_marker)
-            .on_press(Message::SelectRegion(region_id, false)) // Your custom message
-            .padding(0) // Remove padding so the clickable area matches the 2px width
+            .on_press(Message::SelectRegion(region_id, false))
+            .padding(0)
             .into()
-        // marker_line.into()
+    }
+}
+
+const DRAG_THRESHOLD_PX: f32 = 5.0;
+const REGION_COLOR: Color = Color::from_rgb(0.0, 0.4, 0.6);
+const REGION_VALID_DROP: Color = Color::from_rgb(0.4, 0.7, 0.9);
+const REGION_INVALID_DROP: Color = Color::from_rgb(0.9, 0.2, 0.2);
+
+#[derive(Clone)]
+pub struct InteractiveTimelineCanvas {
+    pub regions: Vec<(Tick, Tick, RegionIdentifier)>,
+    pub length_per_tick: f32,
+    pub ppq: u32,
+    pub beats_per_bar: u8,
+    pub bars_in_timeline: u32,
+    pub track_index: usize,
+    pub ruler_height: f32,
+    pub track_height: f32,
+    pub drag_state: Option<DragState>,
+}
+
+/// Pending drag start: (region_id, press_x, press_y) in canvas coords.
+type PendingDrag = (RegionIdentifier, f32, f32);
+
+impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
+    type State = Option<PendingDrag>;
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: &iced::Event,
+        bounds: Rectangle,
+        cursor: Cursor,
+    ) -> Option<iced::widget::Action<Message>> {
+        let cursor_position = cursor.position_in(bounds)?;
+        let (x, y) = (cursor_position.x, cursor_position.y);
+        let timeline_y = self.ruler_height + self.track_index as f32 * self.track_height + y;
+
+        match event {
+            iced::Event::Mouse(mouse_event) => match mouse_event {
+                Event::ButtonPressed(Button::Left) => {
+                    if let Some(region_id) = self.region_at_x(x) {
+                        *state = Some((region_id, x, y));
+                    } else {
+                        return Some(iced::widget::Action::publish(Message::DeselectAllRegions()));
+                    }
+                }
+                Event::ButtonReleased(Button::Left) => {
+                    if let Some((region_id, _, _)) = state.take() {
+                        return Some(iced::widget::Action::publish(Message::RegionClick(region_id)));
+                    }
+                    return Some(iced::widget::Action::publish(Message::EndRegionDrag));
+                }
+                Event::CursorMoved { .. } => {
+                    if let Some(pending) = state.take() {
+                        let (region_id, px, py) = pending;
+                        let dist = ((x - px).powi(2) + (y - py).powi(2)).sqrt();
+                        if dist >= DRAG_THRESHOLD_PX {
+                            let press_timeline_y = self.ruler_height + self.track_index as f32 * self.track_height + py;
+                            return Some(iced::widget::Action::publish(Message::StartRegionDrag(
+                                region_id, px, press_timeline_y, x, timeline_y,
+                            )));
+                        }
+                        *state = Some((region_id, px, py));
+                    } else {
+                        return Some(iced::widget::Action::publish(Message::UpdateRegionDrag(x, timeline_y)));
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        None
+    }
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &iced::Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: Cursor,
+    ) -> Vec<Geometry> {
+        let geometry = canvas::Cache::new().draw(renderer, bounds.size(), |frame: &mut Frame| {
+            frame.fill(
+                &Path::rectangle(Point::ORIGIN, bounds.size()),
+                Color::from_rgb8(0x00, 0x00, 0x00),
+            );
+            let height = bounds.height;
+            let length_per_bar =
+                self.length_per_tick * self.beats_per_bar as f32 * self.ppq as f32;
+            let bar_stroke = Stroke {
+                style: canvas::Style::Solid(Color::from_rgb8(0x30, 0x30, 0x30)),
+                width: 1.0,
+                line_cap: LineCap::Square,
+                ..Stroke::default()
+            };
+            for bar in 0..self.bars_in_timeline {
+                let xpos = bar as f32 * length_per_bar;
+                if xpos < bounds.width {
+                    frame.stroke(
+                        &Path::line(Point::new(xpos, 0.0), Point::new(xpos, height)),
+                        bar_stroke,
+                    );
+                }
+            }
+            let dragging_id = self.drag_state.as_ref().map(|d| d.region_id);
+            for (start, length, region_id) in &self.regions {
+                if Some(*region_id) == dragging_id {
+                    continue;
+                }
+                let x = *start as f32 * self.length_per_tick;
+                let w = *length as f32 * self.length_per_tick;
+                let rect = Path::rectangle(Point::new(x, 0.0), iced::Size::new(w, height));
+                frame.fill(&rect, Fill::from(REGION_COLOR));
+            }
+            if let Some(ref drag) = self.drag_state && drag.current_track_index == self.track_index {
+                    let x = drag.current_tick as f32 * self.length_per_tick;
+                    let w = drag.region_length as f32 * self.length_per_tick;
+                    let color = if drag.is_valid_drop {
+                        REGION_VALID_DROP
+                    } else {
+                        REGION_INVALID_DROP
+                    };
+                    let rect = Path::rectangle(Point::new(x, 0.0), iced::Size::new(w, height));
+                    frame.fill(&rect, Fill::from(color));
+            }
+        });
+        vec![geometry]
+    }
+}
+
+impl InteractiveTimelineCanvas {
+    fn region_at_x(&self, x: f32) -> Option<RegionIdentifier> {
+        for (start, length, id) in &self.regions {
+            let rx = *start as f32 * self.length_per_tick;
+            let rw = *length as f32 * self.length_per_tick;
+            if x >= rx && x < rx + rw {
+                return Some(*id);
+            }
+        }
+        None
     }
 }
 

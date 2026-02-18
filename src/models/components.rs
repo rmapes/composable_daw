@@ -159,6 +159,29 @@ impl Track {
             .remove(&id.region_id)
             .expect("Attempt to access pattern with invalid id");
     }
+
+    /// Removes a region by identifier and returns it if present.
+    pub fn remove_region(&mut self, id: &RegionIdentifier) -> Option<Sequence> {
+        self.midi
+            .as_mut()
+            .and_then(|container| container.sequences.remove(&id.region_id))
+    }
+
+    /// Inserts a region at the given tick, updating its id. On collision returns the sequence so the caller can restore.
+    pub fn insert_region(&mut self, tick: Tick, mut sequence: Sequence) -> Result<(), (CollisionError, Sequence)> {
+        let length = sequence.length_in_ticks();
+        let container = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
+        if container.region_collides_with_existing(tick, length) {
+            return Err((CollisionError {}, sequence));
+        }
+        match &mut sequence {
+            Sequence::Pattern(p) => p.id = RegionIdentifier { track_id: self.id, region_id: tick },
+            Sequence::Midi(m) => m.id = RegionIdentifier { track_id: self.id, region_id: tick },
+            Sequence::SequenceContainer(_) => {}
+        }
+        container.sequences.insert(tick, sequence);
+        Ok(())
+    }
 }
 
 

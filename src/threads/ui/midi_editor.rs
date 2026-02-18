@@ -250,10 +250,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
         }
 
         // Mouse events require cursor position
-        let cursor_position = match cursor.position_in(bounds) {
-            Some(p) => p,
-            None => return None,
-        };
+        let cursor_position = cursor.position_in(bounds)?;
 
         // Calculate if the cursor is within the Grid area
         let grid_bounds = Rectangle::new(
@@ -281,12 +278,11 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             let old_key = (*old_start, *note_index);
                             if state.selected_notes.remove(&old_key) {
                                 // Find the note at the new position by matching key and length
-                                if let Some(notes_at_new_tick) = self.notes.get(new_start) {
-                                    if let Some((actual_index, _)) = notes_at_new_tick.iter()
+                                if let Some(notes_at_new_tick) = self.notes.get(new_start) &&
+                                    let Some((actual_index, _)) = notes_at_new_tick.iter()
                                         .enumerate()
                                         .find(|(_, n)| n.key == note.key && n.length == note.length && n.velocity == note.velocity) {
                                         state.selected_notes.insert((*new_start, actual_index));
-                                    }
                                 }
                             }
                             state.pending_update = None;
@@ -296,8 +292,8 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     
                     // Handle debounce: check if mouse has moved enough to start dragging
                     if let (Some((click_x, click_y)), Some((click_start_tick, click_note_index))) = 
-                        (state.click_start_position, state.click_start_note) {
-                        if state.dragged_note.is_none() && state.pending_note.is_none() {
+                        (state.click_start_position, state.click_start_note) &&
+                        state.dragged_note.is_none() && state.pending_note.is_none() {
                             // Calculate distance moved
                             let dx = cursor_position.x - click_x;
                             let dy = cursor_position.y - click_y;
@@ -307,8 +303,8 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             
                             if distance > DRAG_THRESHOLD {
                                 // Mouse moved enough - start dragging
-                                if let Some(notes_at_tick) = self.notes.get(&click_start_tick) {
-                                    if click_note_index < notes_at_tick.len() {
+                                if let Some(notes_at_tick) = self.notes.get(&click_start_tick) &&
+                                    click_note_index < notes_at_tick.len() {
                                         let note = notes_at_tick[click_note_index];
                         let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
                                         let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
@@ -335,8 +331,6 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                         state.click_start_note = None;
                                         self.cache.clear();
                         return Some(iced::widget::Action::capture());
-                                    }
-                                }
                             }
                         }
                     }
@@ -406,7 +400,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             // This keeps the note aligned with where the user originally clicked
                             let new_start_tick = mouse_tick.saturating_sub(dragged.click_offset_x as u32);
                             let new_pitch_f32 = mouse_pitch as f32 - dragged.click_offset_y;
-                            let new_pitch = new_pitch_f32.max(0.0).min(127.0) as u8; // Clamp to valid MIDI range
+                            let new_pitch = new_pitch_f32.clamp(0.0, 127.0) as u8; // Clamp to valid MIDI range
                             
                             // Snap the new position
                             let snapped_start_tick = self.snap_to_grid.snap_tick(new_start_tick);
@@ -480,8 +474,8 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             }
                             
                             // Clicked on resize edge - start resizing
-                            if let Some(notes_at_tick) = self.notes.get(&start_tick) {
-                                if note_index < notes_at_tick.len() {
+                            if let Some(notes_at_tick) = self.notes.get(&start_tick) &&
+                                note_index < notes_at_tick.len() {
                                     let note = notes_at_tick[note_index];
                                     state.dragged_note = Some(DraggedNote {
                                         original_start: start_tick,
@@ -497,7 +491,6 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                     self.cache.clear(); // Redraw to show selection
                                     return Some(iced::widget::Action::capture());
                                 }
-                            }
                         }
                         // Then check if we clicked on an existing note (for moving)
                         else if let Some((start_tick, note_index)) = self.find_note_at_position(
@@ -565,8 +558,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
                     // Handle click without drag (selection only)
                     if let (Some((click_x, click_y)), Some(_click_note)) = 
-                        (state.click_start_position, state.click_start_note) {
-                        if state.dragged_note.is_none() {
+                        (state.click_start_position, state.click_start_note) && state.dragged_note.is_none() {
                             // Check if mouse moved significantly
                             let dx = cursor_position.x - click_x;
                             let dy = cursor_position.y - click_y;
@@ -581,7 +573,6 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 state.click_start_note = None;
                                 return None; // Let selection update be handled
                             }
-                        }
                     }
                     
                     // Clear click tracking on release
@@ -823,7 +814,7 @@ impl MidiEditor {
             let y = pitch_to_y(pitch, bounds, midi_offset);
             let line = Path::line(Point::new(0.0, y), Point::new(total_time_span, y));
 
-            let is_octave_c_row = pitch % 12 == 0;
+            let is_octave_c_row = pitch.is_multiple_of(12);
 
             let stroke_style = if is_octave_c_row {
                 Color::from_rgb(0.4, 0.0, 0.0) // Stronger line for C notes
@@ -906,10 +897,9 @@ impl MidiEditor {
         for (start, notes) in &self.notes {
             for (note_index, note) in notes.iter().enumerate() {
                 // Skip drawing the note that's being dragged/resized or has pending update
-                if let Some((skip_start, skip_idx)) = skip_note {
-                    if *start == skip_start && note_index == skip_idx {
+                if let Some((skip_start, skip_idx)) = skip_note &&
+                    *start == skip_start && note_index == skip_idx {
                         continue;
-                    }
                 }
                 // Draw selected notes with brighter color
                 if state.selected_notes.contains(&(*start, note_index)) {
@@ -945,10 +935,9 @@ impl MidiEditor {
         if state.dragged_note.is_none() && state.pending_update.is_none() {
             for (start, notes) in &self.notes {
                 for (note_index, note) in notes.iter().enumerate() {
-                    if let Some((hovered_start, hovered_index)) = state.hovered_resize_edge {
-                        if *start == hovered_start && note_index == hovered_index {
+                    if let Some((hovered_start, hovered_index)) = state.hovered_resize_edge &&
+                        *start == hovered_start && note_index == hovered_index {
                             self.draw_resize_indicator(frame, *start, note, bounds, midi_offset);
-                        }
                     }
                 }
             }
@@ -1053,7 +1042,7 @@ impl MidiEditor {
                     
                     // Check if cursor is near the right edge and within vertical bounds
                     let distance_from_edge = note_end_x - relative_x;
-                    if distance_from_edge >= 0.0 && distance_from_edge <= Self::RESIZE_EDGE_THRESHOLD &&
+                    if (0.0..=Self::RESIZE_EDGE_THRESHOLD).contains(&distance_from_edge) &&
                        relative_y >= note_y && relative_y <= note_y + NOTE_HEIGHT {
                         return Some((*start_tick, note_index));
                     }

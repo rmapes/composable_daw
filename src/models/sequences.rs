@@ -386,23 +386,30 @@ impl SequenceContainer {
     }
 
     pub fn region_collides_with_existing(&self, start_tick: Tick, length: Tick) -> bool {
-        // Check start not in preceding region
-        for tick in 0..start_tick {
-            if self.sequences.contains_key(&tick) 
-                && self.sequences[&tick].length_in_ticks() > start_tick - tick {
-                    return true;
+        self.region_collides_with_existing_excluding(start_tick, length, None)
+    }
+
+    /// Like `region_collides_with_existing` but ignores the region that starts at `exclude_tick` (if any).
+    pub fn region_collides_with_existing_excluding(
+        &self,
+        start_tick: Tick,
+        length: Tick,
+        exclude_tick: Option<Tick>,
+    ) -> bool {
+        let exclude = exclude_tick;
+        for (tick, seq) in &self.sequences {
+            if exclude == Some(*tick) {
+                continue;
             }
-        }
-        // Check no region starts in this region
-        let end_tick = start_tick + length;
-        for tick in start_tick..end_tick {
-            if self.sequences.contains_key(&tick) {
+            let len = seq.length_in_ticks();
+            let end = tick + len;
+            let new_end = start_tick + length;
+            if start_tick < end && new_end > *tick {
                 return true;
             }
         }
         false
     }
-
 }
 
 impl TSequence for SequenceContainer {
