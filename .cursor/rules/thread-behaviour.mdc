@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+
+## Audio thread
+
+- Audio threads (both those outputting to cpal, and those preparing buffer content when play has been pressed) are expected to run in real time
+- Therefore, they should be high priority threads, they should communicate via ring buffers rather than mutexes or RwLocks, and they should avoid allocating memory during an audio output operation.
+- The exception to this is when non-priority threads want to pass configuration information (e.g. adding a new track, or routing through a new buss) to one of these threads at a time when audio output is not being generated. The preferred mechanism for this is a channel and a notification loop but if the thread is processing non-time sensitive information and therefore cannot enter a blocking loop, shared data structures such as RwLocks and Mutexes can be used.
+
+## UI behaviour
+
+- UI rendering must never be blocked by background processing
+- Ideally, all configuration updates sent from the backend must be available locally, so that it can be accessed during rendering with no chance of blocking if the backend thread is busy
+- However, the front end should be highly responsive to configuration changes, particularly those triggered from the front end. Interacting with a front end element should feel instantaneous, even if this requires configuration to be updated on the backend.
+- Conversely, if the front end is unable to update the backend, the interactions that would cause this should be disabled, and obviously so, to avoid discrepancies between front end and backend configuration being perceivable by the user
