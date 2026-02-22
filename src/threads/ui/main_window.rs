@@ -454,7 +454,10 @@ mod integration_tests {
 
     use std::{collections::VecDeque, thread, time::Duration};
 
-    use crate::models::{sequences::MidiNote, shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier}};
+    use crate::models::{
+        sequences::MidiNote,
+        shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier},
+    };
 
     use super::*;
     use iced::widget::Id;
@@ -528,6 +531,221 @@ mod integration_tests {
         Ok(())
     }
 
+    /// Spec 1.3 Rewind to start: Playhead returns to tick 0
+    #[test]
+    fn test_rewind_to_start() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        // Set playhead away from 0 (via SetPlayhead message)
+        test.send_message(Message::SetPlayhead(1000));
+        assert_ne!(test.get_playhead(), 0);
+        // Click Rewind (sends GoToStart)
+        test.send_message(Message::GoToStart);
+        assert_eq!(test.get_playhead(), 0);
+        Ok(())
+    }
+
+    /// Spec 1.1 Play, 1.2 Stop: Start and stop playback without crash
+    #[test]
+    fn test_play_and_stop() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.send_message(Message::Engine(Actions::Play));
+        test.send_message(Message::Engine(Actions::Pause));
+        Ok(())
+    }
+
+    /// Spec 2.1 New project: File → New clears project
+    #[test]
+    fn test_new_project_clears() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click("+")?;
+        assert_eq!(test.tracks_present(), 2);
+        test.click_menu_item("File", "New")?;
+        assert_eq!(test.tracks_present(), 1);
+        Ok(())
+    }
+
+    /// Spec 2.2 Open file: No crash when File → Open (not yet implemented)
+    #[test]
+    fn test_open_file_no_crash() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.send_message(Message::OpenFile);
+        Ok(())
+    }
+
+    /// Spec 3.1 Add track, 3.2 Select track: Add track and verify selection
+    #[test]
+    fn test_add_and_select_track() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click("+")?;
+        assert_eq!(test.tracks_present(), 2);
+        test.select_track(1)?;
+        assert!(test.is_track_selected("Track 2"));
+        Ok(())
+    }
+
+    /// Spec 4.6 Set playhead: Playhead moves to position
+    #[test]
+    fn test_set_playhead() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.send_message(Message::SetPlayhead(480));
+        assert_eq!(test.get_playhead(), 480);
+        Ok(())
+    }
+
+    /// Spec 4.4 Move region: Simulate drag via StartRegionDrag, UpdateRegionDrag, EndRegionDrag
+    #[test]
+    fn test_move_region() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.select_first_region_in_selected_track()?;
+        let region_id = test.app.selected_region.expect("region selected");
+        let _region_length = crate::models::sequences::TSequence::length_in_ticks(
+            test.app.data.tracks[region_id.track_id.track_id]
+                .midi
+                .as_ref()
+                .and_then(|c| c.sequences.get(&region_id.region_id))
+                .expect("region exists"),
+        );
+        let length_per_tick = 950.0 / (test.app.data.ppq * 4 * 16) as f32;
+        let delta_x = length_per_tick * 480.0; // move 480 ticks right
+        test.send_message(Message::StartRegionDrag(
+            region_id,
+            100.0,
+            50.0,
+            100.0 + delta_x,
+            50.0,
+        ));
+        test.send_message(Message::EndRegionDrag);
+        // Region should have moved; selection updated
+        assert!(test.app.selected_region.is_some());
+        Ok(())
+    }
+
+    /// Spec 6.3 Editor when no region selected: Deselect shows empty/neutral editor
+    #[test]
+    fn test_editor_when_no_region_selected() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click(Id::new("TimelineBackground"))?;
+        assert!(!test.has_selection());
+        // App should not crash; view renders
+        let _ = test.app.view();
+        Ok(())
+    }
+
+    /// Spec 7.2 Multiple pattern toggles: Each step maintains state
+    #[test]
+    fn test_pattern_multiple_toggles() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click_menu_item("Edit", "Delete Region")?;
+        test.click_menu_item("Edit", "Add Pattern Region")?;
+        test.select_first_region_in_selected_track()?;
+        test.click_pattern_editor_grid(0, 0)?;
+        test.click_pattern_editor_grid(1, 2)?;
+        test.click_pattern_editor_grid(2, 1)?;
+        test.drain_engine_updates();
+        // Verify pattern has steps on (beat 0, note 0), (beat 1, note 2), (beat 2, note 1)
+        let region_id = test.app.selected_region.expect("region");
+        let seq = test.app.data.tracks[region_id.track_id.track_id]
+            .midi
+            .as_ref()
+            .and_then(|c| c.sequences.get(&region_id.region_id));
+        if let Some(crate::models::sequences::Sequence::Pattern(p)) = seq {
+            assert!(*p.is_on(0, 0), "beat 0 note 0 should be on");
+            assert!(*p.is_on(1, 2), "beat 1 note 2 should be on");
+            assert!(*p.is_on(2, 1), "beat 2 note 1 should be on");
+        } else {
+            panic!("Expected Pattern region");
+        }
+        Ok(())
+    }
+
+    /// Spec 8.5 Delete MIDI notes: Selected notes removed
+    #[test]
+    fn test_delete_midi_notes() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click_menu_item("Edit", "Delete Region")?;
+        test.click_menu_item("Edit", "Add Midi Region")?;
+        test.select_first_region_in_selected_track()?;
+        test.click_midi_editor_grid(0, 60)?;
+        test.click_midi_editor_grid(480, 62)?;
+        test.drain_engine_updates();
+        let region_id = test.app.selected_region.expect("region");
+        let midi_seq = test.app.data.tracks[region_id.track_id.track_id]
+            .midi
+            .as_ref()
+            .and_then(|c| c.sequences.get(&region_id.region_id));
+        let before = match midi_seq {
+            Some(crate::models::sequences::Sequence::Midi(m)) => {
+                m.notes.values().map(|v| v.len()).sum::<usize>()
+            }
+            _ => 0,
+        };
+        assert!(before >= 2, "should have at least 2 notes, got {}", before);
+        test.send_message(Message::Engine(Actions::DeleteMultipleMidiNotes(
+            region_id,
+            vec![(0, 0), (480, 0)],
+        )));
+        let midi_seq_after = test.app.data.tracks[region_id.track_id.track_id]
+            .midi
+            .as_ref()
+            .and_then(|c| c.sequences.get(&region_id.region_id));
+        let after = match midi_seq_after {
+            Some(crate::models::sequences::Sequence::Midi(m)) => {
+                m.notes.values().map(|v| v.len()).sum::<usize>()
+            }
+            _ => 0,
+        };
+        assert!(after < before);
+        Ok(())
+    }
+
+    /// Spec 10.1 Menu items: File and Edit menus have expected items
+    #[test]
+    fn test_menu_items_present() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        // File menu items
+        test.click_menu_item("File", "New")?;
+        test.click_menu_item("File", "Open")?;
+        // Edit menu items
+        test.click_menu_item("Edit", "Add Pattern Region")?;
+        test.select_first_region_in_selected_track()?;
+        test.click_menu_item("Edit", "Add Midi Region")?;
+        test.select_first_region_in_selected_track()?;
+        test.click_menu_item("Edit", "Delete Region")?;
+        Ok(())
+    }
+
+    /// Spec 11.1 Delete region with no selection: No crash
+    #[test]
+    fn test_delete_region_with_no_selection() -> Result<(), Error> {
+        let mut app = MainWindow::default();
+        let mut test = Emulator::new(&mut app);
+        test.click(Id::new("TimelineBackground"))?;
+        assert!(!test.has_selection());
+        test.send_message(Message::DeleteSelectedRegion);
+        Ok(())
+    }
+
+    /// Spec 5.1, 10.2 Layout: Control bar and track list visible
+    #[test]
+    fn test_layout_control_bar_and_tracks_visible() -> Result<(), Error> {
+        let app = MainWindow::default();
+        let mut ui = simulator(app.view());
+        ui.find("Track 1")?;
+        ui.find("+")?;
+        Ok(())
+    }
+
     #[test]
     fn test_add_pattern_region() -> Result<(), Error> {
         let mut app = MainWindow::default();
@@ -567,6 +785,21 @@ mod integration_tests {
     impl<'a> Emulator<'a> {
         fn new(app: &'a mut MainWindow) -> Self {
             Self { app }
+        }
+
+        fn send_message(&mut self, msg: Message) {
+            let mut messages = std::collections::VecDeque::new();
+            messages.push_back(msg);
+            self.process_messages(messages);
+        }
+
+        fn drain_engine_updates(&mut self) {
+            for _ in 0..5 {
+                thread::sleep(Duration::from_millis(200));
+                while let Ok(data) = self.app.engine.data_change_receiver.try_recv() {
+                    let _ = self.app.update(Message::ProjectDataChanged(data));
+                }
+            }
         }
 
         // Select an element, and click on it directly

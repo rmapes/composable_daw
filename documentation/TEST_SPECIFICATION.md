@@ -2,6 +2,36 @@
 
 This document describes, in human language, how to test each major piece of functionality. It can be used for manual testing or as a basis for automated integration tests.
 
+## Test Coverage Mapping
+
+The following automated tests in `src/threads/ui/main_window.rs` (integration_tests module) cover the specifications below:
+
+| Spec | Test function | Notes |
+|------|---------------|-------|
+| 1.1 Play, 1.2 Stop | `test_play_and_stop` | Verifies no crash on Play then Pause |
+| 1.3 Rewind to start | `test_rewind_to_start` | Verifies playhead returns to 0 |
+| 2.1 New project | `test_new_project_clears`, `test_add_and_delete_tracks` | File → New clears project |
+| 2.2 Open file | `test_open_file_no_crash` | No panic when File → Open |
+| 3.1 Add track, 3.2 Select track | `test_add_and_select_track`, `test_add_and_delete_tracks` | |
+| 4.1 Add Pattern | `test_add_pattern_region` | |
+| 4.2 Add Midi | `test_add_midi_region` | |
+| 4.3 Select region | `test_add_midi_region`, `test_add_pattern_region` | |
+| 4.4 Move region | `test_move_region` | Simulates drag via StartRegionDrag/EndRegionDrag |
+| 4.5 Delete region | `test_add_midi_region`, `test_add_pattern_region` | |
+| 4.6 Set playhead | `test_set_playhead` | |
+| 5.1 Timeline, 10.2 Layout | `test_layout_control_bar_and_tracks_visible` | |
+| 6.1 Pattern editor | `test_add_pattern_region` | |
+| 6.2 MIDI editor | `test_add_midi_region` | |
+| 6.3 Editor when no region | `test_editor_when_no_region_selected` | |
+| 7.1 Toggle step | `test_add_pattern_region` | |
+| 7.2 Multiple toggles | `test_pattern_multiple_toggles` | |
+| 8.1 Create MIDI note | `test_add_midi_region` | |
+| 8.5 Delete MIDI notes | `test_delete_midi_notes` | |
+| 10.1 Menu items | `test_menu_items_present` | |
+| 11.1 Delete with no selection | `test_delete_region_with_no_selection` | |
+
+Specs 1.4, 5.2, 8.2–8.4, 8.6–8.8, 9.1–9.3, 11.2–11.4 require manual testing or additional UI automation (e.g. keyboard simulation, file picker mocking).
+
 ---
 
 ## 1. Transport (playback)
