@@ -1,5 +1,7 @@
-use iced::widget::{ row, text, Column, Container, Row, button };
-use iced::{Length, Element};
+use iced::widget::{button, row, text, Column, Container, Row};
+use iced::{Element, Length};
+
+const NOTE_BUTTON_SIZE: f32 = 20.0;
 use super::super::engine::actions::Actions;
 use crate::models::sequences::PatternSeq;
 use crate::models::shared::{ RegionIdentifier, PatternNoteIdentifier};
@@ -9,6 +11,7 @@ use super::actions::Message;
 use super::components;
 use super::style;
 
+#[derive(Debug, Clone)]
 pub struct Component {
     width: Length,
     height: Length,
@@ -59,7 +62,7 @@ fn pattern_editor_row(pattern: &PatternSeq, note_num: u8) -> Row<'static, Messag
 
 fn note_label(midi_pitch: &u8) -> Element<'static, Message> {
     components::label(
-       text(format!("{midi_pitch}")).width(Length::Fixed(20.0)).height(Length::Fixed(20.0)).into(),
+       text(format!("{midi_pitch}")).width(Length::Fixed(NOTE_BUTTON_SIZE)).height(Length::Fixed(NOTE_BUTTON_SIZE)).into(),
     ).into()
 }
 
@@ -67,7 +70,7 @@ fn note_toggle_button(pattern_id: RegionIdentifier, note_num: u8, beat_num: u8, 
     let style = if *is_on { style::note_button_on } else { style::note_button_off };
     components::control(
        button(
-        Container::new(row![]).width(Length::Fixed(20.0)).height(Length::Fixed(20.0)).style(style)
+        Container::new(row![]).width(Length::Fixed(NOTE_BUTTON_SIZE)).height(Length::Fixed(NOTE_BUTTON_SIZE)).style(style)
        ).on_press(Message::Engine(Actions::PatternClickNote(PatternNoteIdentifier {region_id: pattern_id, note_num, beat_num} ))).into(),
     )
 }

@@ -3,6 +3,7 @@ use super::actions::Message;
 use super::components::icons::{icon_button, Icon};
 use super::super::engine::actions::Actions::{Play, Pause};
 
+#[derive(Debug, Clone)]
 pub struct Component {
     width: Length,
     height: Length,

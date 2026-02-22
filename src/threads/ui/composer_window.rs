@@ -1,15 +1,17 @@
 use iced::mouse::{Button, Cursor, Event};
-use iced::widget::{Container, MouseArea, stack, button, column, container, Space, row, scrollable, text};
-use iced::widget::canvas::{self, Frame, Geometry, LineCap, Path, Stroke, Fill};
-use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
+use iced::widget::canvas::{self, Fill, Frame, Geometry, LineCap, Path, Stroke};
 use iced::widget::container::Style;
-use super::super::engine::actions::Actions;
+use iced::widget::{button, column, container, row, scrollable, stack, text, Container, MouseArea, Space};
+use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
+
 use crate::models::components::Track;
 use crate::models::sequences::{TSequence, Tick};
 use crate::models::shared::RegionIdentifier;
-use super::components;
+
+use super::super::engine::actions::Actions;
 use super::actions::Message;
 use super::main_window::DragState;
+use super::components;
 
 
 // Define styling
@@ -30,8 +32,10 @@ pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
 }
 
 const TIMELINE_WIDTH: f32 = 950.0;
+const TRACK_LABEL_WIDTH: f32 = 100.0;
 
 // Define components
+#[derive(Debug, Clone)]
 pub struct Component {
     width: Length,
     height: Length,
@@ -59,7 +63,7 @@ impl Component {
         const RULER_HEIGHT: f32 = 10.0;
 
         let ruler_layer = row![
-            Space::new().width(Length::Fixed(100.0)),
+            Space::new().width(Length::Fixed(TRACK_LABEL_WIDTH)),
             iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE)).width(Length::Fixed(TIMELINE_WIDTH))                
         ].height(Length::Fixed(RULER_HEIGHT));
 
@@ -72,7 +76,7 @@ impl Component {
                     self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE, RULER_HEIGHT, dragging_region),
                     ],
                     row![
-                        Space::new().width(Length::Fixed(100.0)),
+                        Space::new().width(Length::Fixed(TRACK_LABEL_WIDTH)),
                         iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill).width(Length::Fill)
                     ].width(Length::Fill)         
                 ]
@@ -171,7 +175,7 @@ impl Component {
         let content = column![
                 text(track.name.clone())
             ]
-            .width(Length::Fixed(100.0))
+            .width(Length::Fixed(TRACK_LABEL_WIDTH))
             .height(Length::Fill)
             ;
         MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
@@ -246,7 +250,7 @@ const REGION_COLOR: Color = Color::from_rgb(0.0, 0.4, 0.6);
 const REGION_VALID_DROP: Color = Color::from_rgb(0.4, 0.7, 0.9);
 const REGION_INVALID_DROP: Color = Color::from_rgb(0.9, 0.2, 0.2);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InteractiveTimelineCanvas {
     pub regions: Vec<(Tick, Tick, RegionIdentifier)>,
     pub length_per_tick: f32,
@@ -550,18 +554,18 @@ impl canvas::Program<Message, Theme> for TickRuler {
 pub struct PlayheadMarker {
     length_per_tick: f32,
     playhead: Tick,
-    rule_height: f32,
+    ruler_height: f32,
     cache: canvas::Cache,
 }
 
 impl PlayheadMarker {
-    pub fn new(playhead: Tick, length_per_tick: f32, rule_height: f32) -> Self {
-        Self {length_per_tick, playhead, rule_height, cache: canvas::Cache::new()}
+    pub fn new(playhead: Tick, length_per_tick: f32, ruler_height: f32) -> Self {
+        Self {length_per_tick, playhead, ruler_height, cache: canvas::Cache::new()}
     }
 }
 
-pub fn playhead_marker(playhead: Tick, length_per_tick: f32, rule_height: f32) -> PlayheadMarker {
-    PlayheadMarker::new(playhead, length_per_tick, rule_height)
+pub fn playhead_marker(playhead: Tick, length_per_tick: f32, ruler_height: f32) -> PlayheadMarker {
+    PlayheadMarker::new(playhead, length_per_tick, ruler_height)
 }
 
 impl canvas::Program<Message, Theme> for PlayheadMarker {
@@ -586,7 +590,7 @@ impl canvas::Program<Message, Theme> for PlayheadMarker {
             // Draw the marker
             let xpos = self.playhead as f32 * self.length_per_tick;
             // Draw head
-            draw_playhead(xpos, 0.0, bounds, self.rule_height, frame);
+            draw_playhead(xpos, 0.0, bounds, self.ruler_height, frame);
 
             // --- End Drawing Logic ---
         });

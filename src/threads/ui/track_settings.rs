@@ -9,6 +9,7 @@ use super::components;
 use super::actions::Message;
 use super::actions::SynthMessage;
 
+#[derive(Debug, Clone)]
 pub struct Component {
     width: Length,
     height: Length,

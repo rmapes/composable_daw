@@ -8,6 +8,7 @@ use super::actions::Message;
 use super::midi_editor;
 use super::pattern_editor;
 
+#[derive(Debug, Clone)]
 pub struct Component {
     pattern_editor: pattern_editor::Component,
     midi_editor: midi_editor::Component,

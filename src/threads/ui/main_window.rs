@@ -1,29 +1,33 @@
-use iced::advanced::subscription::{Recipe, EventStream};
-use iced::futures::SinkExt;
+use std::hash::Hash;
+use std::sync::{Arc, RwLock};
+
+use iced::advanced::subscription::{EventStream, Recipe};
 use iced::futures::channel::mpsc;
 use iced::futures::stream::BoxStream;
-use std::hash::Hash;
-use iced::widget::{column, Column, row};
-use iced::Length;
-use iced::Element;
+use iced::futures::SinkExt;
 use iced::time;
-use iced::{Subscription, window, Task};
+use iced::widget::{column, row, Column};
+use iced::{Element, Length, Subscription, Task, window};
 use log::{error, info};
-use crate::models::sequences::{Sequence, TSequence, Tick};
-use crate::models::shared::{RegionIdentifier, ProjectData, TrackIdentifier};
-use super::super::engine::{self, PlayerState};
-use super::super::engine::actions::{Actions, SynthActions};
 
+use crate::models::sequences::{Sequence, TSequence, Tick};
+use crate::models::shared::{ProjectData, RegionIdentifier, TrackIdentifier};
+
+use super::super::engine::actions::{Actions, SynthActions};
+use super::super::engine::{self, PlayerState};
 use super::actions::{Message, SynthMessage};
 use super::components;
 use super::composer_window;
 use super::control_bar;
 use super::editor_window;
+use super::file_picker::pick_file;
 use super::main_menu::top_menu_view;
 use super::track_settings;
-use super::file_picker::pick_file;
 
-use std::sync::{Arc, RwLock};
+const DEFAULT_MIDI_OFFSET: u8 = 48; // C3
+const STREAM_CHANNEL_CAPACITY: usize = 100;
+const CONTROL_BAR_HEIGHT: f32 = 50.0;
+const TRACK_SETTINGS_WIDTH: f32 = 100.0;
 
 /// State for an in-progress region drag.
 #[derive(Debug, Clone)]
@@ -100,13 +104,13 @@ impl Default for MainWindow {
             dragging_region: None,
             playhead: 0,
             midi_editor_snap: super::midi_editor::SnapToGrid::Division,
-            midi_editor_offset: 48,
+            midi_editor_offset: DEFAULT_MIDI_OFFSET,
             width: Length::Fill, //600_f32,
             height: Length::Fill, //400_f32,
-            control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(50_f32)),
+            control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(CONTROL_BAR_HEIGHT)),
             composer_window: composer_window::Component::new(Length::Fill, Length::FillPortion(2)),
             editor_window: editor_window::Component::new(Length::Fill, Length::FillPortion(1)),
-            track_settings: track_settings::Component::new(Length::Fixed(100_f32),Length::Fill),            
+            track_settings: track_settings::Component::new(Length::Fixed(TRACK_SETTINGS_WIDTH), Length::Fill),            
         }
     }
 }
@@ -216,7 +220,10 @@ impl MainWindow {
                 // Once we implement save, we should ask the user if they want to save before closing the current file
                 self.send_to_engine_and_handle_errors(Actions::NewFile) 
             },
-            Message::OpenFile => todo!(),
+            Message::OpenFile => {
+                info!("Open file not yet implemented");
+                Task::none()
+            },
             Message::SetPlayhead(tick_position) => {
                 self.playhead = tick_position;
                 if let Ok(mut state) = self.player_state.try_write() {
@@ -426,7 +433,7 @@ impl Recipe for ProjectDataListener {
         let rx = self.receiver;
         
         // We use iced's internal stream channel helper
-        let stream = iced::stream::channel(100, move |mut output: mpsc::Sender<Message>| async move {
+        let stream = iced::stream::channel(STREAM_CHANNEL_CAPACITY, move |mut output: mpsc::Sender<Message>| async move {
             while let Ok(data) = rx.recv_async().await {
                 if output.send(Message::ProjectDataChanged(data)).await.is_err() {
                     break;
@@ -442,6 +449,8 @@ impl Recipe for ProjectDataListener {
 /// Integration Tests
 #[cfg(test)]
 mod integration_tests {
+    const TEST_DEFAULT_NOTE_VELOCITY: u8 = 100;
+    const TEST_DEFAULT_NOTE_LENGTH_TICKS: u32 = 960;
 
     use std::{collections::VecDeque, thread, time::Duration};
 
@@ -701,7 +710,7 @@ mod integration_tests {
 
         fn click_midi_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
             if let Some(region_id) = self.app.selected_region {
-                let midi_note = MidiNote { key: note, velocity: 100, channel: 0, length: 960};
+                let midi_note = MidiNote { key: note, velocity: TEST_DEFAULT_NOTE_VELOCITY, channel: 0, length: TEST_DEFAULT_NOTE_LENGTH_TICKS };
                 let msg = Message::Engine(Actions::CreateMidiNote(region_id, tick, midi_note));
                 let _ = self.app.update(msg);
                 Ok(())

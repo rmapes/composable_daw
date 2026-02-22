@@ -1,20 +1,16 @@
 use std::collections::{BTreeMap, HashSet};
 
 use iced::mouse::{Cursor, ScrollDelta};
+use iced::widget::canvas::{self, Canvas, Frame, Geometry, LineCap, Path, Stroke, Style, Text};
+use iced::widget::{container, pick_list, row, text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
-use super::super::engine::actions::Actions;
+
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
 use crate::models::shared::RegionIdentifier;
 
+use super::super::engine::actions::Actions;
 use super::actions::Message;
-
 use super::components;
-
-use iced::widget::{pick_list, row, text, container};
-
-use iced::widget::canvas::{
-    self, Canvas, Frame, Geometry, Path, Stroke, Text, LineCap, Style,
-};
 
 // 
 // --- CONFIGURATION CONSTANTS ---
@@ -27,6 +23,7 @@ const NOTE_HEIGHT: f32 = 18.0; // Height of one row (MIDI Note)
 const BEAT_WIDTH: f32 = 100.0; // Width of one beat
 
 const DEFAULT_LENGTH: Tick = 960; // TODO: calculate from PPQ
+const DEFAULT_NOTE_VELOCITY: u8 = 100;
 const DRAG_EDGE_SCROLL_THRESHOLD: f32 = 2.0 * NOTE_HEIGHT; // Pixels from top/bottom to trigger auto-scroll
 const DRAG_EDGE_SCROLL_THROTTLE: u8 = 3; // Only scroll every Nth CursorMoved at edge
 
@@ -86,13 +83,13 @@ impl SnapToGrid {
 }
 
 // --- MODEL & STATE ---
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct PendingNote {
     pub start: Tick,
     pub note: MidiNote, // Track the note being dragged
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DraggedNote {
     pub original_start: Tick,
     pub original_note_index: usize,
@@ -532,7 +529,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
 
                             // update internal state
-                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: 100 }});
+                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: DEFAULT_NOTE_VELOCITY }});
                             state.dragged_note = None; // Clear any dragged note
                             state.hovered_resize_edge = None; // Clear hover state
                             // and return message to say all handled
@@ -1109,6 +1106,7 @@ let midi_editor = MidiEditor::view();
 // scrollable::Scrollable::new(midi_editor)
 */
 
+#[derive(Debug, Clone)]
 pub struct Component {
     width: Length,
     height: Length,

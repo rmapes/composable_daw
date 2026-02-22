@@ -15,6 +15,7 @@ use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::{ProjectData, RegionType};
 
+#[derive(Debug)]
 pub struct EngineController {
     tx: mpsc::Sender<actions::Actions>,
     pub data_change_receiver: flume::Receiver<ProjectData>,
@@ -30,6 +31,7 @@ impl EngineController {
 }
 
 
+#[derive(Debug, Clone)]
 pub struct PlayerState {
     pub is_playing: bool,
     pub is_active: bool,
