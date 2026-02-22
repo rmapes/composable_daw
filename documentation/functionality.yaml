@@ -1,0 +1,135 @@
+# Composable DAW — Key Functionality Inventory
+# This file lists all major pieces of functionality for reference and test planning.
+
+transport:
+  - id: play
+    name: Play playback
+    engine_action: Play
+    description: Start playback. The playhead moves along the timeline. Audio is heard if there are playable regions and a working audio output.
+  - id: pause
+    name: Pause playback
+    engine_action: Pause
+    description: Stop playback. The playhead stops moving. Clicking Play again resumes from the current playhead position.
+  - id: go_to_start
+    name: Rewind playhead to start
+    engine_action: GoToStart (local)
+    description: Rewind the playhead to the start of the timeline.
+  - id: playhead
+    name: Playhead position (updates during playback via Tick)
+    description: The playhead position updates automatically during playback. You can also set it by clicking on the timeline ruler in the composer.
+
+project:
+  - id: new_file
+    name: New project / clear project
+    engine_action: NewFile
+    description: Create a new project. The current project is cleared. Effectively resets the project to a new empty state.
+  - id: open_file
+    name: Open file
+    engine_action: OpenFile
+    note: "Not yet implemented (todo)"
+    description: Open a file. The current project is replaced with the contents of the file.
+
+tracks:
+  - id: add_track
+    name: Add a new track
+    engine_action: AddTrack
+    description: Add a new track to the project. The new track is added to the end of the track list.
+  - id: select_track
+    name: Select a track (for editing and region operations)
+    ui_message: SelectTrack(TrackIdentifier)
+    description: Select a track for editing and region operations. The track settings panel on the left shows the channel strip for the selected track.
+  - id: track_settings_panel
+    name: Track settings panel (channel strip) for selected track
+    description: The track settings panel on the left shows the channel strip for the selected track.
+
+regions:
+  - id: add_region_at_playhead
+    name: Add region at current playhead (Pattern or Midi)
+    engine_action: AddRegionAt(TrackIdentifier, Tick, RegionType)
+    region_types: [Pattern, Midi]
+    description: Add a new region at the current playhead position. The region is added to the selected track.
+  - id: select_region
+    name: Select a region (click on region in composer)
+    ui_message: SelectRegion / RegionClick
+    description: Select a region for editing and region operations. The editor area shows the Pattern editor or MIDI editor for the selected region. Clicking on an empty area deselects the region.
+  - id: move_region
+    name: Move region (drag and drop to new track or time)
+    engine_action: MoveRegion(RegionIdentifier, TrackIdentifier, Tick)
+    description: Move a region to a new track and/or time. The region is moved to the new track and/or time.
+  - id: delete_region
+    name: Delete selected region
+    engine_action: DeleteRegion(RegionIdentifier)
+    description: Delete the selected region. The region is removed from the project.
+  - id: set_playhead
+    name: Set playhead position (e.g. click on ruler)
+    ui_message: SetPlayhead(Tick)
+    description: Set the playhead position to a specific time. The playhead moves to the new position.
+composer:
+  - id: timeline_view
+    name: Timeline with ruler, tracks, and regions
+    description: The timeline shows the timeline ruler and track lanes with regions. The timeline ruler shows the time in bars/beats. The track lanes show the tracks in the project. The regions are displayed as blocks in the track lanes.
+  - id: track_list
+    name: List of tracks with region blocks
+    description: The track list shows the tracks in the project. The track lanes show the tracks in the project. The regions are displayed as blocks in the track lanes.
+  - id: region_drag
+    name: Region drag (StartRegionDrag, UpdateRegionDrag, EndRegionDrag, CancelRegionDrag)
+    description: Drag a region to a new track and/or time. The region is moved to the new track and/or time.
+  - id: deselect_regions
+    name: Deselect all regions
+    ui_message: DeselectAllRegions
+    description: Clicking on an empty area deselects the region.
+
+editor:
+  - id: editor_switching
+    name: Editor area shows Pattern editor or Midi editor based on selected region type
+  - id: pattern_editor
+    description: The pattern editor shows the step grid for the selected Pattern region. The step grid shows the steps in the pattern. The steps are displayed as squares in the step grid.
+    name: Pattern editor (step grid for selected Pattern region)
+  - id: midi_editor
+    name: Midi editor (piano roll for selected Midi region)
+    description: The MIDI editor shows the piano roll for the selected Midi region. The piano roll shows the notes in the MIDI region. The notes are displayed as dots in the piano roll.
+
+pattern_editor:
+  - id: pattern_toggle_note
+    name: Toggle step on/off in pattern grid
+    engine_action: PatternClickNote(PatternNoteIdentifier)
+    description: Clicking on a step in the pattern grid toggles the step on or off. The step is toggled between on and off.
+
+midi_editor:
+  - id: create_midi_note
+    name: Create MIDI note (draw in grid or equivalent)
+    engine_action: CreateMidiNote(RegionIdentifier, Tick, MidiNote)
+    description: Clicking and dragging in the MIDI grid creates a new note at the chosen time and pitch. The note is added to the MIDI region.
+  - id: update_midi_note
+    name: Update MIDI note (move or resize)
+    engine_action: UpdateMidiNote(RegionIdentifier, Tick, usize, Tick, MidiNote)
+    description: Dragging a note in the MIDI grid moves the note to the new time. The note is moved to the new time.
+  - id: delete_midi_notes
+    name: Delete selected MIDI notes (Backspace)
+    engine_action: DeleteMultipleMidiNotes(RegionIdentifier, Vec<(Tick, usize)>)
+    description: Pressing Backspace deletes the selected MIDI notes. The notes are removed from the MIDI region.
+  - id: select_midi_notes
+    name: Select one or more MIDI notes (click, shift-click)
+    description: Clicking on a note in the MIDI grid selects the note. Shift-clicking on a note adds the note to the selection. Multiple notes can be selected.
+  - id: set_snap_to_grid
+    name: Set snap-to-grid (None, Division, Beat, Bar)
+    ui_message: MidiEditor(SetSnapToGrid(SnapToGrid))
+    description: Setting the snap-to-grid to None, Division, Beat, or Bar controls how note start/end and movement snap to the grid.
+  - id: scroll_pitch
+    name: Scroll pitch view (Page Up/Down, mouse wheel)
+    ui_message: MidiEditor(ScrollPitch(i16))
+    description: Scrolling the pitch view in the MIDI grid scrolls the view to show higher pitches (Page Up) and lower pitches (Page Down). The notes remain correct.
+
+synth_track_settings:
+  - id: select_soundfont
+    name: Choose SoundFont file for track
+    engine_action: Synth(SetSoundFont(TrackIdentifier, Option<PathBuf>))
+    description: Clicking the SoundFont button in the track settings panel opens a file picker and allows the user to choose a SoundFont file. The SoundFont file is loaded and used for the selected track.
+  - id: set_bank
+    name: Set synth bank (0–127)
+    engine_action: Synth(SetBank(TrackIdentifier, u32))
+    description: Setting the synth bank to a value between 0 and 127 selects the bank for the selected track. The bank is used for the selected track.
+  - id: set_program
+    name: Set synth program (0–127)
+    engine_action: Synth(SetProgram(TrackIdentifier, u8))
+    description: Setting the synth program to a value between 0 and 127 selects the program for the selected track. The program is used for the selected track.
