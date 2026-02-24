@@ -6,7 +6,7 @@ use iced::futures::channel::mpsc;
 use iced::futures::stream::BoxStream;
 use iced::futures::SinkExt;
 use iced::time;
-use iced::widget::{column, row, Column};
+use iced::widget::{column, row, stack, text, Column, Container, Space};
 use iced::{Element, Length, Subscription, Task, window};
 use log::{error, info};
 
@@ -343,42 +343,70 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
         }
     }
     pub fn view(&self) ->Element<'_, Message> {
-        let content: Column<'_, Message> = {
-            let selected_track = if self.selected_track < self.data.tracks.len() {
-                &self.data.tracks[self.selected_track]
-            } else {
-                // If selected_track is out of bounds, default to first track
-                &self.data.tracks[0]
-            }; 
-            let selected_region: Option<&Sequence> = self.selected_region
-                .and_then(|selection| self.data.tracks[selection.track_id.track_id].midi.as_ref()
-                    .and_then(|sequence| sequence.sequences.get(&selection.region_id)));
-            column![
-                top_menu_view(),
-                self.control_bar.view(),
-                // Replace the following row and column layout with https://github.com/iced-rs/iced/blob/master/examples/pane_grid/README.md
-                row![
-                    components::module_slot(
-                        self.track_settings.view(selected_track)
-                    ).width(Length::Shrink), // Shrink to fit channel strips
-                    column![
-                        components::module_slot(
-                            self.composer_window.view(
-                                &self.data.tracks,
-                                self.selected_track,
-                                self.data.ppq,
-                                self.playhead,
-                                self.dragging_region.as_ref(),
-                            ),
-                        ),
-                        components::module_slot(
-                            self.editor_window.view(selected_region, self.midi_editor_snap, self.midi_editor_offset)
-                        ),
-                    ]
-                ]
-            ].width(self.width).height(self.height)
+        let is_audio_initialized = self
+            .player_state
+            .try_read()
+            .map(|s| s.is_audio_initialized)
+            .unwrap_or(false);
+
+        let selected_track = if self.selected_track < self.data.tracks.len() {
+            &self.data.tracks[self.selected_track]
+        } else {
+            &self.data.tracks[0]
         };
-        components::rack(content.into()).into()
+        let selected_region: Option<&Sequence> = self
+            .selected_region
+            .and_then(|selection| {
+                self.data.tracks[selection.track_id.track_id]
+                    .midi
+                    .as_ref()
+                    .and_then(|sequence| sequence.sequences.get(&selection.region_id))
+            });
+
+        let main_content: Column<'_, Message> = column![
+            top_menu_view(),
+            self.control_bar.view(),
+            row![
+                components::module_slot(self.track_settings.view(selected_track))
+                    .width(Length::Shrink),
+                column![
+                    components::module_slot(
+                        self.composer_window.view(
+                            &self.data.tracks,
+                            self.selected_track,
+                            self.data.ppq,
+                            self.playhead,
+                            self.dragging_region.as_ref(),
+                        ),
+                    ),
+                    components::module_slot(
+                        self.editor_window
+                            .view(selected_region, self.midi_editor_snap, self.midi_editor_offset),
+                    ),
+                ]
+            ]
+        ]
+        .width(self.width)
+        .height(self.height);
+
+        let toast_layer: Element<'_, Message> = if is_audio_initialized {
+            Space::new().into()
+        } else {
+            Container::new(
+                Container::new(text("Audio Initializing"))
+                    .padding(8)
+                    .style(super::style::module_slot),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(16)
+            .align_x(iced::alignment::Horizontal::Right)
+            .align_y(iced::alignment::Vertical::Top)
+            .into()
+        };
+
+        let stacked = stack![main_content, toast_layer];
+        components::rack(stacked.into()).into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {

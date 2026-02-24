@@ -1,0 +1,138 @@
+---
+description: Architecture for audio sources, busses and general processing
+alwaysApply: true
+---
+
+# Overall approach
+
+Audio output consists of a pipeline from multiple sources of audio and midi data, which pass
+through various processors and merge points (busses) to form a single stream of audio data
+(the output buss) which is then piped to the computer audio output.
+
+Sources of audio may be external inputs, tracks containing audio data, or audio generators, which themselves may be fed from midi sources.
+In addition, both audio and midi may pass through transformers, which take the inputs and apply processing to create a new output stream. For audio, these transformers are FX units.
+
+Finally, the stream may include monitors, which convert the stream into information to be displayed in the ui in real time (e.g. a VU meter).
+
+# Components
+
+## Input Buss
+
+An external input. May act as an input to a track. Can be either midi or audio
+
+## Track Data
+
+Track data represent a source of midi or audio data.
+Note, Track Data is a component of a Track. A track is not a component but a configuration container, which may also include configuration an input buss, FX chains, FX loops and other elements before feeding into a buss.
+
+## Regions
+
+Regions contain either audio or midi data. They are part of track data.
+
+## Instruments
+
+Instruments take a source of midi and convert it to an audio
+
+## Busses
+
+Busses represent a merge point for multiple audio sources. They have a single audio output which may, itself, feed into another buss.
+
+## Splitters
+
+Splitters take an audio input and split it into two or more outputs. This is usually used to create an FX Loop from a track.
+
+## Audio FX
+
+Audio FX take an audio input and apply processing. This can include distortion, reverb, or more complex effects.
+
+## Midi FX
+
+Midi FX take a midi output and apply processing. E.g. transposing
+
+# Traits
+
+All the above exhibit some of the following behaviours
+
+## Midi Source
+
+A source of midi data
+
+## Audio source
+
+A source of midi data
+
+## Midi Generator
+
+A Midi Source with no midi input
+
+## Midi Consumer
+
+Receives a midi input and does something with it
+
+## Midi Processor
+
+A Midi Source with a midi input
+
+## Audio Generator
+
+An Audio Source with no audio input (but may have a midi input)
+
+## Audio Processor
+
+An Audio Source with an audio input
+
+# Component to trait mapping
+
+- Audio Track Data
+  - Audio Source
+    - Audio Generator
+
+- Midi Track Data
+  - Midi Source
+    - Midi Generator
+
+- Midi Input Buss
+  - Midi Source
+
+- Audio Input Buss
+  - Audio Source
+
+- Instrument
+  - Audio Source
+    - Midi Consumer
+    - Audio Generator
+
+- Audio FX
+  - Audio Source
+    - Audio Processor
+
+- Midi FX
+  - Midi Source
+    - Midi Processor
+
+- Buss
+  - Audio Source
+  - Audio Consumer
+
+- Splitter
+  - Audio Source
+  - Audio Consumer
+
+# Configuration in engine vs audio configuration
+
+The configuration of the audio pipeline (i.e. tracks, regions, buss routing, FX, instruments etc.) is stored in the engine and displayed in the UI. It is this data which is stored when the project is saved to a file, and restored when loading from a file.
+
+The audio configuration is derived from the configuration in the engine (the project config), and represents the actual pipeline the will feed the audio out (cpal on the mac).
+The audio configuration should be set up when a file is loaded, or a new project is created, and kept in sync with the project config.
+The audio configuration must be able to generate audio output with no setup delay, either when the play button is pressed, or when monitoring an input buss, or when previewing a note in the editor.
+
+# Thread handling
+
+While audio output is being generated, this pipeline must operate in real time. There, we do not want it to be blocked by mutex locks, RWLock locks, or memory allocation. Therefore we expect:
+
+- the audio pipeline to be on a separate thread, or threads, from the ui and engine threads
+- we should minimise the number of separate threads within an audio pipeline to minimise cross thread communication
+- where separate threads must be maintained we will communicate by one of the following methods:
+  - audio threads where an input pipeline on one thread terminates in a buss feeding into an downstream thread as an audio source, will use a RingBuffer to pass the buss output on the input thread to the audio source on the downstream thread.
+    - a clock will trigger the buss to keep the RingBuffer full, pulling data from its pipeline to do so. We expect this data pull to be recursive up the pipeline, so that all components within the thread supply data on demand.
+  - midi threads where the input midi thread terminates in an instrument connecting to an audio thread will convert midi event streams into messages to the instrument. The instrument should handle being able to update its state in response to messages from the midi thread, while simultaneously being able to generate audio output on demand when the audio thread does a data pull

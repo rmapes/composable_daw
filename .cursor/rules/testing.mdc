@@ -7,6 +7,7 @@ alwaysApply: false
 # Testing
 
 ## Unit Tests
+
 - `#[cfg(test)] mod tests` in same file as implementation
 - `use super::*` and `use crate::...` for imports
 
@@ -22,10 +23,14 @@ mod tests {
 ```
 
 ## Integration Tests (UI)
+
 - Emulator pattern: struct holding `&mut MainWindow`, helper methods (`click`, `click_menu_item`, `tracks_present`)
 - Use `iced_test` simulator for `find`, `click`, `into_messages`
 - Handle async engine updates: `thread::sleep` + `data_change_receiver.try_recv` in `process_messages`
 
 ## Test Helpers
+
 - `assert_approx_eq!` macro for float comparisons in audio tests
 - Mock implementations (e.g., `MockInput` impl `Output`) for audio pipeline tests
+- Mocks should be used to replace any component that would have side effects (e.g. databases or file systems), and must emulate the component they are replacing sufficiently that the test sees the same inputs and outputs as it would with a real world component, while avoiding the side effects.
+- Mocks may also be used to test real world IO behaviour that would otherwise require a human to judge success (e.g. audio output)

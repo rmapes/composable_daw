@@ -2,18 +2,47 @@ pub mod actions;
 mod synth;
 mod sources;
 
+use std::collections::HashMap;
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::mpsc::SendError;
 use std::sync::{mpsc, Arc, RwLock};
 use std::thread;
+use std::time::Duration;
 
 use log::{error, info};
 
 use actions::SynthActions;
-use sources::AudioSources;
+use sources::{AudioSources, MidiSendersMap};
 use super::audio;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
-use crate::models::shared::{ProjectData, RegionType};
+use crate::models::sequences::MidiNote;
+use crate::models::shared::{ProjectData, RegionType, TrackIdentifier};
+
+use synth::MidiInputMessage;
+
+fn spawn_preview_thread(
+    preview_rx: flume::Receiver<PreviewRequest>,
+    midi_senders: MidiSendersMap,
+) {
+    thread::spawn(move || {
+        while let Ok((track_id, note, duration_ms)) = preview_rx.recv() {
+            let Some(tx) = midi_senders.read().ok().and_then(|g| g.get(&track_id).cloned()) else {
+                continue;
+            };
+            let _ = tx.send(MidiInputMessage::MidiEvent(oxisynth::MidiEvent::NoteOn {
+                channel: note.channel,
+                key: note.key,
+                vel: note.velocity,
+            }));
+            thread::sleep(Duration::from_millis(duration_ms as u64));
+            let _ = tx.send(MidiInputMessage::MidiEvent(oxisynth::MidiEvent::NoteOff {
+                channel: note.channel,
+                key: note.key,
+            }));
+        }
+    });
+}
 
 #[derive(Debug)]
 pub struct EngineController {
@@ -90,46 +119,65 @@ enum ActionFollowUp {
     Exit,
 }
 
-const ALWAYS_PLAY_FROM_START: bool  = false;
-pub fn start<F>(observer_callback: F, project_ref: &ProjectData) -> (EngineController, Arc<RwLock<PlayerState>>) 
-where 
-    F: Fn(&PlayerState) + Send + Sync + 'static {
+const ALWAYS_PLAY_FROM_START: bool = false;
+const PREVIEW_DURATION_MS_ONE_BEAT: u32 = 500;
+const ENGINE_FILL_TIMEOUT_MS: u64 = 5;
+
+/// Request for the preview thread: play this note on this track for this many milliseconds.
+pub type PreviewRequest = (TrackIdentifier, MidiNote, u32);
+
+pub fn start<F>(observer_callback: F, project_ref: &ProjectData) -> (EngineController, Arc<RwLock<PlayerState>>)
+where
+    F: Fn(&PlayerState) + Send + Sync + 'static,
+{
     let (tx, rx) = mpsc::channel::<actions::Actions>();
     let (data_change_sender, data_change_receiver) = flume::unbounded();
     let player_state = Arc::new(RwLock::new(PlayerState::new()));
+    let midi_senders: MidiSendersMap = Arc::new(RwLock::new(HashMap::new()));
+    let (preview_tx, preview_rx) = flume::unbounded::<PreviewRequest>();
 
     let observer = StateObserver::new(observer_callback, Arc::clone(&player_state));
 
-
-
     thread::spawn({
-    info!("Starting main engine thread");
-    let tx = tx.clone();
-    let player_state = player_state.clone();
-    let mut project = project_ref.clone();
-    move || {
-        // Try to initialize audio, but continue without it if initialization fails (e.g., in tests)
-        let (audio, stereo_output) = match audio::init_audio(&tx.clone()) {
-            Ok((audio, stereo_output)) => {
-                if let Ok(mut state) = player_state.write() {
-                    state.is_audio_initialized = true;
+        info!("Starting main engine thread");
+        let tx = tx.clone();
+        let player_state = player_state.clone();
+        let midi_senders = Arc::clone(&midi_senders);
+        let mut project = project_ref.clone();
+        move || {
+            let (audio, stereo_output) = match audio::init_audio(&tx.clone()) {
+                Ok((audio, stereo_output)) => {
+                    if let Ok(mut state) = player_state.write() {
+                        state.is_audio_initialized = true;
+                    }
+                    (audio, stereo_output)
                 }
-                (audio, stereo_output)
-            }
-            Err(e) => {
-                error!("Failed to initialize audio: {}. Continuing without audio output.", e);
-                // Create dummy audio engine with default sample rate
-                let dummy_audio = audio::AudioEngine::dummy(44100);
-                let (_consumer, dummy_stereo_output) = audio::stereo_output::StereoOutputController::new();
-                if let Ok(mut state) = player_state.write() {
-                    state.sample_rate = 44100;
-                    state.is_audio_initialized = false;
+                Err(e) => {
+                    error!("Failed to initialize audio: {}. Continuing without audio output.", e);
+                    let dummy_audio = audio::AudioEngine::dummy(44100);
+                    let (_consumer, dummy_stereo_output) = audio::stereo_output::StereoOutputController::new();
+                    if let Ok(mut state) = player_state.write() {
+                        state.sample_rate = 44100;
+                        state.is_audio_initialized = false;
+                    }
+                    (dummy_audio, dummy_stereo_output)
                 }
-                (dummy_audio, dummy_stereo_output)
-            }
-        };
-        let mut audio_sources = AudioSources::new(audio, stereo_output, &project.tracks);
-        while let Ok(received) = rx.recv() {
+            };
+            let mut audio_sources = AudioSources::new(audio, stereo_output, &project.tracks, Arc::clone(&midi_senders));
+            spawn_preview_thread(preview_rx, Arc::clone(&midi_senders));
+            let fill_timeout = Duration::from_millis(ENGINE_FILL_TIMEOUT_MS);
+            loop {
+                let received = match rx.recv_timeout(fill_timeout) {
+                    Ok(a) => a,
+                    Err(RecvTimeoutError::Timeout) => {
+                        if audio_sources.has_buffer_capacity() {
+                            let playhead = player_state.read().map(|s| s.playhead).unwrap_or(0);
+                            audio_sources.on_tick(playhead);
+                        }
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
+                };
             let follow_up = match received {
                 actions::Actions::Play => {
                     info!("Playing audio");
@@ -238,21 +286,53 @@ where
                 },
                 // Pattern
                 actions::Actions::PatternClickNote(note_identifier) => {
-                    // toggle note on in pattern
                     let track = project.get_track_by_id(&note_identifier.region_id.track_id);
                     track
-                    .get_pattern_by_id(&note_identifier.region_id)
-                    .toggle_on(note_identifier.beat_num, note_identifier.note_num);
+                        .get_pattern_by_id(&note_identifier.region_id)
+                        .toggle_on(note_identifier.beat_num, note_identifier.note_num);
                     if let Err(e) = audio_sources.update_track(track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
+                        const DEFAULT_NOTE_VALUES: [u8; 8] = [72, 71, 69, 67, 65, 64, 62, 60];
+                        let key = DEFAULT_NOTE_VALUES
+                            .get(note_identifier.note_num as usize)
+                            .copied()
+                            .unwrap_or(60);
+                        let note = MidiNote {
+                            channel: 0,
+                            key,
+                            velocity: 100,
+                            length: 0,
+                        };
+                        let _ = preview_tx.send((
+                            note_identifier.region_id.track_id,
+                            note,
+                            PREVIEW_DURATION_MS_ONE_BEAT,
+                        ));
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },
-                 // Midi Sequence
+                actions::Actions::PreviewMidiNote(track_id, note) => {
+                    let _ = preview_tx.send((track_id, note, PREVIEW_DURATION_MS_ONE_BEAT));
+                    ActionFollowUp::Continue
+                },
+                actions::Actions::PreviewPatternNote(track_id, note_num, _beat_num) => {
+                    const DEFAULT_NOTE_VALUES: [u8; 8] = [72, 71, 69, 67, 65, 64, 62, 60];
+                    let key = DEFAULT_NOTE_VALUES
+                        .get(note_num as usize)
+                        .copied()
+                        .unwrap_or(60);
+                    let note = MidiNote {
+                        channel: 0,
+                        key,
+                        velocity: 100,
+                        length: 0,
+                    };
+                    let _ = preview_tx.send((track_id, note, PREVIEW_DURATION_MS_ONE_BEAT));
+                    ActionFollowUp::Continue
+                },
                 actions::Actions::CreateMidiNote(region_identifier, start, note) => {
-                    //Get pattern and add note
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);
                     region.add_note(start, note);
@@ -260,6 +340,11 @@ where
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
+                        let _ = preview_tx.send((
+                            region_identifier.track_id,
+                            note,
+                            PREVIEW_DURATION_MS_ONE_BEAT,
+                        ));
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },

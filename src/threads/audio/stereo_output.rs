@@ -22,4 +22,8 @@ impl StereoOutputController {
         }
     }
 
+    /// True if the ring buffer has space for another buffer (engine uses this to keep buffer full).
+    pub fn has_capacity(&self) -> bool {
+        self.producer.has_capacity()
+    }
 }

@@ -1,35 +1,49 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use log::info;
 
-use super::synth::TrackSynth;
+use super::synth::{MidiInputMessage, TrackSynth};
 use super::audio::{AudioEngine, stereo_output::StereoOutputController, buss::Buss, interfaces::Output};
 use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 use crate::models::sequences::{EventStreamSource, Tick};
 
+/// Shared map of per-track MIDI senders so the preview thread can inject note_on/note_off.
+pub type MidiSendersMap = Arc<RwLock<HashMap<TrackIdentifier, flume::Sender<MidiInputMessage>>>>;
+
 /**
- * Manages audio sources (synths) in the engine thread
- * All synths and busses live in the same thread
+ * Manages audio sources (synths) in the engine thread.
+ * Each synth receives MIDI via a channel (region ticks + preview/raw events).
  */
 pub struct AudioSources {
     audio: AudioEngine,
     stereo_output: StereoOutputController,
     final_buss: Buss,
     tracks: HashMap<TrackIdentifier, Rc<RefCell<TrackSynth>>>,
+    midi_senders: MidiSendersMap,
 }
 
 impl AudioSources {
-    pub fn new(audio: AudioEngine, stereo_output: StereoOutputController, tracks: &Vec<Track>) -> Self {
+    pub fn new(
+        audio: AudioEngine,
+        stereo_output: StereoOutputController,
+        tracks: &Vec<Track>,
+        midi_senders: MidiSendersMap,
+    ) -> Self {
         info!("Creating new Audio Source Controller with {} tracks", tracks.len());
         let mut this = Self {
             audio,
             stereo_output,
             final_buss: Buss::new(),
             tracks: HashMap::new(),
+            midi_senders,
         };
-        for track in tracks { let _ = this.add_track(track); }
+        for track in tracks {
+            let _ = this.add_track(track);
+        }
         this
     }
 
@@ -38,16 +52,20 @@ impl AudioSources {
         match &track.instrument.kind {
             Instrument::Synth(instrument) => {
                 if let Some(seq) = &track.midi {
+                    let (midi_tx, midi_rx) = flume::unbounded();
                     let track_synth = TrackSynth::new(
-                            track.id,
-                            seq, 
-                            self.audio.sample_rate, 
-                            &instrument.get_soundfont_path(), 
-                            instrument.bank, 
-                            instrument.program
-                        );
+                        track.id,
+                        seq,
+                        self.audio.sample_rate,
+                        &instrument.get_soundfont_path(),
+                        instrument.bank,
+                        instrument.program,
+                        midi_rx,
+                    );
+                    if let Ok(mut senders) = self.midi_senders.write() {
+                        senders.insert(track.id, midi_tx);
+                    }
                     let track_synth_rc = Rc::new(RefCell::new(track_synth));
-                    // Add TrackSynth (which implements Output) to final buss via a wrapper
                     let wrapper = Rc::clone(&track_synth_rc);
                     self.final_buss.add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
                     self.tracks.insert(track.id, track_synth_rc);
@@ -72,16 +90,20 @@ impl AudioSources {
         }
     }
 
-    /// Process a tick: update all synths and populate ring buffer if capacity available
+    /// Process a tick: send RegionTick to each track's MIDI input, then fill ring buffer.
+    /// Synths drain their MIDI channel (region + preview events) when generating audio.
     pub fn on_tick(&mut self, tick: Tick) {
-        // Process events for all synths
-        for track_synth in self.tracks.values() {
-            if let Err(e) = track_synth.borrow_mut().process_tick(tick) {
-                log::error!("Error processing tick for track {}: {}", track_synth.borrow().id.track_id, e);
+        if let Ok(senders) = self.midi_senders.read() {
+            for (_track_id, tx) in senders.iter() {
+                let _ = tx.send(MidiInputMessage::RegionTick(tick));
             }
         }
-        // Populate ring buffer from final buss if capacity available
         self.stereo_output.on_tick(&mut self.final_buss);
+    }
+
+    /// True if the ring buffer has capacity so the engine can fill it (for playback and preview).
+    pub fn has_buffer_capacity(&self) -> bool {
+        self.stereo_output.has_capacity()
     }
 
     /// Check if playback should stop (all event streams have been processed past their last note off)

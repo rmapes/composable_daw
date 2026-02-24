@@ -7,12 +7,21 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-
 use super::actions::SynthActions;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use crate::models::shared::TrackIdentifier;
 use super::audio::interfaces::Output;
+
+/// MIDI input to an instrument: from region playback (tick) or from preview/raw input (event).
+/// The instrument (synth) is a single consumer of MIDI from multiple sources.
+#[derive(Clone)]
+pub enum MidiInputMessage {
+    /// Region playback: process events at this tick from the track's event stream.
+    RegionTick(Tick),
+    /// Direct MIDI event (preview, future: raw MIDI input buss).
+    MidiEvent(oxisynth::MidiEvent),
+}
 
 
 // pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
@@ -98,11 +107,13 @@ pub struct TrackThread {
 	program_id: u8,
 }
 
-/// A synth that lives in the engine thread (no separate thread)
+/// Instrument (synth) that receives MIDI from region playback, preview service, or (future) raw MIDI input.
+/// Lives in the engine thread; MIDI is delivered via a channel so preview can run on another thread.
 pub struct TrackSynth {
 	pub id: TrackIdentifier,
-    synth: Box<dyn Output>, // This will actually be a Synth type which we downcast later
-    event_stream: EventStream,
+	synth: Box<dyn Output>,
+	event_stream: EventStream,
+	midi_receiver: flume::Receiver<MidiInputMessage>,
 	soundfont_id: SoundFontId,
 	bank_id: u32,
 	program_id: u8,
@@ -118,19 +129,54 @@ impl Output for TrackSynth {
 		roff: usize, 
 		rincr: usize,
 	) {
+		self.process_midi_input();
 		self.synth.write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
 	}
 }
 
 impl TrackSynth {
-	pub fn new<P: AsRef<Path> + ?Sized + ToString>(id: TrackIdentifier, seq: &dyn EventStreamSource, sample_rate: u32, soundfont: &P, bank: u32, program: u8) -> Self {
+	pub fn new<P: AsRef<Path> + ?Sized + ToString>(
+		id: TrackIdentifier,
+		seq: &dyn EventStreamSource,
+		sample_rate: u32,
+		soundfont: &P,
+		bank: u32,
+		program: u8,
+		midi_receiver: flume::Receiver<MidiInputMessage>,
+	) -> Self {
 		let bank_id = bank;
 		let program_id = program;
 		let (mut synth, soundfont_id) = create_synth(soundfont, bank, program).expect("Couldn't create synth");
 		synth.set_sample_rate(sample_rate as f32);
 		let synth: Box<dyn Output> = Box::new(synth);
 		let event_stream = seq.to_event_stream();
-		Self { id, synth, soundfont_id, event_stream, bank_id, program_id }
+		Self {
+			id,
+			synth,
+			event_stream,
+			midi_receiver,
+			soundfont_id,
+			bank_id,
+			program_id,
+		}
+	}
+
+	/// Drain MIDI input (region ticks and preview/raw events) and apply to the synth.
+	fn process_midi_input(&mut self) {
+		while let Ok(msg) = self.midi_receiver.try_recv() {
+			match msg {
+				MidiInputMessage::RegionTick(tick) => {
+					if tick <= self.event_stream.get_length_in_ticks() {
+						let _ = on_tick_direct(tick, &mut self.synth, &self.event_stream);
+					}
+				}
+				MidiInputMessage::MidiEvent(ev) => {
+					if let Some(s) = self.synth.as_any_mut().downcast_mut::<Synth>() {
+						let _ = s.send_event(ev);
+					}
+				}
+			}
+		}
 	}
 
 	pub fn process_tick(&mut self, tick: Tick) -> Result<(), Box<dyn Error>> {

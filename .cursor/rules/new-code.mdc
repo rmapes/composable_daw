@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+---
+
+Requests to alter code can take one of the following forms:
+
+- Refactor:
+  - Change code to make it cleaner, eliminate lint errors, or to make later extension easier
+  - Should not introduce any new functionality or remove existing functionality
+  - All tests should remain green after refactoring. Tests should only be altered to comply with new names or code structures in the main code
+- Bug fix
+  - Fix an issue supplied with the request
+  - All tests should be green before code is altered, unless specifically mentioned as being part of the bug
+  - A new test should be introduced to test the bug, which should fail prior to fixing it.
+  - The task is complete when changes are introduced to the main code which cause the new test to pass
+- New functionality
+  - Ideally, a description for the new functionality should exist in functionality.yaml. If one doesn't exist, confirm this is intended and interactively work with the user to create a new entry
+  - As well as code to implement the new functionality, a test plan should be added to TEST_SPECIFICATION, and a test implemented which should fail before the code is added, and succeed after it is added.
+  - The USER_GUIDE.md should also be upated to include the new functionality
+- Restructure
+  - Restructure the code base to prepare for new functionality. The changes will not be directly user facing, but will cause changes in functionality that the user may not be aware of, e.g. changing the point at which the audio engine is initialised.
+  - All tests should pass after the restructure
+
+If unsure which of the above is being requested, ask. If none of the above, act appropriately
