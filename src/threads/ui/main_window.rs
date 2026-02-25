@@ -49,7 +49,7 @@ pub struct MainWindow {
     // Core application data and engine
     engine: engine::EngineController,
     player_state: Arc<RwLock<PlayerState>>,
-    data: ProjectData,
+    project_data: ProjectData,
 
     // Mutable state
     selected_track: usize,
@@ -81,10 +81,11 @@ impl std::hash::Hash for MainWindow {
 /// Initial state on startup
 /// All project state is stored in data and managed by the engine. It is this data that is saved and loaded
 /// All UI state is stored in the ui thread and not persisted between sessions. If needed by engine it is passed as command parameters
+/// Player state (i.e. the ephemeral state of the player, such as playhead position, or audio data for visual display ) is passed via the player_state object.
 /// NOT YET IMPLEMENTED: All permanent settings are stored in a settings object and autosaved in the background 
 impl Default for MainWindow {
     fn default() -> Self {
-        let data = ProjectData::new();
+        let project_data = ProjectData::new();
         let (engine, player_state) = {
             let (engine, player_state) = engine::start(
             {
@@ -94,7 +95,7 @@ impl Default for MainWindow {
                 }
             },
             
-            &data
+            &project_data
             );
             (engine, player_state)
         };
@@ -103,7 +104,7 @@ impl Default for MainWindow {
         Self {
             engine,
             player_state,
-            data,
+            project_data,
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             dragging_region: None,
@@ -125,6 +126,8 @@ impl MainWindow {
     /// Actions triggered by UI components. Look for main handlers here
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
+            //////////////////
+            /// System Window Events eg close requested
             Message::WindowEvent(event) => match event {
                 window::Event::CloseRequested => {
                     self.shutdown();
@@ -132,9 +135,41 @@ impl MainWindow {
                 }
                 _ => Task::none(),
             }
+            //////////////////
+            /// Engine Actions to be handled on engine thread
             Message::Engine(action) => { 
                 self.send_to_engine_and_handle_errors(action) 
             }
+            //////////////////
+            /// Responses to events from other threads
+            Message::ProjectDataChanged(project_data) => {
+                self.project_data = project_data;
+                Task::none()
+            }
+            Message::Tick => {
+                if let Ok(state) = self.player_state.try_read() 
+                    && state.is_playing {
+                    self.playhead = state.playhead;
+                }
+                Task::none()
+            },
+            //////////////////
+            /// Actions to be handled by pluggable components e.g Synth.
+            Message::Synth(synth_message) => match synth_message {
+                SynthMessage::SelectSoundFont(track_id) => {
+                    Task::perform(
+                        pick_file(track_id, "./soundfonts"), 
+                        |(track_id, path)| { 
+                            Message::Synth(SynthMessage::SetSoundFont(track_id, path)) 
+                        }
+                    )
+                }
+                SynthMessage::SetSoundFont(track_id, path) => {
+                    self.send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(track_id, path)))
+                }
+            },
+            //////////////////
+            /// UI Actions
             Message::GoToStart => {
                 if let Ok(mut state) = self.player_state.try_write() {
                     state.playhead = 0;
@@ -156,15 +191,15 @@ impl MainWindow {
                 Task::none()
             }
             Message::StartRegionDrag(region_id, initial_x, initial_y, current_x, current_y) => {
-                if let Some(length) = Self::get_region_length(&self.data, &region_id) {
+                if let Some(length) = Self::get_region_length(&self.project_data, &region_id) {
                     self.selected_region = Some(region_id);
                     let track_idx = region_id.track_id.track_id;
                     let initial_tick = region_id.region_id;
-                    let current_track = Self::y_to_track_index(current_y).unwrap_or(track_idx).min(self.data.tracks.len().saturating_sub(1));
-                    let length_per_tick = Self::length_per_tick(self.data.ppq);
+                    let current_track = Self::y_to_track_index(current_y).unwrap_or(track_idx).min(self.project_data.tracks.len().saturating_sub(1));
+                    let length_per_tick = Self::length_per_tick(self.project_data.ppq);
                     let delta_x = current_x - initial_x;
                     let current_tick = (initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
-                    let is_valid = Self::check_drop_valid(&self.data, region_id, track_idx, initial_tick, length, current_track, current_tick);
+                    let is_valid = Self::check_drop_valid(&self.project_data, region_id, track_idx, initial_tick, length, current_track, current_tick);
                     self.dragging_region = Some(DragState {
                         region_id,
                         region_length: length,
@@ -180,14 +215,14 @@ impl MainWindow {
             }
             Message::UpdateRegionDrag(mouse_x, mouse_y) => {
                 if let Some(ref mut drag) = self.dragging_region {
-                    let length_per_tick = Self::length_per_tick(self.data.ppq);
+                    let length_per_tick = Self::length_per_tick(self.project_data.ppq);
                     let delta_x = mouse_x - drag.initial_mouse_x;
                     drag.current_tick = (drag.initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
                     drag.current_track_index = Self::y_to_track_index(mouse_y)
                         .unwrap_or(drag.initial_track_index)
-                        .min(self.data.tracks.len().saturating_sub(1));
+                        .min(self.project_data.tracks.len().saturating_sub(1));
                     drag.is_valid_drop = Self::check_drop_valid(
-                        &self.data,
+                        &self.project_data,
                         drag.region_id,
                         drag.initial_track_index,
                         drag.initial_tick,
@@ -254,30 +289,6 @@ impl MainWindow {
                     self.selected_region = None;
                     return self.send_to_engine_and_handle_errors(Actions::DeleteRegion(region_id))
                 }
-                Task::none()
-            },
-            Message::Tick => {
-                if let Ok(state) = self.player_state.try_read() 
-                    && state.is_playing {
-                    self.playhead = state.playhead;
-                }
-                Task::none()
-            },
-            Message::Synth(synth_message) => match synth_message {
-                SynthMessage::SelectSoundFont(track_id) => {
-                    Task::perform(
-                        pick_file(track_id, "./soundfonts"), 
-                        |(track_id, path)| { 
-                            Message::Synth(SynthMessage::SetSoundFont(track_id, path)) 
-                        }
-                    )
-                }
-                SynthMessage::SetSoundFont(track_id, path) => {
-                    self.send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(track_id, path)))
-                }
-            },
-            Message::ProjectDataChanged(project_data) => {
-                self.data = project_data;
                 Task::none()
             },
             Message::MidiEditor(msg) => {
@@ -363,15 +374,15 @@ impl MainWindow {
             .map(|s| s.is_audio_initialized)
             .unwrap_or(false);
 
-        let selected_track = if self.selected_track < self.data.tracks.len() {
-            &self.data.tracks[self.selected_track]
+        let selected_track = if self.selected_track < self.project_data.tracks.len() {
+            &self.project_data.tracks[self.selected_track]
         } else {
-            &self.data.tracks[0]
+            &self.project_data.tracks[0]
         };
         let selected_region: Option<&Sequence> = self
             .selected_region
             .and_then(|selection| {
-                self.data.tracks[selection.track_id.track_id]
+                self.project_data.tracks[selection.track_id.track_id]
                     .midi
                     .as_ref()
                     .and_then(|sequence| sequence.sequences.get(&selection.region_id))
@@ -386,9 +397,9 @@ impl MainWindow {
                 column![
                     components::module_slot(
                         self.composer_window.view(
-                            &self.data.tracks,
+                            &self.project_data.tracks,
                             self.selected_track,
-                            self.data.ppq,
+                            self.project_data.ppq,
                             self.playhead,
                             self.dragging_region.as_ref(),
                         ),
@@ -654,13 +665,13 @@ mod integration_tests {
         test.select_first_region_in_selected_track()?;
         let region_id = test.app.selected_region.expect("region selected");
         let _region_length = crate::models::sequences::TSequence::length_in_ticks(
-            test.app.data.tracks[region_id.track_id.track_id]
+            test.app.project_data.tracks[region_id.track_id.track_id]
                 .midi
                 .as_ref()
                 .and_then(|c| c.sequences.get(&region_id.region_id))
                 .expect("region exists"),
         );
-        let length_per_tick = 950.0 / (test.app.data.ppq * 4 * 16) as f32;
+        let length_per_tick = 950.0 / (test.app.project_data.ppq * 4 * 16) as f32;
         let delta_x = length_per_tick * 480.0; // move 480 ticks right
         test.send_message(Message::StartRegionDrag(
             region_id,
@@ -701,7 +712,7 @@ mod integration_tests {
         test.drain_engine_updates();
         // Verify pattern has steps on (beat 0, note 0), (beat 1, note 2), (beat 2, note 1)
         let region_id = test.app.selected_region.expect("region");
-        let seq = test.app.data.tracks[region_id.track_id.track_id]
+        let seq = test.app.project_data.tracks[region_id.track_id.track_id]
             .midi
             .as_ref()
             .and_then(|c| c.sequences.get(&region_id.region_id));
@@ -727,7 +738,7 @@ mod integration_tests {
         test.click_midi_editor_grid(480, 62)?;
         test.drain_engine_updates();
         let region_id = test.app.selected_region.expect("region");
-        let midi_seq = test.app.data.tracks[region_id.track_id.track_id]
+        let midi_seq = test.app.project_data.tracks[region_id.track_id.track_id]
             .midi
             .as_ref()
             .and_then(|c| c.sequences.get(&region_id.region_id));
@@ -742,7 +753,7 @@ mod integration_tests {
             region_id,
             vec![(0, 0), (480, 0)],
         )));
-        let midi_seq_after = test.app.data.tracks[region_id.track_id.track_id]
+        let midi_seq_after = test.app.project_data.tracks[region_id.track_id.track_id]
             .midi
             .as_ref()
             .and_then(|c| c.sequences.get(&region_id.region_id));
@@ -952,7 +963,7 @@ mod integration_tests {
         /// Select the first region (by tick) in the currently selected track.
         fn select_first_region_in_selected_track(&mut self) -> Result<(), Error> {
             let track_idx = self.app.selected_track;
-            let track = self.app.data.tracks.get(track_idx).ok_or_else(|| {
+            let track = self.app.project_data.tracks.get(track_idx).ok_or_else(|| {
                 Error::SelectorNotFound { selector: "selected track".to_string() }
             })?;
             let container = track.midi.as_ref().ok_or_else(|| {
