@@ -77,6 +77,11 @@ impl std::hash::Hash for MainWindow {
     }
 }
 
+/////////////////////////////
+/// Initial state on startup
+/// All project state is stored in data and managed by the engine. It is this data that is saved and loaded
+/// All UI state is stored in the ui thread and not persisted between sessions. If needed by engine it is passed as command parameters
+/// NOT YET IMPLEMENTED: All permanent settings are stored in a settings object and autosaved in the background 
 impl Default for MainWindow {
     fn default() -> Self {
         let data = ProjectData::new();
@@ -116,6 +121,8 @@ impl Default for MainWindow {
 }
 
 impl MainWindow {
+    //////////////////
+    /// Actions triggered by UI components. Look for main handlers here
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             Message::WindowEvent(event) => match event {
@@ -288,6 +295,8 @@ impl MainWindow {
         }
     }
 
+    //////////////////
+    /// Helper functions for handlers
     fn length_per_tick(ppq: u32) -> f32 {
         const TIMELINE_WIDTH: f32 = 950.0;
         const BARS_IN_TIMELINE: u32 = 16;
@@ -332,7 +341,9 @@ impl MainWindow {
         !container.region_collides_with_existing_excluding(current_tick, region_length, exclude)
     }
 
-fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message> {
+    //////////////////
+    ///Handles communication with the engine. If the engine returns an error, the application will shut down.
+    fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message> {
         if let Err(err) = self.engine.send(action) {
             //TODO: Restart gracefully.
             error!("Engine shutdown unexpectedly. Shutting down");
@@ -342,6 +353,9 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
             Task::none()
         }
     }
+
+    //////////////////
+    /// UI layout for the application. This is the entry point for the UI and where all the UI components are rendered.
     pub fn view(&self) ->Element<'_, Message> {
         let is_audio_initialized = self
             .player_state
@@ -409,6 +423,8 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
         components::rack(stacked.into()).into()
     }
 
+    //////////////////
+    /// Subscriptions for the application. This is where we subscribe to events from the engine and other sources.
     pub fn subscription(&self) -> Subscription<Message> {
         // 1. Subscription for Window Events
         let window_events = iced::window::events().map(|(_id, event)| Message::WindowEvent(event));
@@ -430,6 +446,10 @@ fn send_to_engine_and_handle_errors(&mut self, action: Actions) -> Task<Message>
         self.engine.quit();
     }
 }
+
+
+    //////////////////
+    /// Listener for project data changes. This is used to update the UI when the project data changes.
 
 pub fn project_data_change_listener(wnd: &MainWindow) -> Subscription<Message> {
     // 1. Create the recipe instance
