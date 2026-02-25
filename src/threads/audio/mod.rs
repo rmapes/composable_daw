@@ -40,7 +40,11 @@ impl AudioEngine {
 }
 
 
-pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<(AudioEngine, StereoOutputController), Box<dyn Error>> {
+// Production init_audio: uses CPAL to create a real output stream.
+#[cfg(not(test))]
+pub(crate) fn init_audio(
+    tx: &mpsc::Sender<Actions>,
+) -> Result<(AudioEngine, StereoOutputController), Box<dyn Error>> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -70,7 +74,28 @@ pub(crate) fn init_audio(tx: &mpsc::Sender<Actions>) -> Result<(AudioEngine, Ste
     };
 
 
-    Ok((AudioEngine { _stream: Some(stream), sample_rate: supported.sample_rate().0 }, stereo_output))
+    Ok((
+        AudioEngine {
+            _stream: Some(stream),
+            sample_rate: supported.sample_rate().0,
+        },
+        stereo_output,
+    ))
+}
+
+// Test-only init_audio: no CPAL, no real audio stream.
+// All tests run against a dummy AudioEngine and an in-memory StereoOutputController.
+#[cfg(test)]
+pub(crate) fn init_audio(
+    tx: &mpsc::Sender<Actions>,
+) -> Result<(AudioEngine, StereoOutputController), Box<dyn Error>> {
+    let sample_rate = 44_100u32;
+    // Keep engine PlayerState.sample_rate consistent with the dummy engine.
+    let _ = tx.send(Actions::Internal(SystemActions::SetSampleRate(
+        sample_rate,
+    )));
+    let (_consumer, stereo_output) = StereoOutputController::new();
+    Ok((AudioEngine::dummy(sample_rate), stereo_output))
 }
 
 fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer, tx: &mpsc::Sender<Actions>) {
@@ -121,10 +146,12 @@ mod tests {
     // Audio Engine
     #[test]
     fn audio_engine_start() {
-        // Smoke test to make sure everything works
         let (tx, _) = mpsc::channel::<Actions>();
-        let engine = init_audio(&tx);
-        assert!(engine.is_ok());
+        let (engine, _stereo) =
+            init_audio(&tx).expect("init_audio should succeed in tests with dummy audio");
+        // In tests we must never create a real CPAL stream.
+        assert!(engine._stream.is_none());
+        assert_eq!(engine.sample_rate, 44_100);
     }
 
     // Test transferring data from Buss to audio output
