@@ -171,8 +171,13 @@ where
                     Ok(a) => a,
                     Err(RecvTimeoutError::Timeout) => {
                         if audio_sources.has_buffer_capacity() {
-                            let playhead = player_state.read().map(|s| s.playhead).unwrap_or(0);
-                            audio_sources.on_tick(playhead);
+                            if let Ok(state) = player_state.read() {
+                                if state.is_playing {
+                                    audio_sources.on_tick(state.playhead);
+                                } else {
+                                    audio_sources.fill_buffer();
+                                }
+                            }
                         }
                         continue;
                     }
@@ -305,6 +310,7 @@ where
                             velocity: 100,
                             length: 0,
                         };
+                        println!("Previewing note: {:?}", note);
                         let _ = preview_tx.send((
                             note_identifier.region_id.track_id,
                             note,

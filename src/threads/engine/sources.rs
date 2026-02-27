@@ -101,6 +101,11 @@ impl AudioSources {
         self.stereo_output.on_tick(&mut self.final_buss);
     }
 
+    /// Fill the ring buffer only (no RegionTick). Use when stopped so preview/other MIDI still sounds.
+    pub fn fill_buffer(&mut self) {
+        self.stereo_output.on_tick(&mut self.final_buss);
+    }
+
     /// True if the ring buffer has capacity so the engine can fill it (for playback and preview).
     pub fn has_buffer_capacity(&self) -> bool {
         self.stereo_output.has_capacity()
