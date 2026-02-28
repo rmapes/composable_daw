@@ -433,14 +433,15 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             
                             // Clear cache to force redraw
                             self.cache.clear();
-                            return Some(if let Some(delta) = scroll_delta {
-                                iced::widget::Action::publish(Message::MidiEditor(
+                            // TODO: Re-enable PreviewMidiNote on key change after preview thread refactor (cancel previous on new call)
+                            let action = match scroll_delta {
+                                Some(delta) => iced::widget::Action::publish(Message::MidiEditor(
                                     MidiEditorMessage::ScrollPitch(delta),
                                 ))
-                                .and_capture()
-                            } else {
-                                iced::widget::Action::capture()
-                            });
+                                .and_capture(),
+                                None => iced::widget::Action::capture(),
+                            };
+                            return Some(action);
                         }
                     }
                 }
@@ -527,13 +528,16 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             // Not clicking on an existing note - start creating a new one
                             let pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
                             let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
+                            let note = MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: DEFAULT_NOTE_VELOCITY };
 
                             // update internal state
-                            state.pending_note = Some(PendingNote{ start: start_tick, note: MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: DEFAULT_NOTE_VELOCITY }});
+                            state.pending_note = Some(PendingNote { start: start_tick, note });
                             state.dragged_note = None; // Clear any dragged note
                             state.hovered_resize_edge = None; // Clear hover state
-                            // and return message to say all handled
-                            return Some(iced::widget::Action::capture());
+                            return Some(iced::widget::Action::publish(Message::Engine(Actions::PreviewMidiNote(
+                                self.region_identifier.track_id,
+                                note,
+                            ))).and_capture());
                         }
                     }
                 }

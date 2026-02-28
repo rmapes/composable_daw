@@ -322,11 +322,6 @@ where
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
-                        let _ = preview_tx.send((
-                            region_identifier.track_id,
-                            note,
-                            PREVIEW_DURATION_MS_ONE_BEAT,
-                        ));
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },
