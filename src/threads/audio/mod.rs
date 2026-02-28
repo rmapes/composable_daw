@@ -1,11 +1,14 @@
 
 
+pub mod controllers;
+pub mod sources;
 pub mod buss;
 pub mod interfaces; //TODO: Make private
 pub mod buffered_output; //TODO: Make private
-pub mod stereo_output;
 
+#[allow(unused_imports)]
 use cpal::traits::DeviceTrait;
+#[allow(unused_imports)]
 use cpal::traits::HostTrait;
 
 
@@ -15,7 +18,7 @@ use std::sync::mpsc;
 
 use buss::BussConsumer;
 use interfaces::Output;
-use stereo_output::StereoOutputController;
+use controllers::stereo_output::StereoOutputController;
 
 pub struct AudioEngine {
 	_stream: Option<cpal::Stream>,

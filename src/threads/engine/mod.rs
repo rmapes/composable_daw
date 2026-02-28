@@ -1,5 +1,4 @@
 pub mod actions;
-mod synth;
 mod sources;
 
 use std::collections::HashMap;
@@ -11,38 +10,18 @@ use std::time::Duration;
 
 use log::{error, info};
 
-use actions::SynthActions;
-use sources::{AudioSources, MidiSendersMap};
+use audio::sources::synth::SynthActions;
+use sources::AudioSources;
+use super::audio::controllers::MidiSendersMap;
 use super::audio;
+use super::audio::controllers::preview;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::MidiNote;
 use crate::models::shared::{ProjectData, RegionType, TrackIdentifier};
 
-use synth::MidiInputMessage;
 
-fn spawn_preview_thread(
-    preview_rx: flume::Receiver<PreviewRequest>,
-    midi_senders: MidiSendersMap,
-) {
-    thread::spawn(move || {
-        while let Ok((track_id, note, duration_ms)) = preview_rx.recv() {
-            let Some(tx) = midi_senders.read().ok().and_then(|g| g.get(&track_id).cloned()) else {
-                continue;
-            };
-            let _ = tx.send(MidiInputMessage::MidiEvent(oxisynth::MidiEvent::NoteOn {
-                channel: note.channel,
-                key: note.key,
-                vel: note.velocity,
-            }));
-            thread::sleep(Duration::from_millis(duration_ms as u64));
-            let _ = tx.send(MidiInputMessage::MidiEvent(oxisynth::MidiEvent::NoteOff {
-                channel: note.channel,
-                key: note.key,
-            }));
-        }
-    });
-}
+
 
 #[derive(Debug)]
 pub struct EngineController {
@@ -123,8 +102,6 @@ const ALWAYS_PLAY_FROM_START: bool = false;
 const PREVIEW_DURATION_MS_ONE_BEAT: u32 = 500;
 const ENGINE_FILL_TIMEOUT_MS: u64 = 5;
 
-/// Request for the preview thread: play this note on this track for this many milliseconds.
-pub type PreviewRequest = (TrackIdentifier, MidiNote, u32);
 
 pub fn start<F>(observer_callback: F, project_ref: &ProjectData) -> (EngineController, Arc<RwLock<PlayerState>>)
 where
@@ -134,7 +111,6 @@ where
     let (data_change_sender, data_change_receiver) = flume::unbounded();
     let player_state = Arc::new(RwLock::new(PlayerState::new()));
     let midi_senders: MidiSendersMap = Arc::new(RwLock::new(HashMap::new()));
-    let (preview_tx, preview_rx) = flume::unbounded::<PreviewRequest>();
 
     let observer = StateObserver::new(observer_callback, Arc::clone(&player_state));
 
@@ -155,7 +131,7 @@ where
                 Err(e) => {
                     error!("Failed to initialize audio: {}. Continuing without audio output.", e);
                     let dummy_audio = audio::AudioEngine::dummy(44100);
-                    let (_consumer, dummy_stereo_output) = audio::stereo_output::StereoOutputController::new();
+                    let (_consumer, dummy_stereo_output) = audio::controllers::stereo_output::StereoOutputController::new();
                     if let Ok(mut state) = player_state.write() {
                         state.sample_rate = 44100;
                         state.is_audio_initialized = false;
@@ -164,7 +140,7 @@ where
                 }
             };
             let mut audio_sources = AudioSources::new(audio, stereo_output, &project.tracks, Arc::clone(&midi_senders));
-            spawn_preview_thread(preview_rx, Arc::clone(&midi_senders));
+            let preview_tx = preview::spawn_preview_thread(Arc::clone(&midi_senders));
             let fill_timeout = Duration::from_millis(ENGINE_FILL_TIMEOUT_MS);
             loop {
                 let received = match rx.recv_timeout(fill_timeout) {

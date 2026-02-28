@@ -1,7 +1,8 @@
-use std::path::PathBuf;
 
 use crate::models::shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier};
 use crate::models::sequences::{MidiNote, Tick};
+// TODO: Decouple specific instrument actions and use a pluggable map instead
+use crate::threads::audio::sources::synth::SynthActions;
 
 #[derive(Debug, Clone)]
 pub enum Actions {
@@ -35,13 +36,5 @@ pub enum SystemActions {
     SamplesPlayed(usize),
     SetSampleRate(u32),
 
-}
-
-#[derive(Debug, Clone)]
-#[allow(clippy::enum_variant_names)] // Set is not part of enum name
-pub enum SynthActions {
-    SetSoundFont(TrackIdentifier, Option<PathBuf>),
-    SetBank(TrackIdentifier, u32),
-    SetProgram(TrackIdentifier, u8),
 }
 

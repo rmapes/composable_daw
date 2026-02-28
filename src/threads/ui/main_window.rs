@@ -13,7 +13,8 @@ use log::{error, info};
 use crate::models::sequences::{Sequence, TSequence, Tick};
 use crate::models::shared::{ProjectData, RegionIdentifier, TrackIdentifier};
 
-use super::super::engine::actions::{Actions, SynthActions};
+use super::super::engine::actions::Actions;
+use super::super::audio::sources::synth::SynthActions;
 use super::super::engine::{self, PlayerState};
 use super::actions::{Message, SynthMessage};
 use super::components;
@@ -127,7 +128,7 @@ impl MainWindow {
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             //////////////////
-            /// System Window Events eg close requested
+            // System Window Events eg close requested
             Message::WindowEvent(event) => match event {
                 window::Event::CloseRequested => {
                     self.shutdown();
@@ -136,12 +137,12 @@ impl MainWindow {
                 _ => Task::none(),
             }
             //////////////////
-            /// Engine Actions to be handled on engine thread
+            // Engine Actions to be handled on engine thread
             Message::Engine(action) => { 
                 self.send_to_engine_and_handle_errors(action) 
             }
             //////////////////
-            /// Responses to events from other threads
+            // Responses to events from other threads
             Message::ProjectDataChanged(project_data) => {
                 self.project_data = project_data;
                 Task::none()
@@ -154,7 +155,7 @@ impl MainWindow {
                 Task::none()
             },
             //////////////////
-            /// Actions to be handled by pluggable components e.g Synth.
+            // Actions to be handled by pluggable components e.g Synth.
             Message::Synth(synth_message) => match synth_message {
                 SynthMessage::SelectSoundFont(track_id) => {
                     Task::perform(
@@ -169,7 +170,7 @@ impl MainWindow {
                 }
             },
             //////////////////
-            /// UI Actions
+            // UI Actions
             Message::GoToStart => {
                 if let Ok(mut state) = self.player_state.try_write() {
                     state.playhead = 0;

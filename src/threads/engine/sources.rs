@@ -1,18 +1,15 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::sync::Arc;
-use std::sync::RwLock;
 
 use log::info;
 
-use super::synth::{MidiInputMessage, TrackSynth};
-use super::audio::{AudioEngine, stereo_output::StereoOutputController, buss::Buss, interfaces::Output};
+use super::audio::sources::synth::TrackSynth;
+use super::audio::controllers::{MidiInputMessage, MidiSendersMap};
+use super::audio::{AudioEngine, controllers::stereo_output::StereoOutputController, buss::Buss, interfaces::Output};
 use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 use crate::models::sequences::{EventStreamSource, Tick};
 
-/// Shared map of per-track MIDI senders so the preview thread can inject note_on/note_off.
-pub type MidiSendersMap = Arc<RwLock<HashMap<TrackIdentifier, flume::Sender<MidiInputMessage>>>>;
 
 /**
  * Manages audio sources (synths) in the engine thread.
@@ -131,7 +128,8 @@ impl AudioSources {
     }
 
     /// Handle synth actions (soundfont, bank, program changes)
-    pub fn handle_synth_action(&mut self, action: super::actions::SynthActions) -> Result<(), Box<dyn std::error::Error>> {
+    /// TODO: Decouple specific instrument actions and use a pluggable map instead
+    pub fn handle_synth_action(&mut self, action: super::audio::sources::synth::SynthActions) -> Result<(), Box<dyn std::error::Error>> {
         for track_synth in self.tracks.values() {
             track_synth.borrow_mut().handle_synth_action(action.clone())?;
         }

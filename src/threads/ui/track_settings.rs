@@ -1,6 +1,7 @@
 use iced::widget::{ button, column, pick_list, row, text, Column };
 use iced::{Length, Element};
-use super::super::engine::actions::{Actions, SynthActions};
+use super::super::engine::actions::Actions;
+use super::super::audio::sources::synth::SynthActions;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::TrackIdentifier;

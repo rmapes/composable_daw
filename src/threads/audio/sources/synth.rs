@@ -3,25 +3,24 @@ use log::{debug, error, info};
 use oxisynth::*;
 use std::error::Error;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-use super::actions::SynthActions;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStreamSource, Tick, EventStream};
 use crate::models::shared::TrackIdentifier;
-use super::audio::interfaces::Output;
+use crate::threads::audio::controllers::MidiInputMessage;
+use super::super::interfaces::Output;
 
-/// MIDI input to an instrument: from region playback (tick) or from preview/raw input (event).
-/// The instrument (synth) is a single consumer of MIDI from multiple sources.
-#[derive(Clone)]
-pub enum MidiInputMessage {
-    /// Region playback: process events at this tick from the track's event stream.
-    RegionTick(Tick),
-    /// Direct MIDI event (preview, future: raw MIDI input buss).
-    MidiEvent(oxisynth::MidiEvent),
+#[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)] // Set is not part of enum name
+pub enum SynthActions {
+    SetSoundFont(TrackIdentifier, Option<PathBuf>),
+    SetBank(TrackIdentifier, u32),
+    SetProgram(TrackIdentifier, u8),
 }
+
 
 
 // pub fn play_midi(notes: &[u8]) -> Result<(), Box<dyn Error>> {
