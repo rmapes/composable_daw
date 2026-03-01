@@ -6,7 +6,7 @@ use iced::widget::{container, pick_list, row, text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 
 use crate::models::sequences::{MidiNote, MidiSeq, Tick};
-use crate::models::shared::RegionIdentifier;
+use crate::models::shared::{RegionIdentifier, TrackIdentifier};
 
 use super::super::engine::actions::Actions;
 use super::actions::Message;
@@ -403,6 +403,7 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             let snapped_start_tick = self.snap_to_grid.snap_tick(new_start_tick);
                             let snapped_pitch = new_pitch; // Pitch snapping could be added here if needed
                             
+                            let key_changed = dragged.note.key != snapped_pitch;
                             // Update the dragged note's position
                             dragged.current_start = snapped_start_tick;
                             dragged.note.key = snapped_pitch;
@@ -433,13 +434,27 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                             
                             // Clear cache to force redraw
                             self.cache.clear();
-                            // TODO: Re-enable PreviewMidiNote on key change after preview thread refactor (cancel previous on new call)
-                            let action = match scroll_delta {
-                                Some(delta) => iced::widget::Action::publish(Message::MidiEditor(
+                            let action = match (key_changed, scroll_delta) {
+                                (true, Some(delta)) => iced::widget::Action::publish(Message::MidiEditor(
+                                    MidiEditorMessage::ScrollPitchAndPreviewNote(
+                                        delta,
+                                        self.region_identifier.track_id,
+                                        dragged.note.clone(),
+                                    ),
+                                ))
+                                .and_capture(),
+                                (true, None) => iced::widget::Action::publish(Message::Engine(
+                                    Actions::PreviewMidiNote(
+                                        self.region_identifier.track_id,
+                                        dragged.note.clone(),
+                                    ),
+                                ))
+                                .and_capture(),
+                                (false, Some(delta)) => iced::widget::Action::publish(Message::MidiEditor(
                                     MidiEditorMessage::ScrollPitch(delta),
                                 ))
                                 .and_capture(),
-                                None => iced::widget::Action::capture(),
+                                (false, None) => iced::widget::Action::capture(),
                             };
                             return Some(action);
                         }
@@ -1164,5 +1179,7 @@ pub enum MidiEditorMessage {
     SetSnapToGrid(SnapToGrid),
     /// Scroll pitch view: positive = see higher notes, negative = see lower notes (Logic Pro: wheel, Page Up/Down)
     ScrollPitch(i16),
+    /// Scroll pitch and preview the given note (used when key changes during drag at edge of grid).
+    ScrollPitchAndPreviewNote(i16, TrackIdentifier, MidiNote),
 }
 

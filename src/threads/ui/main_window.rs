@@ -301,6 +301,18 @@ impl MainWindow {
                         let new_offset = (self.midi_editor_offset as i16 + delta).clamp(0, 127);
                         self.midi_editor_offset = new_offset as u8;
                     }
+                    super::midi_editor::MidiEditorMessage::ScrollPitchAndPreviewNote(
+                        delta,
+                        track_id,
+                        note,
+                    ) => {
+                        let new_offset =
+                            (self.midi_editor_offset as i16 + delta).clamp(0, 127);
+                        self.midi_editor_offset = new_offset as u8;
+                        return self.send_to_engine_and_handle_errors(Actions::PreviewMidiNote(
+                            track_id, note,
+                        ));
+                    }
                 }
                 Task::none()
             },
