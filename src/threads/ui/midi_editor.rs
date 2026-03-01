@@ -307,36 +307,35 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         let dy = cursor_position.y - click_y;
                         let distance = (dx * dx + dy * dy).sqrt();
 
-                        if distance > DRAG_THRESHOLD {
-                            if let Some(notes_at_tick) = self.notes.get(&click_start_tick)
-                                && click_note_index < notes_at_tick.len()
-                            {
-                                let note = notes_at_tick[click_note_index];
-                                let relative_x =
-                                    cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                                let relative_y =
-                                    cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
-                                let click_tick = self.x_to_tick(relative_x);
-                                let click_pitch =
-                                    y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
-                                let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
-                                let click_offset_y_pitch =
-                                    (click_pitch as i16 - note.key as i16) as f32;
+                        if distance > DRAG_THRESHOLD
+                            && let Some(notes_at_tick) = self.notes.get(&click_start_tick)
+                            && click_note_index < notes_at_tick.len()
+                        {
+                            let note = notes_at_tick[click_note_index];
+                            let relative_x =
+                                cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                            let relative_y =
+                                cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                            let click_tick = self.x_to_tick(relative_x);
+                            let click_pitch =
+                                y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
+                            let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
+                            let click_offset_y_pitch =
+                                (click_pitch as i16 - note.key as i16) as f32;
 
-                                state.dragged_note = Some(DraggedNote {
-                                    original_start: click_start_tick,
-                                    original_note_index: click_note_index,
-                                    current_start: click_start_tick,
-                                    note,
-                                    is_resizing: false,
-                                    click_offset_x: click_offset_x_ticks as f32,
-                                    click_offset_y: click_offset_y_pitch,
-                                });
-                                state.click_start_position = None;
-                                state.click_start_note = None;
-                                self.cache.clear();
-                                return Some(iced::widget::Action::capture());
-                            }
+                            state.dragged_note = Some(DraggedNote {
+                                original_start: click_start_tick,
+                                original_note_index: click_note_index,
+                                current_start: click_start_tick,
+                                note,
+                                is_resizing: false,
+                                click_offset_x: click_offset_x_ticks as f32,
+                                click_offset_y: click_offset_y_pitch,
+                            });
+                            state.click_start_position = None;
+                            state.click_start_note = None;
+                            self.cache.clear();
+                            return Some(iced::widget::Action::capture());
                         }
                     }
 
@@ -492,14 +491,14 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                     MidiEditorMessage::ScrollPitchAndPreviewNote(
                                         delta,
                                         self.region_identifier.track_id,
-                                        dragged.note.clone(),
+                                        dragged.note,
                                     ),
                                 ))
                                 .and_capture(),
                                 (true, None) => iced::widget::Action::publish(Message::Engine(
                                     Actions::PreviewMidiNote(
                                         self.region_identifier.track_id,
-                                        dragged.note.clone(),
+                                        dragged.note,
                                     ),
                                 ))
                                 .and_capture(),
@@ -648,17 +647,18 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     }
 
                     // Handle click on empty without drag: create note at click position
-                    if state.click_start_pending_note.is_some() && state.pending_note.is_none() {
-                        if let Some((start_tick, note)) = state.click_start_pending_note.take() {
-                            state.click_start_position = None;
-                            return Some(iced::widget::Action::publish(Message::Engine(
-                                Actions::CreateMidiNote(
-                                    self.region_identifier,
-                                    start_tick,
-                                    note,
-                                ),
-                            )));
-                        }
+                    if state.click_start_pending_note.is_some()
+                        && state.pending_note.is_none()
+                        && let Some((start_tick, note)) = state.click_start_pending_note.take()
+                    {
+                        state.click_start_position = None;
+                        return Some(iced::widget::Action::publish(Message::Engine(
+                            Actions::CreateMidiNote(
+                                self.region_identifier,
+                                start_tick,
+                                note,
+                            ),
+                        )));
                     }
 
                     // Clear click tracking and pending-note move mode on release

@@ -2,7 +2,7 @@ use iced::mouse::{Button, Cursor, Event};
 use iced::widget::canvas::{self, Fill, Frame, Geometry, LineCap, Path, Stroke};
 use iced::widget::container::Style;
 use iced::widget::{button, column, container, row, scrollable, stack, text, Container, MouseArea, Space};
-use iced::{Color, Element, Length, Point, Rectangle, Theme, border};
+use iced::{Color, Element, Length, Point, Rectangle, Theme};
 
 use crate::models::components::Track;
 use crate::models::sequences::{TSequence, Tick};
@@ -93,6 +93,7 @@ impl Component {
             button("+").on_press(Message::Engine(Actions::AddTrack)),
         ].into()
     }
+    #[allow(clippy::too_many_arguments)]
     fn track_list(
         &self,
         tracks: &[Track],
@@ -137,6 +138,7 @@ impl Component {
             .into()       
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn track(
         &self,
         track: &Track,
@@ -181,6 +183,7 @@ impl Component {
         MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn timeline_view(
         &self,
         track: &Track,
@@ -228,21 +231,6 @@ impl Component {
         }).unwrap_or_default()
     }
 
-    fn region<'a>(&self, width: f32, region_id: RegionIdentifier, debug_id: String) -> Element<'a, Message> {
-        let region_marker = container(text(""))
-            .width(iced::Length::Fixed(width))
-            .height(iced::Length::Fill)
-            .style(|_theme: &Theme| container::Style {
-                background: Some(Color::from_rgb(0.0, 0.4, 0.6).into()),
-                border: border::rounded(5),
-                ..Default::default()
-            })
-            .id(debug_id);
-        button(region_marker)
-            .on_press(Message::SelectRegion(region_id, false))
-            .padding(0)
-            .into()
-    }
 }
 
 const DRAG_THRESHOLD_PX: f32 = 5.0;
@@ -280,8 +268,8 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
         let (x, y) = (cursor_position.x, cursor_position.y);
         let timeline_y = self.ruler_height + self.track_index as f32 * self.track_height + y;
 
-        match event {
-            iced::Event::Mouse(mouse_event) => match mouse_event {
+        if let iced::Event::Mouse(mouse_event) = event {
+            match mouse_event {
                 Event::ButtonPressed(Button::Left) => {
                     if let Some(region_id) = self.region_at_x(x) {
                         *state = Some((region_id, x, y));
@@ -300,9 +288,8 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                         let (region_id, px, py) = pending;
                         let dist = ((x - px).powi(2) + (y - py).powi(2)).sqrt();
                         if dist >= DRAG_THRESHOLD_PX {
-                            let press_timeline_y = self.ruler_height + self.track_index as f32 * self.track_height + py;
                             return Some(iced::widget::Action::publish(Message::StartRegionDrag(
-                                region_id, px, press_timeline_y, x, timeline_y,
+                                region_id, px, x, timeline_y,
                             )));
                         }
                         *state = Some((region_id, px, py));
@@ -311,8 +298,7 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                     }
                 }
                 _ => {}
-            },
-            _ => {}
+            }
         }
         None
     }
@@ -384,74 +370,6 @@ impl InteractiveTimelineCanvas {
             }
         }
         None
-    }
-}
-
-pub struct TrackTimeline {
-    length_per_tick: f32,
-    ppq: u32,
-    beats_per_bar: u8,
-    total_bars: u32,
-    cache: canvas::Cache,
-}
-
-impl TrackTimeline {
-    pub fn new(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars: u32) -> Self {
-        Self {length_per_tick, ppq, beats_per_bar, total_bars, cache: canvas::Cache::new()}
-    }
-}
-
-pub fn timeline(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars: u32) -> TrackTimeline {
-    TrackTimeline::new(length_per_tick, ppq, beats_per_bar, total_bars)
-}
-
-impl canvas::Program<Message, Theme> for TrackTimeline {
-    type State = ();
-
-    fn draw(
-        &self,
-        _state: &Self::State,
-        renderer: &iced::Renderer,
-        _theme: &Theme,
-        bounds: Rectangle,
-        _cursor: Cursor,
-    ) -> Vec<Geometry> {
-        // Use the cache; if the canvas size hasn't changed, this avoids re-drawing.
-        let geometry = self.cache.draw(renderer, bounds.size(), |frame: &mut Frame| {
-            
-            // --- Custom Drawing Logic ---
-            
-            // Background color
-            frame.fill(&Path::rectangle(Point::ORIGIN, bounds.size()), Color::from_rgb8(0x00, 0x00, 0x00));
-
-            let height = bounds.height;
-
-
-            let length_per_bar = self.length_per_tick * self.beats_per_bar as f32 * self.ppq as f32;
-
-            // Define stroke style for the wave
-            let bar_line_stroke = Stroke {
-                style: canvas::Style::Solid(Color::from_rgb8(0x30, 0x30, 0x30)),
-                width: 1.0,
-                line_cap: LineCap::Square,
-                ..Stroke::default()
-            };
-
-            // Draw the wave
-            for bar in 0..self.total_bars {
-                let xpos = bar as f32 * length_per_bar;
-                if xpos < bounds.width {
-                    frame.stroke(&Path::line(
-                        Point { x: xpos, y: 0.0 },
-                        Point { x: xpos, y: height },
-                    ), bar_line_stroke);
-                }
-            }
-
-            // --- End Drawing Logic ---
-        });
-
-        vec![geometry]
     }
 }
 

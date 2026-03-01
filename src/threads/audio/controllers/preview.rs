@@ -56,14 +56,14 @@ pub(crate) fn spawn_preview_thread(
                         .map(|(&t, _)| t)
                         .collect();
                     for time_key in to_drain {
-                        if let Some(entries) = pending_note_offs.remove(&time_key) {
-                            if let Ok(senders) = midi_senders.read() {
-                                for (track_id, channel, key) in entries {
-                                    if let Some(tx) = senders.get(&track_id) {
-                                        let _ = tx.send(MidiInputMessage::MidiEvent(
-                                            oxisynth::MidiEvent::NoteOff { channel, key },
-                                        ));
-                                    }
+                        if let Some(entries) = pending_note_offs.remove(&time_key)
+                            && let Ok(senders) = midi_senders.read()
+                        {
+                            for (track_id, channel, key) in entries {
+                                if let Some(tx) = senders.get(&track_id) {
+                                    let _ = tx.send(MidiInputMessage::MidiEvent(
+                                        oxisynth::MidiEvent::NoteOff { channel, key },
+                                    ));
                                 }
                             }
                         }

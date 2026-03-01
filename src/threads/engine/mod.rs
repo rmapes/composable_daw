@@ -18,7 +18,7 @@ use super::audio::controllers::preview::{self, PreviewMessage};
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::MidiNote;
-use crate::models::shared::{ProjectData, RegionType, TrackIdentifier};
+use crate::models::shared::{ProjectData, RegionType};
 
 
 
@@ -147,13 +147,13 @@ where
                     Ok(a) => a,
                     Err(RecvTimeoutError::Timeout) => {
                         let _ = preview_tx.send(PreviewMessage::Clock);
-                        if audio_sources.has_buffer_capacity() {
-                            if let Ok(state) = player_state.read() {
-                                if state.is_playing {
-                                    audio_sources.on_tick(state.playhead);
-                                } else {
-                                    audio_sources.fill_buffer();
-                                }
+                        if audio_sources.has_buffer_capacity()
+                            && let Ok(state) = player_state.read()
+                        {
+                            if state.is_playing {
+                                audio_sources.on_tick(state.playhead);
+                            } else {
+                                audio_sources.fill_buffer();
                             }
                         }
                         continue;
@@ -210,7 +210,7 @@ where
                         RegionType::Pattern => track.add_pattern_at(tick),
                         RegionType::Midi => track.add_midi_region_at(tick),
                     };
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -225,11 +225,11 @@ where
                             let target_track = &mut project.tracks[tgt_idx];
                             match target_track.insert_region(new_tick, sequence) {
                                 Ok(()) => {
-                                    if let Err(e) = audio_sources.update_track(&mut project.tracks[src_idx]) {
+                                    if let Err(e) = audio_sources.update_track(&project.tracks[src_idx]) {
                                         error!("FATAL: Unexpected error updating source track: {}", e);
                                         ActionFollowUp::Exit
                                     } else if src_idx != tgt_idx
-                                        && audio_sources.update_track(&mut project.tracks[tgt_idx]).is_err()
+                                        && audio_sources.update_track(&project.tracks[tgt_idx]).is_err()
                                     {
                                         error!("FATAL: Unexpected error updating target track");
                                         ActionFollowUp::Exit
@@ -241,7 +241,7 @@ where
                                     if project.tracks[src_idx].insert_region(region_id.region_id, sequence).is_err() {
                                         error!("FATAL: Failed to restore region after move collision");
                                         ActionFollowUp::Exit
-                                    } else if let Err(e) = audio_sources.update_track(&mut project.tracks[src_idx]) {
+                                    } else if let Err(e) = audio_sources.update_track(&project.tracks[src_idx]) {
                                         error!("FATAL: Unexpected error restoring track: {}", e);
                                         ActionFollowUp::Exit
                                     } else {
@@ -259,7 +259,7 @@ where
                 actions::Actions::DeleteRegion(region_id) => {
                     let track = &mut project.tracks[region_id.track_id.track_id];
                     track.delete_pattern(&region_id);
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -272,7 +272,7 @@ where
                     track
                         .get_pattern_by_id(&note_identifier.region_id)
                         .toggle_on(note_identifier.beat_num, note_identifier.note_num);
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -304,42 +304,12 @@ where
                     )));
                     ActionFollowUp::Continue
                 },
-                actions::Actions::PreviewPatternNote(track_id, note_num, _beat_num) => {
-                    const DEFAULT_NOTE_VALUES: [u8; 8] = [72, 71, 69, 67, 65, 64, 62, 60];
-                    let key = DEFAULT_NOTE_VALUES
-                        .get(note_num as usize)
-                        .copied()
-                        .unwrap_or(60);
-                    let note = MidiNote {
-                        channel: 0,
-                        key,
-                        velocity: 100,
-                        length: 0,
-                    };
-                    let _ = preview_tx.send(PreviewMessage::Request((
-                        track_id,
-                        note,
-                        PREVIEW_DURATION_MS_ONE_BEAT,
-                    )));
-                    ActionFollowUp::Continue
-                },
                 actions::Actions::CreateMidiNote(region_identifier, start, note) => {
                     let track = &mut project.tracks[region_identifier.track_id.track_id];
                     let region = track.get_midi_by_id(&region_identifier);
                     region.add_note(start, note);
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error adding region: {}", e);
-                        ActionFollowUp::Exit
-                    } else {
-                        ActionFollowUp::ProjectDataUpdate
-                    }
-                },
-                actions::Actions::DeleteMidiNote(region_identifier, start_tick, note_index) => {
-                    let track = &mut project.tracks[region_identifier.track_id.track_id];
-                    let region = track.get_midi_by_id(&region_identifier);
-                    let _ = region.remove_note(start_tick, note_index);
-                    if let Err(e) = audio_sources.update_track(track) {
-                        error!("FATAL: Unexpected error updating track: {}", e);
                         ActionFollowUp::Exit
                     } else {
                         ActionFollowUp::ProjectDataUpdate
@@ -364,7 +334,7 @@ where
                         let _ = region.remove_note(start_tick, note_index);
                     }
                     
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error updating track: {}", e);
                         ActionFollowUp::Exit
                     } else {
@@ -379,7 +349,7 @@ where
                         // Add note at new position
                         region.add_note(new_start_tick, updated_note);
                     }
-                    if let Err(e) = audio_sources.update_track(track) {
+                    if let Err(e) = audio_sources.update_track(&*track) {
                         error!("FATAL: Unexpected error updating track: {}", e);
                         ActionFollowUp::Exit
                     } else {

@@ -91,6 +91,7 @@ fn create_synth<P: AsRef<Path> + ?Sized + ToString>(soundfont: &P, bank: u32, pr
 	Ok((synth, font_id))
 }
 
+#[allow(dead_code)] // Variants used by TrackThread::run(); senders not yet wired in this design.
 pub enum TrackThreadEvents {
 	Tick(Tick),
 	Update(TrackIdentifier, EventStream),
@@ -176,13 +177,6 @@ impl TrackSynth {
 				}
 			}
 		}
-	}
-
-	pub fn process_tick(&mut self, tick: Tick) -> Result<(), Box<dyn Error>> {
-		if tick > self.event_stream.get_length_in_ticks() {
-			return Ok(());
-		}
-		on_tick_direct(tick, &mut self.synth, &self.event_stream)
 	}
 
 	pub fn update_event_stream(&mut self, event_stream: EventStream) {

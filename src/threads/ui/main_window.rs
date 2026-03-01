@@ -191,7 +191,7 @@ impl MainWindow {
                 self.dragging_region = None;
                 Task::none()
             }
-            Message::StartRegionDrag(region_id, initial_x, initial_y, current_x, current_y) => {
+            Message::StartRegionDrag(region_id, initial_x, current_x, current_y) => {
                 if let Some(length) = Self::get_region_length(&self.project_data, &region_id) {
                     self.selected_region = Some(region_id);
                     let track_idx = region_id.track_id.track_id;
@@ -474,7 +474,6 @@ impl MainWindow {
 
     //////////////////
     /// Listener for project data changes. This is used to update the UI when the project data changes.
-
 pub fn project_data_change_listener(wnd: &MainWindow) -> Subscription<Message> {
     // 1. Create the recipe instance
     let recipe = ProjectDataListener {
@@ -689,7 +688,6 @@ mod integration_tests {
         test.send_message(Message::StartRegionDrag(
             region_id,
             100.0,
-            50.0,
             100.0 + delta_x,
             50.0,
         ));
