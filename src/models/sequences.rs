@@ -295,14 +295,14 @@ impl MidiSeq {
     }
 
     pub fn remove_note(&mut self, start: Tick, note_index: usize) -> Option<MidiNote> {
-        if let Some(notes_at_tick) = self.notes.get_mut(&start) {
-            if note_index < notes_at_tick.len() {
-                let note = notes_at_tick.remove(note_index);
-                if notes_at_tick.is_empty() {
-                    self.notes.remove(&start);
-                }
-                return Some(note);
+        if let Some(notes_at_tick) = self.notes.get_mut(&start)
+            && note_index < notes_at_tick.len()
+        {
+            let note = notes_at_tick.remove(note_index);
+            if notes_at_tick.is_empty() {
+                self.notes.remove(&start);
             }
+            return Some(note);
         }
         None
     }
@@ -455,8 +455,7 @@ impl EventStreamSource for SequenceContainer {
 
 /////////////////////////
 ///  Tests
-/// 
-
+///
 #[cfg(test)]
 mod tests {
 
@@ -483,7 +482,7 @@ mod tests {
         let length_in_ticks = 960*4;
         let mut event_stream = EventStream::new(24000, length_in_ticks);
         let event = MidiEventAt { event: MidiEvent::SystemReset {}, ticks: 12 };
-        let _ = event_stream.store_event(event);
+        event_stream.store_event(event);
         assert!(event_stream.get_events( 12, EventPriority::Audio).contains(&event)); // All midi events are currently Audio. TODO: distriguish
         // assert!(event_stream.get_events( 0, EventPriority::System).is_empty());  TODO: create tests showing that these calls panick, or make return is empty
         // assert!(event_stream.get_events( 12, EventPriority::Other).is_empty());

@@ -136,8 +136,7 @@ fn fill_output_buffer(data: &mut [f32], channels: usize, buss: &mut BussConsumer
 
 /////////////////////////
 ///  Tests
-/// 
-
+///
 #[cfg(test)]
 mod tests {
 

@@ -50,8 +50,7 @@ impl Output for BufferedOutput {
 
 /////////////////////////
 ///  Tests
-/// 
-
+///
 #[cfg(test)]
 mod tests {
  

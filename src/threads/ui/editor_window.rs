@@ -12,7 +12,6 @@ use super::pattern_editor;
 pub struct Component {
     pattern_editor: pattern_editor::Component,
     midi_editor: midi_editor::Component,
-    snap_to_grid: midi_editor::SnapToGrid,
 }
 
 impl Component {
@@ -20,7 +19,6 @@ impl Component {
         Self {
             pattern_editor: pattern_editor::Component::new(width, height),
             midi_editor: midi_editor::Component::new(width, height),
-            snap_to_grid: midi_editor::SnapToGrid::None,
         }
     }
 
