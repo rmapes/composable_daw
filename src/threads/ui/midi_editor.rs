@@ -110,6 +110,10 @@ pub struct MidiEditorState {
     pub pending_update: Option<(Tick, usize, Tick, MidiNote)>, // Track pending note update (old_start, note_index, new_start, note) to show at new position
     pub click_start_position: Option<(f32, f32)>, // Track initial click position for debounce (x, y)
     pub click_start_note: Option<(Tick, usize)>, // Track which note was clicked for debounce
+    /// When clicking on empty space: (start_tick, note) for debounce; drag starts after threshold like existing note.
+    pub click_start_pending_note: Option<(Tick, MidiNote)>,
+    /// When creating a new note by drag: None = length-only mode; Some(offset_x_ticks, offset_y_pitch) = move mode (start/key follow mouse, length fixed).
+    pub pending_note_move_offset: Option<(f32, f32)>,
     pub drag_edge_scroll_counter: u8, // Throttle for auto-scroll when dragging note to edge
 }
 
@@ -128,9 +132,12 @@ impl canvas::Program<Message, Theme> for MidiEditor {
 
     fn draw(&self, state: &Self::State, renderer: &iced::Renderer,
         _theme: &Theme, bounds: Rectangle, _cursor: Cursor) -> Vec<Geometry> {
-        // Clear cache when dragging/resizing, hovering resize edge, or pending update to ensure smooth visual updates
-        // This forces a redraw every frame during drag/resize and while waiting for update
-        if state.dragged_note.is_some() || state.hovered_resize_edge.is_some() || state.pending_update.is_some() {
+        // Clear cache when dragging/resizing, creating note, hovering resize edge, or pending update to ensure smooth visual updates
+        if state.dragged_note.is_some()
+            || state.pending_note.is_some()
+            || state.hovered_resize_edge.is_some()
+            || state.pending_update.is_some()
+        {
             self.cache.clear();
         }
         
@@ -287,48 +294,71 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                         }
                     }
                     
-                    // Handle debounce: check if mouse has moved enough to start dragging
-                    if let (Some((click_x, click_y)), Some((click_start_tick, click_note_index))) = 
-                        (state.click_start_position, state.click_start_note) &&
-                        state.dragged_note.is_none() && state.pending_note.is_none() {
-                            // Calculate distance moved
-                            let dx = cursor_position.x - click_x;
-                            let dy = cursor_position.y - click_y;
-                            let distance = (dx * dx + dy * dy).sqrt();
-                            
-                            const DRAG_THRESHOLD: f32 = 3.0; // Pixels - minimum movement to start drag
-                            
-                            if distance > DRAG_THRESHOLD {
-                                // Mouse moved enough - start dragging
-                                if let Some(notes_at_tick) = self.notes.get(&click_start_tick) &&
-                                    click_note_index < notes_at_tick.len() {
-                                        let note = notes_at_tick[click_note_index];
-                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                                        let relative_y = cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
-                                        
-                                        // Calculate the offset from the note's start position where user clicked
-                                        let click_tick = self.x_to_tick(relative_x);
-                                        let click_pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
-                                        
-                                        // Calculate offset: how far into the note the user clicked
-                                        let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
-                                        let click_offset_y_pitch = (click_pitch as i16 - note.key as i16) as f32;
-                                        
-                                        state.dragged_note = Some(DraggedNote {
-                                            original_start: click_start_tick,
-                                            original_note_index: click_note_index,
-                                            current_start: click_start_tick,
-                                            note,
-                                            is_resizing: false,
-                                            click_offset_x: click_offset_x_ticks as f32,
-                                            click_offset_y: click_offset_y_pitch,
-                                        });
-                                        // Clear click tracking now that we're dragging
-                                        state.click_start_position = None;
-                                        state.click_start_note = None;
-                                        self.cache.clear();
-                        return Some(iced::widget::Action::capture());
+                    const DRAG_THRESHOLD: f32 = 3.0; // Pixels - minimum movement to start drag (same for note drag and new-note drag)
+
+                    // Handle debounce: check if mouse has moved enough to start dragging an existing note
+                    if let (Some((click_x, click_y)), Some((click_start_tick, click_note_index))) =
+                        (state.click_start_position, state.click_start_note)
+                        && state.dragged_note.is_none()
+                        && state.pending_note.is_none()
+                        && state.click_start_pending_note.is_none()
+                    {
+                        let dx = cursor_position.x - click_x;
+                        let dy = cursor_position.y - click_y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+
+                        if distance > DRAG_THRESHOLD {
+                            if let Some(notes_at_tick) = self.notes.get(&click_start_tick)
+                                && click_note_index < notes_at_tick.len()
+                            {
+                                let note = notes_at_tick[click_note_index];
+                                let relative_x =
+                                    cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                                let relative_y =
+                                    cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                                let click_tick = self.x_to_tick(relative_x);
+                                let click_pitch =
+                                    y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
+                                let click_offset_x_ticks = click_tick.saturating_sub(click_start_tick);
+                                let click_offset_y_pitch =
+                                    (click_pitch as i16 - note.key as i16) as f32;
+
+                                state.dragged_note = Some(DraggedNote {
+                                    original_start: click_start_tick,
+                                    original_note_index: click_note_index,
+                                    current_start: click_start_tick,
+                                    note,
+                                    is_resizing: false,
+                                    click_offset_x: click_offset_x_ticks as f32,
+                                    click_offset_y: click_offset_y_pitch,
+                                });
+                                state.click_start_position = None;
+                                state.click_start_note = None;
+                                self.cache.clear();
+                                return Some(iced::widget::Action::capture());
                             }
+                        }
+                    }
+
+                    // Handle debounce for new note: start "drag" (show note, extend length) only after movement past threshold
+                    if let (Some((click_x, click_y)), Some((start_tick, note))) =
+                        (state.click_start_position, state.click_start_pending_note.take())
+                        && state.dragged_note.is_none()
+                        && state.pending_note.is_none()
+                        && state.click_start_note.is_none()
+                    {
+                        let dx = cursor_position.x - click_x;
+                        let dy = cursor_position.y - click_y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+
+                        if distance > DRAG_THRESHOLD {
+                            state.pending_note = Some(PendingNote { start: start_tick, note });
+                            state.pending_note_move_offset = None;
+                            state.click_start_position = None;
+                            self.cache.clear();
+                            return Some(iced::widget::Action::capture());
+                        } else {
+                            state.click_start_pending_note = Some((start_tick, note));
                         }
                     }
                     
@@ -352,15 +382,38 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     
                     // Handle dragging/resizing
                     if let Some(pending) = &mut state.pending_note {
-                        // Creating a new note
-                        let relative_x = cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
-                        let current_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
-                        
-                        // update internal state
-                        if current_tick > pending.start {
-                            pending.note.length = current_tick - pending.start;
+                        // Creating a new note: length-only until pitch changes, then move mode (start/key follow mouse, length fixed)
+                        let relative_x =
+                            cursor_position.x - KEYBOARD_WIDTH - self.scroll_offset.x;
+                        let relative_y =
+                            cursor_position.y - RULER_HEIGHT - self.scroll_offset.y;
+                        let mouse_tick = self.x_to_tick(relative_x);
+                        let mouse_pitch =
+                            y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
+                        let current_tick = self.snap_to_grid.snap_tick(mouse_tick);
+
+                        if let Some((offset_x, offset_y)) = state.pending_note_move_offset {
+                            // Move mode: start and pitch follow mouse, length stays fixed
+                            let new_start_tick = self.snap_to_grid.snap_tick(
+                                (mouse_tick as f32 - offset_x).max(0.0) as u32,
+                            );
+                            let new_pitch =
+                                (mouse_pitch as f32 - offset_y).clamp(0.0, 127.0) as u8;
+                            pending.start = new_start_tick;
+                            pending.note.key = new_pitch;
+                        } else {
+                            // Length mode: if pitch changed, switch to move mode (keep current length)
+                            if mouse_pitch != pending.note.key {
+                                state.pending_note_move_offset = Some((
+                                    mouse_tick as f32 - pending.start as f32,
+                                    mouse_pitch as f32 - pending.note.key as f32,
+                                ));
+                                // First frame of move mode: position unchanged (offset chosen so no jump)
+                            } else if current_tick > pending.start {
+                                pending.note.length = current_tick - pending.start;
+                            }
                         }
-                        // and return message to say all handled
+                        self.cache.clear();
                         return Some(iced::widget::Action::capture());
                     } else if let Some(dragged) = &mut state.dragged_note {
                         if dragged.is_resizing {
@@ -540,19 +593,23 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                                 state.selected_notes.clear();
                                 self.cache.clear(); // Redraw to update selection
                             }
-                            // Not clicking on an existing note - start creating a new one
+                            // Store for debounce - drag (show note, extend length) starts on CursorMoved past threshold, same as existing note
                             let pitch = y_to_pitch(relative_y, &grid_bounds.size(), self.midi_offset);
                             let start_tick = self.snap_to_grid.snap_tick(self.x_to_tick(relative_x));
-                            let note = MidiNote { channel: 0, key: pitch, length: DEFAULT_LENGTH, velocity: DEFAULT_NOTE_VELOCITY };
-
-                            // update internal state
-                            state.pending_note = Some(PendingNote { start: start_tick, note });
-                            state.dragged_note = None; // Clear any dragged note
-                            state.hovered_resize_edge = None; // Clear hover state
-                            return Some(iced::widget::Action::publish(Message::Engine(Actions::PreviewMidiNote(
-                                self.region_identifier.track_id,
-                                note,
-                            ))).and_capture());
+                            let note = MidiNote {
+                                channel: 0,
+                                key: pitch,
+                                length: DEFAULT_LENGTH,
+                                velocity: DEFAULT_NOTE_VELOCITY,
+                            };
+                            state.click_start_position = Some((cursor_position.x, cursor_position.y));
+                            state.click_start_pending_note = Some((start_tick, note));
+                            state.dragged_note = None;
+                            state.hovered_resize_edge = None;
+                            return Some(iced::widget::Action::publish(Message::Engine(
+                                Actions::PreviewMidiNote(self.region_identifier.track_id, note),
+                            ))
+                            .and_capture());
                         }
                     }
                 }
@@ -572,33 +629,49 @@ impl canvas::Program<Message, Theme> for MidiEditor {
                     }
                 }
                 iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left) => {
+                    const DRAG_THRESHOLD: f32 = 3.0; // Same as CursorMoved
+
                     // Handle click without drag (selection only)
-                    if let (Some((click_x, click_y)), Some(_click_note)) = 
-                        (state.click_start_position, state.click_start_note) && state.dragged_note.is_none() {
-                            // Check if mouse moved significantly
-                            let dx = cursor_position.x - click_x;
-                            let dy = cursor_position.y - click_y;
-                            let distance = (dx * dx + dy * dy).sqrt();
-                            
-                            const DRAG_THRESHOLD: f32 = 3.0; // Same threshold as in CursorMoved
-                            
-                            if distance <= DRAG_THRESHOLD {
-                                // Click without drag - selection already handled in ButtonPressed
-                                // Just clear the click tracking
-                                state.click_start_position = None;
-                                state.click_start_note = None;
-                                return None; // Let selection update be handled
-                            }
+                    if let (Some((click_x, click_y)), Some(_click_note)) =
+                        (state.click_start_position, state.click_start_note)
+                        && state.dragged_note.is_none()
+                        && state.click_start_pending_note.is_none()
+                    {
+                        let dx = cursor_position.x - click_x;
+                        let dy = cursor_position.y - click_y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        if distance <= DRAG_THRESHOLD {
+                            state.click_start_position = None;
+                            state.click_start_note = None;
+                            return None;
+                        }
                     }
-                    
-                    // Clear click tracking on release
+
+                    // Handle click on empty without drag: create note at click position
+                    if state.click_start_pending_note.is_some() && state.pending_note.is_none() {
+                        if let Some((start_tick, note)) = state.click_start_pending_note.take() {
+                            state.click_start_position = None;
+                            return Some(iced::widget::Action::publish(Message::Engine(
+                                Actions::CreateMidiNote(
+                                    self.region_identifier,
+                                    start_tick,
+                                    note,
+                                ),
+                            )));
+                        }
+                    }
+
+                    // Clear click tracking and pending-note move mode on release
                     state.click_start_position = None;
                     state.click_start_note = None;
-                    
+                    state.click_start_pending_note = None;
+                    state.pending_note_move_offset = None;
+
                     if let Some(pending) = &state.pending_note {
                         // Finishing creating a new note
                         let final_note = *pending;
                         state.pending_note = None;
+                        state.pending_note_move_offset = None;
                         return Some(iced::widget::Action::publish(Message::Engine(Actions::CreateMidiNote (
                             self.region_identifier,
                             final_note.start,
