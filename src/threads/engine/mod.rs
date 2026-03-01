@@ -14,7 +14,7 @@ use audio::sources::synth::SynthActions;
 use sources::AudioSources;
 use super::audio::controllers::MidiSendersMap;
 use super::audio;
-use super::audio::controllers::preview;
+use super::audio::controllers::preview::{self, PreviewMessage};
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::MidiNote;
@@ -146,6 +146,7 @@ where
                 let received = match rx.recv_timeout(fill_timeout) {
                     Ok(a) => a,
                     Err(RecvTimeoutError::Timeout) => {
+                        let _ = preview_tx.send(PreviewMessage::Clock);
                         if audio_sources.has_buffer_capacity() {
                             if let Ok(state) = player_state.read() {
                                 if state.is_playing {
@@ -287,16 +288,20 @@ where
                             length: 0,
                         };
                         println!("Previewing note: {:?}", note);
-                        let _ = preview_tx.send((
+                        let _ = preview_tx.send(PreviewMessage::Request((
                             note_identifier.region_id.track_id,
                             note,
                             PREVIEW_DURATION_MS_ONE_BEAT,
-                        ));
+                        )));
                         ActionFollowUp::ProjectDataUpdate
                     }
                 },
                 actions::Actions::PreviewMidiNote(track_id, note) => {
-                    let _ = preview_tx.send((track_id, note, PREVIEW_DURATION_MS_ONE_BEAT));
+                    let _ = preview_tx.send(PreviewMessage::Request((
+                        track_id,
+                        note,
+                        PREVIEW_DURATION_MS_ONE_BEAT,
+                    )));
                     ActionFollowUp::Continue
                 },
                 actions::Actions::PreviewPatternNote(track_id, note_num, _beat_num) => {
@@ -311,7 +316,11 @@ where
                         velocity: 100,
                         length: 0,
                     };
-                    let _ = preview_tx.send((track_id, note, PREVIEW_DURATION_MS_ONE_BEAT));
+                    let _ = preview_tx.send(PreviewMessage::Request((
+                        track_id,
+                        note,
+                        PREVIEW_DURATION_MS_ONE_BEAT,
+                    )));
                     ActionFollowUp::Continue
                 },
                 actions::Actions::CreateMidiNote(region_identifier, start, note) => {
