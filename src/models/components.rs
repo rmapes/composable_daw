@@ -42,23 +42,20 @@ impl Default for VirtualInstrument {
     }
 }
 
-
 /*** Containers ****/
 
 #[derive(Debug, Clone)]
 pub struct Track {
     /////////////////
     /// Fixed structures
-    /// 
-    /// 
+    ///
+    ///
     // Inputs
-    // audio_input: AudioBuss, 
-    // Input needs to be a buss to support Buss tracks. 
+    // audio_input: AudioBuss,
+    // Input needs to be a buss to support Buss tracks.
     // Alernative is to allow busses to act as independent entities and each track accept only a single input.
     // This allows routing of busses to multiple outputs via
     // a wiring diagram, but doesn't really give much more flexibility over using sends
-
-
 
     // Generator pipelines
     pub midi: Option<SequenceContainer>,
@@ -75,22 +72,18 @@ pub struct Track {
     pub id: TrackIdentifier,
     pub name: String,
     pub ppq: u32, // TODO: Pass this in as a global settings object
-
 }
 
 #[derive(Debug, Clone)]
 pub struct CollisionError;
 
-impl Error for CollisionError {
-}
+impl Error for CollisionError {}
 
 impl fmt::Display for CollisionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "overlapping regions not allowed")
     }
 }
-
-
 
 impl Track {
     pub fn new(id: TrackIdentifier, name: String, ppq: u32) -> Self {
@@ -105,7 +98,13 @@ impl Track {
 
     pub fn add_midi_region_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
         let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
-        let midi = MidiSeq::new(RegionIdentifier{ track_id: self.id, region_id: tick }, self.ppq);
+        let midi = MidiSeq::new(
+            RegionIdentifier {
+                track_id: self.id,
+                region_id: tick,
+            },
+            self.ppq,
+        );
         // Check for collisions
         if sequence.region_collides_with_existing(tick, midi.length_in_ticks()) {
             return Err(CollisionError {});
@@ -130,7 +129,13 @@ impl Track {
 
     pub fn add_pattern_at(&mut self, tick: Tick) -> Result<(), CollisionError> {
         let sequence = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
-        let pattern = PatternSeq::new(RegionIdentifier{ track_id: self.id, region_id: tick }, self.ppq);
+        let pattern = PatternSeq::new(
+            RegionIdentifier {
+                track_id: self.id,
+                region_id: tick,
+            },
+            self.ppq,
+        );
         // Check for collisions
         if sequence.region_collides_with_existing(tick, pattern.length_in_ticks()) {
             return Err(CollisionError {});
@@ -168,20 +173,32 @@ impl Track {
     }
 
     /// Inserts a region at the given tick, updating its id. On collision returns the sequence so the caller can restore.
-    pub fn insert_region(&mut self, tick: Tick, mut sequence: Sequence) -> Result<(), (CollisionError, Sequence)> {
+    pub fn insert_region(
+        &mut self,
+        tick: Tick,
+        mut sequence: Sequence,
+    ) -> Result<(), (CollisionError, Sequence)> {
         let length = sequence.length_in_ticks();
         let container = self.midi.get_or_insert(SequenceContainer::new(self.ppq));
         if container.region_collides_with_existing(tick, length) {
             return Err((CollisionError {}, sequence));
         }
         match &mut sequence {
-            Sequence::Pattern(p) => p.id = RegionIdentifier { track_id: self.id, region_id: tick },
-            Sequence::Midi(m) => m.id = RegionIdentifier { track_id: self.id, region_id: tick },
+            Sequence::Pattern(p) => {
+                p.id = RegionIdentifier {
+                    track_id: self.id,
+                    region_id: tick,
+                }
+            }
+            Sequence::Midi(m) => {
+                m.id = RegionIdentifier {
+                    track_id: self.id,
+                    region_id: tick,
+                }
+            }
             Sequence::SequenceContainer(_) => {}
         }
         container.sequences.insert(tick, sequence);
         Ok(())
     }
 }
-
-

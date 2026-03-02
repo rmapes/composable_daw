@@ -1,6 +1,5 @@
-
-use crate::models::shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier};
 use crate::models::sequences::{MidiNote, Tick};
+use crate::models::shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier};
 // TODO: Decouple specific instrument actions and use a pluggable map instead
 use crate::threads::audio::sources::synth::SynthActions;
 
@@ -33,6 +32,4 @@ pub enum Actions {
 pub enum SystemActions {
     SamplesPlayed(usize),
     SetSampleRate(u32),
-
 }
-

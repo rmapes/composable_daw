@@ -5,7 +5,6 @@ use crate::threads::ui;
 mod models;
 mod threads;
 
-
 fn main() -> Result<(), Box<dyn Error>> {
     pretty_env_logger::init();
     log::info!("Starting app");

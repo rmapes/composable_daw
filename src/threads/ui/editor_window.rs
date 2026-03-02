@@ -3,7 +3,6 @@ use iced::{Element, Length};
 
 use crate::models::sequences::Sequence;
 
-
 use super::actions::Message;
 use super::midi_editor;
 use super::pattern_editor;
@@ -22,11 +21,15 @@ impl Component {
         }
     }
 
-
-    pub fn view(&self, maybe_region: Option<&Sequence>, snap_to_grid: midi_editor::SnapToGrid, midi_offset: u8) -> Element<'_, Message> {
+    pub fn view(
+        &self,
+        maybe_region: Option<&Sequence>,
+        snap_to_grid: midi_editor::SnapToGrid,
+        midi_offset: u8,
+    ) -> Element<'_, Message> {
         if let Some(region) = maybe_region {
             match region {
-                Sequence::Pattern(pattern) =>  self.pattern_editor.view(pattern),
+                Sequence::Pattern(pattern) => self.pattern_editor.view(pattern),
                 Sequence::Midi(midi) => self.midi_editor.view(midi, snap_to_grid, midi_offset),
                 Sequence::SequenceContainer(_sequence_container) => row![].into(),
             }
@@ -34,6 +37,4 @@ impl Component {
             row![].into()
         }
     }
-
-
 }

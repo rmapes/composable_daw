@@ -1,15 +1,16 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use log::info;
 
-use super::audio::sources::synth::TrackSynth;
 use super::audio::controllers::{MidiInputMessage, MidiSendersMap};
-use super::audio::{AudioEngine, controllers::stereo_output::StereoOutputController, buss::Buss, interfaces::Output};
-use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
+use super::audio::sources::synth::TrackSynth;
+use super::audio::{
+    AudioEngine, buss::Buss, controllers::stereo_output::StereoOutputController, interfaces::Output,
+};
 use crate::models::sequences::{EventStreamSource, Tick};
-
+use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 
 /**
  * Manages audio sources (synths) in the engine thread.
@@ -30,7 +31,10 @@ impl AudioSources {
         tracks: &Vec<Track>,
         midi_senders: MidiSendersMap,
     ) -> Self {
-        info!("Creating new Audio Source Controller with {} tracks", tracks.len());
+        info!(
+            "Creating new Audio Source Controller with {} tracks",
+            tracks.len()
+        );
         let mut this = Self {
             audio,
             stereo_output,
@@ -64,7 +68,8 @@ impl AudioSources {
                     }
                     let track_synth_rc = Rc::new(RefCell::new(track_synth));
                     let wrapper = Rc::clone(&track_synth_rc);
-                    self.final_buss.add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
+                    self.final_buss
+                        .add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
                     self.tracks.insert(track.id, track_synth_rc);
                     Ok(())
                 } else {
@@ -117,8 +122,15 @@ impl AudioSources {
         }
 
         // Find the maximum end tick across all tracks
-        let max_end_tick = self.tracks.values()
-            .map(|track_synth| track_synth.borrow().get_event_stream().get_length_in_ticks())
+        let max_end_tick = self
+            .tracks
+            .values()
+            .map(|track_synth| {
+                track_synth
+                    .borrow()
+                    .get_event_stream()
+                    .get_length_in_ticks()
+            })
             .max()
             .unwrap_or(0);
 
@@ -129,9 +141,14 @@ impl AudioSources {
 
     /// Handle synth actions (soundfont, bank, program changes)
     /// TODO: Decouple specific instrument actions and use a pluggable map instead
-    pub fn handle_synth_action(&mut self, action: super::audio::sources::synth::SynthActions) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn handle_synth_action(
+        &mut self,
+        action: super::audio::sources::synth::SynthActions,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         for track_synth in self.tracks.values() {
-            track_synth.borrow_mut().handle_synth_action(action.clone())?;
+            track_synth
+                .borrow_mut()
+                .handle_synth_action(action.clone())?;
         }
         Ok(())
     }
@@ -148,15 +165,18 @@ unsafe impl Send for RefCellOutputWrapper {}
 unsafe impl Sync for RefCellOutputWrapper {}
 
 impl Output for RefCellOutputWrapper {
-    fn write_f32(&mut self, 
-        len: usize, 
-        left_out: &mut [f32], 
-        loff: usize, 
-        lincr: usize, 
-        right_out: &mut [f32], 
-        roff: usize, 
+    fn write_f32(
+        &mut self,
+        len: usize,
+        left_out: &mut [f32],
+        loff: usize,
+        lincr: usize,
+        right_out: &mut [f32],
+        roff: usize,
         rincr: usize,
     ) {
-        self.inner.borrow_mut().write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
+        self.inner
+            .borrow_mut()
+            .write_f32(len, left_out, loff, lincr, right_out, roff, rincr);
     }
 }

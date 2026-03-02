@@ -2,19 +2,19 @@ use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 
 use iced::advanced::subscription::{EventStream, Recipe};
+use iced::futures::SinkExt;
 use iced::futures::channel::mpsc;
 use iced::futures::stream::BoxStream;
-use iced::futures::SinkExt;
 use iced::time;
-use iced::widget::{column, row, stack, text, Column, Container, Space};
+use iced::widget::{Column, Container, Space, column, row, stack, text};
 use iced::{Element, Length, Subscription, Task, window};
 use log::{error, info};
 
 use crate::models::sequences::{Sequence, TSequence, Tick};
 use crate::models::shared::{ProjectData, RegionIdentifier, TrackIdentifier};
 
-use super::super::engine::actions::Actions;
 use super::super::audio::sources::synth::SynthActions;
+use super::super::engine::actions::Actions;
 use super::super::engine::{self, PlayerState};
 use super::actions::{Message, SynthMessage};
 use super::components;
@@ -45,7 +45,7 @@ pub struct DragState {
 
 //////////////////////
 /// Entry point for iced ui
-/// 
+///
 pub struct MainWindow {
     // Core application data and engine
     engine: engine::EngineController,
@@ -71,13 +71,11 @@ pub struct MainWindow {
     composer_window: composer_window::Component,
     editor_window: editor_window::Component,
     track_settings: track_settings::Component,
-
-
 }
 
 impl std::hash::Hash for MainWindow {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_i64(123456_i64);  // Use a static hash to allow data change subscription to work
+        state.write_i64(123456_i64); // Use a static hash to allow data change subscription to work
     }
 }
 
@@ -86,42 +84,50 @@ impl std::hash::Hash for MainWindow {
 /// All project state is stored in data and managed by the engine. It is this data that is saved and loaded
 /// All UI state is stored in the ui thread and not persisted between sessions. If needed by engine it is passed as command parameters
 /// Player state (i.e. the ephemeral state of the player, such as playhead position, or audio data for visual display ) is passed via the player_state object.
-/// NOT YET IMPLEMENTED: All permanent settings are stored in a settings object and autosaved in the background 
+/// NOT YET IMPLEMENTED: All permanent settings are stored in a settings object and autosaved in the background
 impl Default for MainWindow {
     fn default() -> Self {
         let project_data = ProjectData::new();
         let (engine, player_state) = {
             let (engine, player_state) = engine::start(
-            {
-                move |_player_state: &engine::PlayerState| {
-                    // Ignore this for the moment.
-                    // Eventually, I'll need to work out how to handle internal state updates
-                }
-            },
-            
-            &project_data
+                {
+                    move |_player_state: &engine::PlayerState| {
+                        // Ignore this for the moment.
+                        // Eventually, I'll need to work out how to handle internal state updates
+                    }
+                },
+                &project_data,
             );
             (engine, player_state)
         };
-        let selected_track = TrackIdentifier{ track_id: 0 };
-    
+        let selected_track = TrackIdentifier { track_id: 0 };
+
         Self {
             engine,
             player_state,
             project_data,
             is_audio_initialized: false,
             selected_track: selected_track.track_id,
-            selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
+            selected_region: Some(RegionIdentifier {
+                track_id: selected_track,
+                region_id: 0,
+            }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             dragging_region: None,
             playhead: 0,
             midi_editor_snap: super::midi_editor::SnapToGrid::Division,
             midi_editor_offset: DEFAULT_MIDI_OFFSET,
-            width: Length::Fill, //600_f32,
+            width: Length::Fill,  //600_f32,
             height: Length::Fill, //400_f32,
-            control_bar: control_bar::Component::new(Length::Fill, Length::Fixed(CONTROL_BAR_HEIGHT)),
+            control_bar: control_bar::Component::new(
+                Length::Fill,
+                Length::Fixed(CONTROL_BAR_HEIGHT),
+            ),
             composer_window: composer_window::Component::new(Length::Fill, Length::FillPortion(2)),
             editor_window: editor_window::Component::new(Length::Fill, Length::FillPortion(1)),
-            track_settings: track_settings::Component::new(Length::Fixed(TRACK_SETTINGS_WIDTH), Length::Fill),            
+            track_settings: track_settings::Component::new(
+                Length::Fixed(TRACK_SETTINGS_WIDTH),
+                Length::Fill,
+            ),
         }
     }
 }
@@ -132,10 +138,10 @@ impl MainWindow {
     pub fn update(&mut self, msg: Message) -> Task<Message> {
         // Cache state
         self.is_audio_initialized = self
-        .player_state
-        .try_read()
-        .map(|s| s.is_audio_initialized)
-        .unwrap_or(self.is_audio_initialized);    
+            .player_state
+            .try_read()
+            .map(|s| s.is_audio_initialized)
+            .unwrap_or(self.is_audio_initialized);
         // Handle messages
         match msg {
             //////////////////
@@ -146,12 +152,10 @@ impl MainWindow {
                     iced::exit()
                 }
                 _ => Task::none(),
-            }
+            },
             //////////////////
             // Engine Actions to be handled on engine thread
-            Message::Engine(action) => { 
-                self.send_to_engine_and_handle_errors(action) 
-            }
+            Message::Engine(action) => self.send_to_engine_and_handle_errors(action),
             //////////////////
             // Responses to events from other threads
             Message::ProjectDataChanged(project_data) => {
@@ -159,26 +163,25 @@ impl MainWindow {
                 Task::none()
             }
             Message::Tick => {
-                if let Ok(state) = self.player_state.try_read() 
-                    && state.is_playing {
+                if let Ok(state) = self.player_state.try_read()
+                    && state.is_playing
+                {
                     self.playhead = state.playhead;
                 }
                 Task::none()
-            },
+            }
             //////////////////
             // Actions to be handled by pluggable components e.g Synth.
             Message::Synth(synth_message) => match synth_message {
                 SynthMessage::SelectSoundFont(track_id) => {
-                    Task::perform(
-                        pick_file(track_id, "./soundfonts"), 
-                        |(track_id, path)| { 
-                            Message::Synth(SynthMessage::SetSoundFont(track_id, path)) 
-                        }
-                    )
+                    Task::perform(pick_file(track_id, "./soundfonts"), |(track_id, path)| {
+                        Message::Synth(SynthMessage::SetSoundFont(track_id, path))
+                    })
                 }
-                SynthMessage::SetSoundFont(track_id, path) => {
-                    self.send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(track_id, path)))
-                }
+                SynthMessage::SetSoundFont(track_id, path) => self
+                    .send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(
+                        track_id, path,
+                    ))),
             },
             //////////////////
             // UI Actions
@@ -188,7 +191,7 @@ impl MainWindow {
                     self.playhead = 0;
                 }
                 Task::none()
-            },
+            }
             Message::SelectTrack(id) => {
                 self.selected_track = id.track_id;
                 Task::none()
@@ -207,11 +210,22 @@ impl MainWindow {
                     self.selected_region = Some(region_id);
                     let track_idx = region_id.track_id.track_id;
                     let initial_tick = region_id.region_id;
-                    let current_track = Self::y_to_track_index(current_y).unwrap_or(track_idx).min(self.project_data.tracks.len().saturating_sub(1));
+                    let current_track = Self::y_to_track_index(current_y)
+                        .unwrap_or(track_idx)
+                        .min(self.project_data.tracks.len().saturating_sub(1));
                     let length_per_tick = Self::length_per_tick(self.project_data.ppq);
                     let delta_x = current_x - initial_x;
-                    let current_tick = (initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
-                    let is_valid = Self::check_drop_valid(&self.project_data, region_id, track_idx, initial_tick, length, current_track, current_tick);
+                    let current_tick =
+                        (initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
+                    let is_valid = Self::check_drop_valid(
+                        &self.project_data,
+                        region_id,
+                        track_idx,
+                        initial_tick,
+                        length,
+                        current_track,
+                        current_tick,
+                    );
                     self.dragging_region = Some(DragState {
                         region_id,
                         region_length: length,
@@ -229,7 +243,8 @@ impl MainWindow {
                 if let Some(ref mut drag) = self.dragging_region {
                     let length_per_tick = Self::length_per_tick(self.project_data.ppq);
                     let delta_x = mouse_x - drag.initial_mouse_x;
-                    drag.current_tick = (drag.initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
+                    drag.current_tick =
+                        (drag.initial_tick as f32 + delta_x / length_per_tick).max(0.0) as Tick;
                     drag.current_track_index = Self::y_to_track_index(mouse_y)
                         .unwrap_or(drag.initial_track_index)
                         .min(self.project_data.tracks.len().saturating_sub(1));
@@ -246,7 +261,9 @@ impl MainWindow {
                 Task::none()
             }
             Message::EndRegionDrag => {
-                if let Some(drag) = self.dragging_region.take() && drag.is_valid_drop {
+                if let Some(drag) = self.dragging_region.take()
+                    && drag.is_valid_drop
+                {
                     let target_id = TrackIdentifier {
                         track_id: drag.current_track_index,
                     };
@@ -269,40 +286,44 @@ impl MainWindow {
             Message::DeselectAllRegions() => {
                 self.selected_region = None;
                 Task::none()
-            },
+            }
             Message::NewFile => {
                 // Once we implement save, we should ask the user if they want to save before closing the current file
-                self.send_to_engine_and_handle_errors(Actions::NewFile) 
-            },
+                self.send_to_engine_and_handle_errors(Actions::NewFile)
+            }
             Message::OpenFile => {
                 info!("Open file not yet implemented");
                 Task::none()
-            },
+            }
             Message::SetPlayhead(tick_position) => {
                 self.playhead = tick_position;
                 if let Ok(mut state) = self.player_state.try_write() {
                     state.playhead = self.playhead;
                 }
                 Task::none()
-            },
+            }
             Message::AddRegionAtPlayhead(region_type) => {
                 let player_state = self.player_state.clone();
                 if let Ok(state) = player_state.read() {
-                    let track_id = TrackIdentifier { track_id: self.selected_track};
+                    let track_id = TrackIdentifier {
+                        track_id: self.selected_track,
+                    };
                     let tick = state.playhead;
-                    return self.send_to_engine_and_handle_errors(
-                        Actions::AddRegionAt(track_id, tick, region_type)
-                    )
+                    return self.send_to_engine_and_handle_errors(Actions::AddRegionAt(
+                        track_id,
+                        tick,
+                        region_type,
+                    ));
                 };
                 Task::none()
-            },
+            }
             Message::DeleteSelectedRegion => {
-                if let Some(region_id) =self.selected_region {
+                if let Some(region_id) = self.selected_region {
                     self.selected_region = None;
-                    return self.send_to_engine_and_handle_errors(Actions::DeleteRegion(region_id))
+                    return self.send_to_engine_and_handle_errors(Actions::DeleteRegion(region_id));
                 }
                 Task::none()
-            },
+            }
             Message::MidiEditor(msg) => {
                 match msg {
                     super::midi_editor::MidiEditorMessage::SetSnapToGrid(snap) => {
@@ -317,8 +338,7 @@ impl MainWindow {
                         track_id,
                         note,
                     ) => {
-                        let new_offset =
-                            (self.midi_editor_offset as i16 + delta).clamp(0, 127);
+                        let new_offset = (self.midi_editor_offset as i16 + delta).clamp(0, 127);
                         self.midi_editor_offset = new_offset as u8;
                         return self.send_to_engine_and_handle_errors(Actions::PreviewMidiNote(
                             track_id, note,
@@ -326,7 +346,7 @@ impl MainWindow {
                     }
                 }
                 Task::none()
-            },
+            }
         }
     }
 
@@ -384,27 +404,25 @@ impl MainWindow {
             error!("Engine shutdown unexpectedly. Shutting down");
             error!("{}", err);
             iced::exit()
-        } else { 
+        } else {
             Task::none()
         }
     }
 
     //////////////////
     /// UI layout for the application. This is the entry point for the UI and where all the UI components are rendered.
-    pub fn view(&self) ->Element<'_, Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         let selected_track = if self.selected_track < self.project_data.tracks.len() {
             &self.project_data.tracks[self.selected_track]
         } else {
             &self.project_data.tracks[0]
         };
-        let selected_region: Option<&Sequence> = self
-            .selected_region
-            .and_then(|selection| {
-                self.project_data.tracks[selection.track_id.track_id]
-                    .midi
-                    .as_ref()
-                    .and_then(|sequence| sequence.sequences.get(&selection.region_id))
-            });
+        let selected_region: Option<&Sequence> = self.selected_region.and_then(|selection| {
+            self.project_data.tracks[selection.track_id.track_id]
+                .midi
+                .as_ref()
+                .and_then(|sequence| sequence.sequences.get(&selection.region_id))
+        });
 
         let main_content: Column<'_, Message> = column![
             top_menu_view(),
@@ -413,19 +431,18 @@ impl MainWindow {
                 components::module_slot(self.track_settings.view(selected_track))
                     .width(Length::Shrink),
                 column![
-                    components::module_slot(
-                        self.composer_window.view(
-                            &self.project_data.tracks,
-                            self.selected_track,
-                            self.project_data.ppq,
-                            self.playhead,
-                            self.dragging_region.as_ref(),
-                        ),
-                    ),
-                    components::module_slot(
-                        self.editor_window
-                            .view(selected_region, self.midi_editor_snap, self.midi_editor_offset),
-                    ),
+                    components::module_slot(self.composer_window.view(
+                        &self.project_data.tracks,
+                        self.selected_track,
+                        self.project_data.ppq,
+                        self.playhead,
+                        self.dragging_region.as_ref(),
+                    ),),
+                    components::module_slot(self.editor_window.view(
+                        selected_region,
+                        self.midi_editor_snap,
+                        self.midi_editor_offset
+                    ),),
                 ]
             ]
         ]
@@ -457,18 +474,18 @@ impl MainWindow {
     pub fn subscription(&self) -> Subscription<Message> {
         // 1. Subscription for Window Events
         let window_events = iced::window::events().map(|(_id, event)| Message::WindowEvent(event));
-    
+
         // 2. Subscription for the Millisecond Tick
         // Every 1 millisecond, send a Message::Tick
         let tick = time::every(time::Duration::from_millis(1)).map(|_| Message::Tick);
 
         // 3. Subscribe to project data change events
         let data_change = project_data_change_listener(self);
-    
+
         // 4. Combine all subscriptions
         Subscription::batch(vec![window_events, tick, data_change])
     }
-    
+
     // Don't forget to stop engine on shutdown
     fn shutdown(&self) {
         info!("Shutting down");
@@ -476,9 +493,8 @@ impl MainWindow {
     }
 }
 
-
-    //////////////////
-    /// Listener for project data changes. This is used to update the UI when the project data changes.
+//////////////////
+/// Listener for project data changes. This is used to update the UI when the project data changes.
 pub fn project_data_change_listener(wnd: &MainWindow) -> Subscription<Message> {
     // 1. Create the recipe instance
     let recipe = ProjectDataListener {
@@ -507,15 +523,22 @@ impl Recipe for ProjectDataListener {
     // This is where the actual async work happens
     fn stream(self: Box<Self>, _input: EventStream) -> BoxStream<'static, Self::Output> {
         let rx = self.receiver;
-        
+
         // We use iced's internal stream channel helper
-        let stream = iced::stream::channel(STREAM_CHANNEL_CAPACITY, move |mut output: mpsc::Sender<Message>| async move {
-            while let Ok(data) = rx.recv_async().await {
-                if output.send(Message::ProjectDataChanged(data)).await.is_err() {
-                    break;
+        let stream = iced::stream::channel(
+            STREAM_CHANNEL_CAPACITY,
+            move |mut output: mpsc::Sender<Message>| async move {
+                while let Ok(data) = rx.recv_async().await {
+                    if output
+                        .send(Message::ProjectDataChanged(data))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
-            }
-        });
+            },
+        );
 
         Box::pin(stream)
     }
@@ -541,24 +564,37 @@ mod integration_tests {
 
     use super::super::actions::Message;
 
-
     #[test]
     fn test_add_and_delete_tracks() -> Result<(), Error> {
         let mut app = MainWindow::default();
         // Using fluent TestApp helper for cleaner test code
         let mut test = Emulator::new(&mut app);
         // Check that we've started up with one track present
-        assert_eq!(test.tracks_present(), 1, "We should start with one track present");
+        assert_eq!(
+            test.tracks_present(),
+            1,
+            "We should start with one track present"
+        );
         // Click + to add a track (fluent method calls)
         test.click("+")?;
         // Check that a new track has been added
-        assert_eq!(test.tracks_present(), 2, "A new track should have been added");
+        assert_eq!(
+            test.tracks_present(),
+            2,
+            "A new track should have been added"
+        );
         // Click to select the second track
-        assert!(!test.is_track_selected("Track 2"), "Track 2 should not be selected initially");
+        assert!(
+            !test.is_track_selected("Track 2"),
+            "Track 2 should not be selected initially"
+        );
         test.select_track(1)?; // Select track by index (0-based, so 1 = "Track 2")
         // Check that it is selected
         assert!(test.is_track_selected(1), "Track 2 should be selected");
-        assert!(test.is_track_selected("Track 2"), "Track 2 should be selected by name");
+        assert!(
+            test.is_track_selected("Track 2"),
+            "Track 2 should be selected by name"
+        );
         // Use the file menu to delete the track
         // Check that we are back to a single tracks
         // Click file/new using the menu helper method
@@ -568,27 +604,39 @@ mod integration_tests {
         Ok(())
     }
 
-#[test]
+    #[test]
     fn test_add_midi_region() -> Result<(), Error> {
         let mut app = MainWindow::default();
         let mut test = Emulator::new(&mut app);
 
-        // 1. Check that there is a region currently selected 
+        // 1. Check that there is a region currently selected
         // (MainWindow default selects Region 0 on Track 0)
-        assert!(test.has_selection(), "A region should be selected by default");
+        assert!(
+            test.has_selection(),
+            "A region should be selected by default"
+        );
 
         // 2. Check that clicking outside deselects
         // Assuming "TimelineBackground" is a valid selector for the empty area
-        test.click(Id::new("TimelineBackground"))?; 
-        assert!(!test.has_selection(), "Region should be deselected after clicking background");
+        test.click(Id::new("TimelineBackground"))?;
+        assert!(
+            !test.has_selection(),
+            "Region should be deselected after clicking background"
+        );
 
         // 3. Check that selecting the first region selects it
         test.select_first_region_in_selected_track()?;
-        assert!(test.has_selection(), "Region should be selected after selecting it");
+        assert!(
+            test.has_selection(),
+            "Region should be selected after selecting it"
+        );
 
         // 4. Check "Edit"/"Delete Region" removes it
         test.click_menu_item("Edit", "Delete Region")?;
-        assert!(!test.has_selection(), "Selection should be gone after delete");
+        assert!(
+            !test.has_selection(),
+            "Selection should be gone after delete"
+        );
 
         // 5. Check playhead is at 0
         assert_eq!(test.get_playhead(), 0);
@@ -599,11 +647,14 @@ mod integration_tests {
 
         // 7. Check selecting displays MIDI editor
         // We check if the editor window is viewing a sequence (non-None)
-        assert!(test.is_midi_editor_visible(), "Editor should be visible for MIDI region");
+        assert!(
+            test.is_midi_editor_visible(),
+            "Editor should be visible for MIDI region"
+        );
 
         // 8. Click grid to add note (at tick 10, pitch 60)
         test.click_midi_editor_grid(10, 60)?;
-        
+
         Ok(())
     }
 
@@ -826,13 +877,19 @@ mod integration_tests {
         let mut app = MainWindow::default();
         let mut test = Emulator::new(&mut app);
 
-        // 1. Check that there is a region currently selected 
+        // 1. Check that there is a region currently selected
         // (MainWindow default selects Region 0 on Track 0)
-        assert!(test.has_selection(), "A region should be selected by default");
+        assert!(
+            test.has_selection(),
+            "A region should be selected by default"
+        );
 
         // 2. Check "Edit"/"Delete Region" removes it
         test.click_menu_item("Edit", "Delete Region")?;
-        assert!(!test.has_selection(), "Selection should be gone after delete");
+        assert!(
+            !test.has_selection(),
+            "Selection should be gone after delete"
+        );
 
         // 3. Check playhead is at 0
         assert_eq!(test.get_playhead(), 0);
@@ -843,11 +900,14 @@ mod integration_tests {
 
         // 5. Check selecting displays pattern editor
         // We check if the editor window is viewing a sequence (non-None)
-        assert!(test.is_pattern_editor_visible(), "Editor should be visible for Pattern region");
+        assert!(
+            test.is_pattern_editor_visible(),
+            "Editor should be visible for Pattern region"
+        );
 
         // 6. Click grid to add note (at tick 10, pitch 60)
         test.click_pattern_editor_grid(3, 2)?;
-        
+
         Ok(())
     }
 
@@ -878,8 +938,11 @@ mod integration_tests {
         }
 
         // Select an element, and click on it directly
-        fn click<S>(&mut self, selector: S) -> Result<(), Error> 
-        where S:Selector + Send + Clone, S::Output: Bounded + Clone + Send + Sync + 'static {
+        fn click<S>(&mut self, selector: S) -> Result<(), Error>
+        where
+            S: Selector + Send + Clone,
+            S::Output: Bounded + Clone + Send + Sync + 'static,
+        {
             let messages = {
                 let view = self.app.view();
                 let mut ui = simulator(view);
@@ -896,7 +959,10 @@ mod integration_tests {
             while !messages.is_empty() {
                 if let Some(message) = messages.pop_front() {
                     let task = self.app.update(message.clone());
-                    assert!(task.units()==0, "We can't handle chained tasks, so only send messages that result in task none");
+                    assert!(
+                        task.units() == 0,
+                        "We can't handle chained tasks, so only send messages that result in task none"
+                    );
                 }
                 // Now check for generated events
                 thread::sleep(Duration::from_millis(1000));
@@ -905,7 +971,7 @@ mod integration_tests {
                 }
             }
         }
-        
+
         fn click_menu_item(&mut self, menu: &str, item: &str) -> Result<(), Error> {
             self.click(menu)?;
             if self.click(item).is_ok() {
@@ -913,7 +979,7 @@ mod integration_tests {
                 thread::sleep(Duration::from_millis(1));
                 return Ok(());
             }
-            
+
             // Expanded fallback mapping
             let message = match (menu, item) {
                 ("File", "New") => Some(Message::NewFile),
@@ -921,26 +987,40 @@ mod integration_tests {
                 ("Edit", "Delete Region") => Some(Message::DeleteSelectedRegion),
                 ("Edit", "Add Midi Region") => {
                     // Simulate AddRegionAtPlayhead, as we can't chain tasks.
-                    let track_id = TrackIdentifier { track_id: self.app.selected_track};
+                    let track_id = TrackIdentifier {
+                        track_id: self.app.selected_track,
+                    };
                     let tick = self.app.playhead;
-                    Some(Message::Engine(Actions::AddRegionAt(track_id, tick, RegionType::Midi)))
-                },
+                    Some(Message::Engine(Actions::AddRegionAt(
+                        track_id,
+                        tick,
+                        RegionType::Midi,
+                    )))
+                }
                 ("Edit", "Add Pattern Region") => {
                     // Simulate AddRegionAtPlayhead, as we can't chain tasks.
-                    let track_id = TrackIdentifier { track_id: self.app.selected_track};
+                    let track_id = TrackIdentifier {
+                        track_id: self.app.selected_track,
+                    };
                     let tick = self.app.playhead;
-                    Some(Message::Engine(Actions::AddRegionAt(track_id, tick, RegionType::Pattern)))
-                },
+                    Some(Message::Engine(Actions::AddRegionAt(
+                        track_id,
+                        tick,
+                        RegionType::Pattern,
+                    )))
+                }
                 _ => None,
             };
-            
+
             if let Some(msg) = message {
                 let mut messages = VecDeque::new();
                 messages.push_back(msg);
                 self.process_messages(messages);
                 Ok(())
             } else {
-                Err(Error::SelectorNotFound { selector: format!("{} -> {}", menu, item) })
+                Err(Error::SelectorNotFound {
+                    selector: format!("{} -> {}", menu, item),
+                })
             }
         }
 
@@ -948,8 +1028,11 @@ mod integration_tests {
             let mut ui = simulator(self.app.view());
             let mut count: usize = 0;
             for i in 1..1000 {
-                if ui.find(format!("Track {i}")).is_ok() { count += 1; }
-                else { break; }
+                if ui.find(format!("Track {i}")).is_ok() {
+                    count += 1;
+                } else {
+                    break;
+                }
             }
             count
         }
@@ -963,14 +1046,16 @@ mod integration_tests {
             self.click(track_name)?;
             match selector {
                 TrackSelector::Index(idx) => Ok(idx),
-                TrackSelector::Name(_) => Ok(self.app.selected_track)
+                TrackSelector::Name(_) => Ok(self.app.selected_track),
             }
         }
 
         fn is_track_selected(&self, track: impl Into<TrackSelector>) -> bool {
             match track.into() {
                 TrackSelector::Index(idx) => self.app.selected_track == idx,
-                TrackSelector::Name(name) => format!("Track {}", self.app.selected_track + 1) == name,
+                TrackSelector::Name(name) => {
+                    format!("Track {}", self.app.selected_track + 1) == name
+                }
             }
         }
 
@@ -980,16 +1065,25 @@ mod integration_tests {
         fn select_first_region_in_selected_track(&mut self) -> Result<(), Error> {
             let track_idx = self.app.selected_track;
             let track = self.app.project_data.tracks.get(track_idx).ok_or_else(|| {
-                Error::SelectorNotFound { selector: "selected track".to_string() }
+                Error::SelectorNotFound {
+                    selector: "selected track".to_string(),
+                }
             })?;
-            let container = track.midi.as_ref().ok_or_else(|| {
-                Error::SelectorNotFound { selector: "track midi container".to_string() }
+            let container = track.midi.as_ref().ok_or_else(|| Error::SelectorNotFound {
+                selector: "track midi container".to_string(),
             })?;
-            let first_tick = container.sequences.keys().min().ok_or_else(|| {
-                Error::SelectorNotFound { selector: "first region in selected track".to_string() }
-            })?;
+            let first_tick =
+                container
+                    .sequences
+                    .keys()
+                    .min()
+                    .ok_or_else(|| Error::SelectorNotFound {
+                        selector: "first region in selected track".to_string(),
+                    })?;
             let region_id = RegionIdentifier {
-                track_id: TrackIdentifier { track_id: track_idx },
+                track_id: TrackIdentifier {
+                    track_id: track_idx,
+                },
                 region_id: *first_tick,
             };
             let mut messages = VecDeque::new();
@@ -1018,18 +1112,25 @@ mod integration_tests {
 
         fn click_midi_editor_grid(&mut self, tick: Tick, note: u8) -> Result<(), Error> {
             if let Some(region_id) = self.app.selected_region {
-                let midi_note = MidiNote { key: note, velocity: TEST_DEFAULT_NOTE_VELOCITY, channel: 0, length: TEST_DEFAULT_NOTE_LENGTH_TICKS };
+                let midi_note = MidiNote {
+                    key: note,
+                    velocity: TEST_DEFAULT_NOTE_VELOCITY,
+                    channel: 0,
+                    length: TEST_DEFAULT_NOTE_LENGTH_TICKS,
+                };
                 let msg = Message::Engine(Actions::CreateMidiNote(region_id, tick, midi_note));
                 let _ = self.app.update(msg);
                 Ok(())
             } else {
-                Err(Error::SelectorNotFound { selector: "Editor Grid (No Region Selected)".to_string() })
+                Err(Error::SelectorNotFound {
+                    selector: "Editor Grid (No Region Selected)".to_string(),
+                })
             }
         }
 
         fn click_pattern_editor_grid(&mut self, beat: u8, note: u8) -> Result<(), Error> {
             if let Some(region_id) = self.app.selected_region {
-                let pattern_note = PatternNoteIdentifier { 
+                let pattern_note = PatternNoteIdentifier {
                     region_id,
                     note_num: note,
                     beat_num: beat,
@@ -1038,13 +1139,25 @@ mod integration_tests {
                 let _ = self.app.update(msg);
                 Ok(())
             } else {
-                Err(Error::SelectorNotFound { selector: "Editor Grid (No Region Selected)".to_string() })
+                Err(Error::SelectorNotFound {
+                    selector: "Editor Grid (No Region Selected)".to_string(),
+                })
             }
         }
     }
 
-    enum TrackSelector { Name(String), Index(usize) }
-    impl From<&str> for TrackSelector { fn from(name: &str) -> Self { TrackSelector::Name(name.to_string()) } }
-    impl From<usize> for TrackSelector { fn from(idx: usize) -> Self { TrackSelector::Index(idx) } }
+    enum TrackSelector {
+        Name(String),
+        Index(usize),
+    }
+    impl From<&str> for TrackSelector {
+        fn from(name: &str) -> Self {
+            TrackSelector::Name(name.to_string())
+        }
+    }
+    impl From<usize> for TrackSelector {
+        fn from(idx: usize) -> Self {
+            TrackSelector::Index(idx)
+        }
+    }
 }
-

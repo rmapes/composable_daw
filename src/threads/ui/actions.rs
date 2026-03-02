@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use iced::window;
 
+use super::super::engine::actions::Actions;
 use crate::models::sequences::Tick;
 use crate::models::shared::{ProjectData, RegionIdentifier, RegionType, TrackIdentifier};
-use super::super::engine::actions::Actions;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)] // SelectRegion and CancelRegionDrag are constructed from composer_window and main_window

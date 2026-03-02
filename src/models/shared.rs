@@ -18,7 +18,6 @@ use super::components::*;
 // the only problems this presents are:
 //    - do we need explici
 
-
 ////////
 /// Value objects to identify structures stored within Project Data
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -55,7 +54,6 @@ pub struct ProjectData {
     // Tempo and Measures
     pub bpm: u8,
     pub ppq: u32,
-
 }
 
 impl ProjectData {
@@ -77,16 +75,20 @@ impl ProjectData {
     }
 
     pub fn ticks_per_second(&self) -> u32 {
-        self.ppq * self.bpm as u32/ 60
+        self.ppq * self.bpm as u32 / 60
     }
 
     pub fn new_track(&mut self) -> TrackIdentifier {
         // Add a new track, defaulting to name Track # where # is current position
         let new_track_num = self.tracks.len() + 1;
-        let id = TrackIdentifier {track_id: new_track_num - 1};
+        let id = TrackIdentifier {
+            track_id: new_track_num - 1,
+        };
         let mut new_track = Track::new(id, format!("Track {new_track_num}"), self.ppq);
         // Temporary until we can add regions via UI. Add pattern at start
-        new_track.add_midi_region_at(0).expect("Unexpected collision inserting into empty sequence");
+        new_track
+            .add_midi_region_at(0)
+            .expect("Unexpected collision inserting into empty sequence");
         self.tracks.push(new_track);
         id
     }

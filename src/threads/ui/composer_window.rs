@@ -1,7 +1,9 @@
 use iced::mouse::{Button, Cursor, Event};
 use iced::widget::canvas::{self, Fill, Frame, Geometry, LineCap, Path, Stroke};
 use iced::widget::container::Style;
-use iced::widget::{button, column, container, row, scrollable, stack, text, Container, MouseArea, Space};
+use iced::widget::{
+    Container, MouseArea, Space, button, column, container, row, scrollable, stack, text,
+};
 use iced::{Color, Element, Length, Point, Rectangle, Theme};
 
 use crate::models::components::Track;
@@ -10,9 +12,8 @@ use crate::models::shared::RegionIdentifier;
 
 use super::super::engine::actions::Actions;
 use super::actions::Message;
-use super::main_window::DragState;
 use super::components;
-
+use super::main_window::DragState;
 
 // Define styling
 pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
@@ -21,7 +22,7 @@ pub fn track_style(is_selected: bool) -> impl Fn(&Theme) -> Style {
     } else {
         Color::BLACK
     };
-    
+
     // The closure signature is correct: |_theme: &Theme| -> container::Style
     move |_theme: &Theme| Style {
         // Set the background color
@@ -43,11 +44,8 @@ pub struct Component {
 
 impl Component {
     pub fn new(width: Length, height: Length) -> Self {
-        Self { 
-            width, 
-            height,
-        }
-    } 
+        Self { width, height }
+    }
 
     pub fn view(
         &self,
@@ -64,34 +62,50 @@ impl Component {
 
         let ruler_layer = row![
             Space::new().width(Length::Fixed(TRACK_LABEL_WIDTH)),
-            iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE)).width(Length::Fixed(TIMELINE_WIDTH))                
-        ].height(Length::Fixed(RULER_HEIGHT));
+            iced::widget::canvas(tick_ruler(length_per_tick, ppq, 4, BARS_IN_TIMELINE))
+                .width(Length::Fixed(TIMELINE_WIDTH))
+        ]
+        .height(Length::Fixed(RULER_HEIGHT));
 
         components::module(
             column![
                 self.controls(),
                 stack![
                     column![
-                    ruler_layer,
-                    self.track_list(tracks, selected_track, length_per_tick, ppq, 4, BARS_IN_TIMELINE, RULER_HEIGHT, dragging_region),
+                        ruler_layer,
+                        self.track_list(
+                            tracks,
+                            selected_track,
+                            length_per_tick,
+                            ppq,
+                            4,
+                            BARS_IN_TIMELINE,
+                            RULER_HEIGHT,
+                            dragging_region
+                        ),
                     ],
                     row![
                         Space::new().width(Length::Fixed(TRACK_LABEL_WIDTH)),
-                        iced::widget::canvas(playhead_marker(playhead, length_per_tick, RULER_HEIGHT)).height(Length::Fill).width(Length::Fill)
-                    ].width(Length::Fill)         
+                        iced::widget::canvas(playhead_marker(
+                            playhead,
+                            length_per_tick,
+                            RULER_HEIGHT
+                        ))
+                        .height(Length::Fill)
+                        .width(Length::Fill)
+                    ]
+                    .width(Length::Fill)
                 ]
-                
             ]
             .spacing(0)
             .width(self.width)
             .height(self.height)
-            .into()
-        ).into()
+            .into(),
+        )
+        .into()
     }
     fn controls(&self) -> Element<'_, Message> {
-        row![
-            button("+").on_press(Message::Engine(Actions::AddTrack)),
-        ].into()
+        row![button("+").on_press(Message::Engine(Actions::AddTrack)),].into()
     }
     #[allow(clippy::too_many_arguments)]
     fn track_list(
@@ -135,7 +149,7 @@ impl Component {
             .center_x(Length::Fill)
             .align_y(iced::alignment::Vertical::Top) // You can also set a fixed height, e.g., `Length::Fixed(400.0)`
             .padding(0)
-            .into()       
+            .into()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -174,13 +188,12 @@ impl Component {
     }
 
     fn track_settings(&self, track: &Track) -> Element<'_, Message> {
-        let content = column![
-                text(track.name.clone())
-            ]
+        let content = column![text(track.name.clone())]
             .width(Length::Fixed(TRACK_LABEL_WIDTH))
-            .height(Length::Fill)
-            ;
-        MouseArea::new(content).on_press(Message::SelectTrack(track.id)).into()
+            .height(Length::Fill);
+        MouseArea::new(content)
+            .on_press(Message::SelectTrack(track.id))
+            .into()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -219,18 +232,28 @@ impl Component {
     }
 
     fn get_regions(&self, track: &Track) -> Vec<(Tick, Tick, Option<RegionIdentifier>)> {
-        track.midi.as_ref().map(|m| {
-            m.sequences.iter().map(|(tick, region)| {
-                let identifier = match region {
-                    crate::models::sequences::Sequence::Pattern(pattern_seq) => Some(pattern_seq.id),
-                    crate::models::sequences::Sequence::SequenceContainer(_sequence_container) => None,
-                    crate::models::sequences::Sequence::Midi(midi_seq) =>  Some(midi_seq.id),
-                };
-                (*tick, region.length_in_ticks(), identifier)
-            }).collect()
-        }).unwrap_or_default()
+        track
+            .midi
+            .as_ref()
+            .map(|m| {
+                m.sequences
+                    .iter()
+                    .map(|(tick, region)| {
+                        let identifier = match region {
+                            crate::models::sequences::Sequence::Pattern(pattern_seq) => {
+                                Some(pattern_seq.id)
+                            }
+                            crate::models::sequences::Sequence::SequenceContainer(
+                                _sequence_container,
+                            ) => None,
+                            crate::models::sequences::Sequence::Midi(midi_seq) => Some(midi_seq.id),
+                        };
+                        (*tick, region.length_in_ticks(), identifier)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
-
 }
 
 const DRAG_THRESHOLD_PX: f32 = 5.0;
@@ -279,7 +302,9 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                 }
                 Event::ButtonReleased(Button::Left) => {
                     if let Some((region_id, _, _)) = state.take() {
-                        return Some(iced::widget::Action::publish(Message::RegionClick(region_id)));
+                        return Some(iced::widget::Action::publish(Message::RegionClick(
+                            region_id,
+                        )));
                     }
                     return Some(iced::widget::Action::publish(Message::EndRegionDrag));
                 }
@@ -294,7 +319,9 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                         }
                         *state = Some((region_id, px, py));
                     } else {
-                        return Some(iced::widget::Action::publish(Message::UpdateRegionDrag(x, timeline_y)));
+                        return Some(iced::widget::Action::publish(Message::UpdateRegionDrag(
+                            x, timeline_y,
+                        )));
                     }
                 }
                 _ => {}
@@ -317,8 +344,7 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                 Color::from_rgb8(0x00, 0x00, 0x00),
             );
             let height = bounds.height;
-            let length_per_bar =
-                self.length_per_tick * self.beats_per_bar as f32 * self.ppq as f32;
+            let length_per_bar = self.length_per_tick * self.beats_per_bar as f32 * self.ppq as f32;
             let bar_stroke = Stroke {
                 style: canvas::Style::Solid(Color::from_rgb8(0x30, 0x30, 0x30)),
                 width: 1.0,
@@ -344,16 +370,18 @@ impl canvas::Program<Message, Theme> for InteractiveTimelineCanvas {
                 let rect = Path::rectangle(Point::new(x, 0.0), iced::Size::new(w, height));
                 frame.fill(&rect, Fill::from(REGION_COLOR));
             }
-            if let Some(ref drag) = self.drag_state && drag.current_track_index == self.track_index {
-                    let x = drag.current_tick as f32 * self.length_per_tick;
-                    let w = drag.region_length as f32 * self.length_per_tick;
-                    let color = if drag.is_valid_drop {
-                        REGION_VALID_DROP
-                    } else {
-                        REGION_INVALID_DROP
-                    };
-                    let rect = Path::rectangle(Point::new(x, 0.0), iced::Size::new(w, height));
-                    frame.fill(&rect, Fill::from(color));
+            if let Some(ref drag) = self.drag_state
+                && drag.current_track_index == self.track_index
+            {
+                let x = drag.current_tick as f32 * self.length_per_tick;
+                let w = drag.region_length as f32 * self.length_per_tick;
+                let color = if drag.is_valid_drop {
+                    REGION_VALID_DROP
+                } else {
+                    REGION_INVALID_DROP
+                };
+                let rect = Path::rectangle(Point::new(x, 0.0), iced::Size::new(w, height));
+                frame.fill(&rect, Fill::from(color));
             }
         });
         vec![geometry]
@@ -383,7 +411,13 @@ pub struct TickRuler {
 
 impl TickRuler {
     pub fn new(length_per_tick: f32, ppq: u32, beats_per_bar: u8, total_bars: u32) -> Self {
-        Self {length_per_tick, ppq, beats_per_bar, total_bars, cache: canvas::Cache::new()}
+        Self {
+            length_per_tick,
+            ppq,
+            beats_per_bar,
+            total_bars,
+            cache: canvas::Cache::new(),
+        }
     }
 }
 
@@ -401,15 +435,18 @@ impl canvas::Program<Message, Theme> for TickRuler {
         bounds: Rectangle,
         cursor: Cursor,
     ) -> Option<iced::widget::Action<Message>> {
-        if let iced::Event::Mouse(mouse_event) = event 
-            && let Some(cursor_position) = cursor.position_in(bounds) {
-                // Check for a mouse button press event (e.g., left click)
-                if matches!(mouse_event, Event::ButtonPressed(Button::Left)) {
-                    // convert cursor position to tick
-                    let tick_position = cursor_position.x / self.length_per_tick;
-                    // cursor_position is relative to the canvas bounds
-                    return Some(iced::widget::Action::publish(Message::SetPlayhead(tick_position as u32)));
-                }
+        if let iced::Event::Mouse(mouse_event) = event
+            && let Some(cursor_position) = cursor.position_in(bounds)
+        {
+            // Check for a mouse button press event (e.g., left click)
+            if matches!(mouse_event, Event::ButtonPressed(Button::Left)) {
+                // convert cursor position to tick
+                let tick_position = cursor_position.x / self.length_per_tick;
+                // cursor_position is relative to the canvas bounds
+                return Some(iced::widget::Action::publish(Message::SetPlayhead(
+                    tick_position as u32,
+                )));
+            }
         }
         None
     }
@@ -423,47 +460,63 @@ impl canvas::Program<Message, Theme> for TickRuler {
         _cursor: Cursor,
     ) -> Vec<Geometry> {
         // Use the cache; if the canvas size hasn't changed, this avoids re-drawing.
-        let geometry = self.cache.draw(renderer, bounds.size(), |frame: &mut Frame| {
-            
-            // --- Custom Drawing Logic ---
-            
-            // Background color
-            frame.fill(&Path::rectangle(Point::ORIGIN, bounds.size()), Color::from_rgb8(0x00, 0x00, 0x00));
+        let geometry = self
+            .cache
+            .draw(renderer, bounds.size(), |frame: &mut Frame| {
+                // --- Custom Drawing Logic ---
 
-            let length_per_division = self.length_per_tick * self.ppq as f32;
+                // Background color
+                frame.fill(
+                    &Path::rectangle(Point::ORIGIN, bounds.size()),
+                    Color::from_rgb8(0x00, 0x00, 0x00),
+                );
 
-            // Define stroke style for the wave
-            let bar_line_stroke = Stroke {
-                style: canvas::Style::Solid(Color::from_rgb8(0x90, 0x90, 0x90)),
-                width: 1.0,
-                line_cap: LineCap::Square,
-                ..Stroke::default()
-            };
+                let length_per_division = self.length_per_tick * self.ppq as f32;
 
-            // Define stroke style for the wave
-            let division_line_stroke = Stroke {
-                style: canvas::Style::Solid(Color::from_rgb8(0x60, 0x60, 0x60)),
-                width: 1.0,
-                line_cap: LineCap::Square,
-                ..Stroke::default()
-            };
+                // Define stroke style for the wave
+                let bar_line_stroke = Stroke {
+                    style: canvas::Style::Solid(Color::from_rgb8(0x90, 0x90, 0x90)),
+                    width: 1.0,
+                    line_cap: LineCap::Square,
+                    ..Stroke::default()
+                };
 
-            // Draw the wave
-            let total_divisions = self.total_bars * self.beats_per_bar as u32;
-            for division in 0..total_divisions {
-                let xpos = division as f32 * length_per_division;
-                if xpos < bounds.width {
-                    let stroke = {if division % self.beats_per_bar as u32 == 0 {bar_line_stroke} else {division_line_stroke}};
-                    let height = {if division % self.beats_per_bar as u32 == 0 {bounds.height} else {bounds.height / 2.0}};
-                    frame.stroke(&Path::line(
-                        Point { x: xpos, y: 0.0 },
-                        Point { x: xpos, y: height },
-                    ), stroke);
+                // Define stroke style for the wave
+                let division_line_stroke = Stroke {
+                    style: canvas::Style::Solid(Color::from_rgb8(0x60, 0x60, 0x60)),
+                    width: 1.0,
+                    line_cap: LineCap::Square,
+                    ..Stroke::default()
+                };
+
+                // Draw the wave
+                let total_divisions = self.total_bars * self.beats_per_bar as u32;
+                for division in 0..total_divisions {
+                    let xpos = division as f32 * length_per_division;
+                    if xpos < bounds.width {
+                        let stroke = {
+                            if division % self.beats_per_bar as u32 == 0 {
+                                bar_line_stroke
+                            } else {
+                                division_line_stroke
+                            }
+                        };
+                        let height = {
+                            if division % self.beats_per_bar as u32 == 0 {
+                                bounds.height
+                            } else {
+                                bounds.height / 2.0
+                            }
+                        };
+                        frame.stroke(
+                            &Path::line(Point { x: xpos, y: 0.0 }, Point { x: xpos, y: height }),
+                            stroke,
+                        );
+                    }
                 }
-            }
 
-            // --- End Drawing Logic ---
-        });
+                // --- End Drawing Logic ---
+            });
 
         vec![geometry]
     }
@@ -478,7 +531,12 @@ pub struct PlayheadMarker {
 
 impl PlayheadMarker {
     pub fn new(playhead: Tick, length_per_tick: f32, ruler_height: f32) -> Self {
-        Self {length_per_tick, playhead, ruler_height, cache: canvas::Cache::new()}
+        Self {
+            length_per_tick,
+            playhead,
+            ruler_height,
+            cache: canvas::Cache::new(),
+        }
     }
 }
 
@@ -498,20 +556,24 @@ impl canvas::Program<Message, Theme> for PlayheadMarker {
         _cursor: Cursor,
     ) -> Vec<Geometry> {
         // Use the cache; if the canvas size hasn't changed, this avoids re-drawing.
-        let geometry = self.cache.draw(renderer, bounds.size(), |frame: &mut Frame| {
-            
-            // --- Custom Drawing Logic ---
-            
-            // Background color
-            frame.fill(&Path::rectangle(Point::ORIGIN, bounds.size()), Color::TRANSPARENT);
+        let geometry = self
+            .cache
+            .draw(renderer, bounds.size(), |frame: &mut Frame| {
+                // --- Custom Drawing Logic ---
 
-            // Draw the marker
-            let xpos = self.playhead as f32 * self.length_per_tick;
-            // Draw head
-            draw_playhead(xpos, 0.0, bounds, self.ruler_height, frame);
+                // Background color
+                frame.fill(
+                    &Path::rectangle(Point::ORIGIN, bounds.size()),
+                    Color::TRANSPARENT,
+                );
 
-            // --- End Drawing Logic ---
-        });
+                // Draw the marker
+                let xpos = self.playhead as f32 * self.length_per_tick;
+                // Draw head
+                draw_playhead(xpos, 0.0, bounds, self.ruler_height, frame);
+
+                // --- End Drawing Logic ---
+            });
 
         vec![geometry]
     }
@@ -519,10 +581,10 @@ impl canvas::Program<Message, Theme> for PlayheadMarker {
 fn draw_playhead(x: f32, y_top: f32, bounds: Rectangle, head_height: f32, frame: &mut Frame) {
     let head_width = head_height;
     // The point where the rectangle part stops and the triangle part begins
-    let shoulder_height = head_height * 0.5; 
-    
+    let shoulder_height = head_height * 0.5;
+
     // Logic Pro-ish Color (Light Gray/Whiteish)
-    let playhead_color = Color::from_rgb8(220, 220, 220); 
+    let playhead_color = Color::from_rgb8(220, 220, 220);
 
     // 2. DRAW THE VERTICAL LINE (The "String")
     // We draw this first so it appears behind the head if they overlap slightly
@@ -533,9 +595,7 @@ fn draw_playhead(x: f32, y_top: f32, bounds: Rectangle, head_height: f32, frame:
 
     frame.stroke(
         &line_path,
-        Stroke::default()
-            .with_color(playhead_color)
-            .with_width(1.0),
+        Stroke::default().with_color(playhead_color).with_width(1.0),
     );
 
     // 3. DRAW THE HEAD (The "Cap")
@@ -543,33 +603,29 @@ fn draw_playhead(x: f32, y_top: f32, bounds: Rectangle, head_height: f32, frame:
     let head_path = Path::new(|p| {
         // Start at top-left corner
         p.move_to(Point::new(x - head_width / 2.0, y_top));
-        
+
         // Draw to top-right corner
         p.line_to(Point::new(x + head_width / 2.0, y_top));
-        
+
         // Draw down to the "shoulder" (right side)
         p.line_to(Point::new(x + head_width / 2.0, y_top + shoulder_height));
-        
+
         // Draw to the tip (center bottom)
         p.line_to(Point::new(x, y_top + head_height));
-        
+
         // Draw up to the "shoulder" (left side)
         p.line_to(Point::new(x - head_width / 2.0, y_top + shoulder_height));
-        
+
         // Close the shape back to start
         p.close();
     });
 
     // Fill the head
     frame.fill(&head_path, Fill::from(playhead_color));
-    
+
     // Optional: Add a slight darker stroke around the head for contrast
     frame.stroke(
-        &head_path, 
-        Stroke::default().with_color(Color::BLACK).with_width(1.0)
+        &head_path,
+        Stroke::default().with_color(Color::BLACK).with_width(1.0),
     );
 }
-
-
-
-

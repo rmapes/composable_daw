@@ -1,15 +1,15 @@
-mod control_bar;
-mod composer_window;
-mod editor_window;
-mod pattern_editor;
-mod midi_editor;
-mod track_settings;
-mod style;
-mod components;
-mod main_window;
-mod main_menu;
 mod actions;
+mod components;
+mod composer_window;
+mod control_bar;
+mod editor_window;
 mod file_picker;
+mod main_menu;
+mod main_window;
+mod midi_editor;
+mod pattern_editor;
+mod style;
+mod track_settings;
 
 use main_window::MainWindow;
 
@@ -19,7 +19,7 @@ pub fn run() -> Result<(), iced::Error> {
     iced::application(
         || (MainWindow::default(), iced::Task::none()),
         MainWindow::update,
-        MainWindow::view
+        MainWindow::view,
     )
     .title(APP_TITLE)
     .subscription(MainWindow::subscription)

@@ -5,37 +5,38 @@ use log::debug;
 
 use crate::models::shared::RegionIdentifier;
 
-
-
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EventPriority {
     System,
     Audio,
-    Other
+    Other,
 }
 
 impl EventPriority {
     fn iter() -> Iter<'static, EventPriority> {
-        static PRIORITIES: [EventPriority; 3] = [EventPriority::System, EventPriority::Audio, EventPriority::Other];
+        static PRIORITIES: [EventPriority; 3] = [
+            EventPriority::System,
+            EventPriority::Audio,
+            EventPriority::Other,
+        ];
         PRIORITIES.iter()
     }
 }
 
-// Event Stream actually consists of a hashmap of ticks to events, 
+// Event Stream actually consists of a hashmap of ticks to events,
 // where each tick is mapped to a further hashmap of events by priority
 pub trait EventStreamSource {
     fn to_event_stream(&self) -> EventStream;
 }
 
-pub struct EventStream{
-    ppq: u32, //ppq = pulses per quarter = pulses per quarter beat = ticks per beat. 
+pub struct EventStream {
+    ppq: u32, //ppq = pulses per quarter = pulses per quarter beat = ticks per beat.
     events: HashMap<u32, HashMap<EventPriority, Vec<MidiEventAt>>>,
     length_in_ticks: u32,
     no_events: Vec<MidiEventAt>,
 }
 
-impl EventStream{
+impl EventStream {
     fn new(ppq: u32, length_in_ticks: u32) -> EventStream {
         EventStream {
             ppq,
@@ -54,8 +55,10 @@ impl EventStream{
     }
     // Return list of events at tick and priority
     pub fn get_events(&self, tick: u32, priority: EventPriority) -> &Vec<MidiEventAt> {
-        let maybe_events = self.events.get(&tick)
-        .and_then(|tick_block| tick_block.get(&priority));
+        let maybe_events = self
+            .events
+            .get(&tick)
+            .and_then(|tick_block| tick_block.get(&priority));
 
         match maybe_events {
             Some(events) => events,
@@ -86,26 +89,31 @@ pub struct PatternSeq {
 
 impl PatternSeq {
     pub fn is_on(&self, beat_num: u8, note_num: u8) -> &bool {
-        self.pattern.get(beat_num as usize).and_then(|notes| {notes.get(note_num as usize)})
-        .expect("Attempt to access pattern out of range")
+        self.pattern
+            .get(beat_num as usize)
+            .and_then(|notes| notes.get(note_num as usize))
+            .expect("Attempt to access pattern out of range")
     }
 
     pub fn toggle_on(&mut self, beat_num: u8, note_num: u8) {
-        self.pattern[beat_num as usize][note_num as usize] = !self.pattern[beat_num as usize][note_num as usize];
+        self.pattern[beat_num as usize][note_num as usize] =
+            !self.pattern[beat_num as usize][note_num as usize];
     }
 
     pub fn new(id: RegionIdentifier, ppq: u32) -> Self {
-        let note_values = vec![72,71,69,67,65,64,62,60];
+        let note_values = vec![72, 71, 69, 67, 65, 64, 62, 60];
         let num_notes = note_values.len() as u8;
         let num_beats = 16;
-        let pattern = (0..num_beats).map(|_| { (0..num_notes).map(|_| {false}).collect() }).collect();
+        let pattern = (0..num_beats)
+            .map(|_| (0..num_notes).map(|_| false).collect())
+            .collect();
         let beats_per_quarter_note = 4;
-        Self { 
+        Self {
             id,
-            note_values, 
-            num_notes, 
-            num_beats, 
-            pattern, 
+            note_values,
+            num_notes,
+            num_beats,
+            pattern,
             ppq,
             beats_per_quarter_note,
         }
@@ -117,7 +125,6 @@ impl TSequence for PatternSeq {
         self.num_beats as u32 * self.ppq / self.beats_per_quarter_note as u32
     }
 }
-
 
 // create local midi type to mirror oxisynth midi event so we can make into a value type
 type U7 = u8; // From oxisynth
@@ -181,20 +188,47 @@ pub enum MidiEvent {
 impl MidiEvent {
     pub fn to_oxisynth(self) -> oxisynth::MidiEvent {
         match self {
-            MidiEvent::NoteOn { channel, key, vel } => { oxisynth::MidiEvent::NoteOn { channel, key, vel } },
-            MidiEvent::NoteOff { channel, key } => { oxisynth::MidiEvent::NoteOff { channel, key } },
-            MidiEvent::ControlChange { channel, ctrl, value } => { oxisynth::MidiEvent::ControlChange { channel, ctrl, value } },
-            MidiEvent::AllNotesOff { channel } => { oxisynth::MidiEvent::AllNotesOff { channel } },
-            MidiEvent::AllSoundOff { channel } => { oxisynth::MidiEvent::AllSoundOff { channel } },
-            MidiEvent::PitchBend { channel, value } => { oxisynth::MidiEvent::PitchBend { channel, value } },
-            MidiEvent::ProgramChange { channel, program_id } => { oxisynth::MidiEvent::ProgramChange { channel, program_id } },
-            MidiEvent::ChannelPressure { channel, value } => { oxisynth::MidiEvent::ChannelPressure { channel, value } },
-            MidiEvent::PolyphonicKeyPressure { channel, key, value } => { oxisynth::MidiEvent::PolyphonicKeyPressure { channel, key, value } },
-            MidiEvent::SystemReset => { oxisynth::MidiEvent::SystemReset },
+            MidiEvent::NoteOn { channel, key, vel } => {
+                oxisynth::MidiEvent::NoteOn { channel, key, vel }
+            }
+            MidiEvent::NoteOff { channel, key } => oxisynth::MidiEvent::NoteOff { channel, key },
+            MidiEvent::ControlChange {
+                channel,
+                ctrl,
+                value,
+            } => oxisynth::MidiEvent::ControlChange {
+                channel,
+                ctrl,
+                value,
+            },
+            MidiEvent::AllNotesOff { channel } => oxisynth::MidiEvent::AllNotesOff { channel },
+            MidiEvent::AllSoundOff { channel } => oxisynth::MidiEvent::AllSoundOff { channel },
+            MidiEvent::PitchBend { channel, value } => {
+                oxisynth::MidiEvent::PitchBend { channel, value }
+            }
+            MidiEvent::ProgramChange {
+                channel,
+                program_id,
+            } => oxisynth::MidiEvent::ProgramChange {
+                channel,
+                program_id,
+            },
+            MidiEvent::ChannelPressure { channel, value } => {
+                oxisynth::MidiEvent::ChannelPressure { channel, value }
+            }
+            MidiEvent::PolyphonicKeyPressure {
+                channel,
+                key,
+                value,
+            } => oxisynth::MidiEvent::PolyphonicKeyPressure {
+                channel,
+                key,
+                value,
+            },
+            MidiEvent::SystemReset => oxisynth::MidiEvent::SystemReset,
         }
     }
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MidiEventAt {
@@ -206,9 +240,9 @@ impl MidiEventAt {
     pub fn get_priority(&self) -> EventPriority {
         EventPriority::Audio
     }
-    pub fn get_event_time(&self) ->  Tick {
+    pub fn get_event_time(&self) -> Tick {
         self.ticks
-    }  
+    }
     pub fn as_midi(&self) -> oxisynth::MidiEvent {
         self.event.to_oxisynth()
     }
@@ -222,8 +256,15 @@ impl MidiEventAt {
 
 impl EventStreamSource for PatternSeq {
     fn to_event_stream(&self) -> EventStream {
-        debug!("Operating on pattern with beats {} and notes {}",self.num_beats, self.num_notes);
-        debug!("Container array has size {} * {}", self.pattern.len(), self.pattern[0].len());
+        debug!(
+            "Operating on pattern with beats {} and notes {}",
+            self.num_beats, self.num_notes
+        );
+        debug!(
+            "Container array has size {} * {}",
+            self.pattern.len(),
+            self.pattern[0].len()
+        );
         let ticks_per_beat = self.ppq / self.beats_per_quarter_note as u32; // sample rate = ticks per second
         let mut playing_notes = Vec::new();
         let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
@@ -232,8 +273,11 @@ impl EventStreamSource for PatternSeq {
             // Add events for note off
             for note in &playing_notes {
                 event_stream.store_event(MidiEventAt {
-                    event: MidiEvent::NoteOff { channel: 0, key: *note }, 
-                    ticks: current_tick
+                    event: MidiEvent::NoteOff {
+                        channel: 0,
+                        key: *note,
+                    },
+                    ticks: current_tick,
                 });
             }
             playing_notes.clear();
@@ -243,10 +287,14 @@ impl EventStreamSource for PatternSeq {
                 let note = self.note_values[note_num as usize];
                 if self.pattern[beat as usize][note_num as usize] {
                     event_stream.store_event(MidiEventAt {
-                        event: MidiEvent::NoteOn { channel: 0, key: note, vel: 100 }, 
-                        ticks: current_tick
+                        event: MidiEvent::NoteOn {
+                            channel: 0,
+                            key: note,
+                            vel: 100,
+                        },
+                        ticks: current_tick,
                     });
-                    playing_notes.push(note);  
+                    playing_notes.push(note);
                 }
             }
         }
@@ -255,15 +303,18 @@ impl EventStreamSource for PatternSeq {
         // Add events for note off
         for note in &playing_notes {
             event_stream.store_event(MidiEventAt {
-                event: MidiEvent::NoteOff { channel: 0, key: *note }, 
-                ticks: current_tick
+                event: MidiEvent::NoteOff {
+                    channel: 0,
+                    key: *note,
+                },
+                ticks: current_tick,
             });
         }
         event_stream
-    }    
+    }
 }
 
-// Implement midi seq 
+// Implement midi seq
 #[derive(Debug, Copy, Clone, Default)]
 pub struct MidiNote {
     pub channel: u8,
@@ -282,9 +333,9 @@ pub struct MidiSeq {
 
 impl MidiSeq {
     pub fn new(id: RegionIdentifier, ppq: u32) -> Self {
-        Self { 
+        Self {
             id,
-            notes: BTreeMap::new(), 
+            notes: BTreeMap::new(),
             length: ppq * 4,
             ppq,
         }
@@ -321,18 +372,25 @@ impl EventStreamSource for MidiSeq {
             for note in self.notes[current_tick].as_slice() {
                 // Add event for note on
                 event_stream.store_event(MidiEventAt {
-                    event: MidiEvent::NoteOn { channel: note.channel, key: note.key, vel: note.velocity }, 
+                    event: MidiEvent::NoteOn {
+                        channel: note.channel,
+                        key: note.key,
+                        vel: note.velocity,
+                    },
                     ticks: *current_tick,
                 });
                 // Add event for note off
                 event_stream.store_event(MidiEventAt {
-                    event: MidiEvent::NoteOff { channel: note.channel, key: note.key }, 
-                    ticks: *current_tick + note.length
+                    event: MidiEvent::NoteOff {
+                        channel: note.channel,
+                        key: note.key,
+                    },
+                    ticks: *current_tick + note.length,
                 });
             }
         }
         event_stream
-    }    
+    }
 }
 
 // Implement Sequence Polymorphism
@@ -342,16 +400,16 @@ impl EventStreamSource for MidiSeq {
 pub enum Sequence {
     Pattern(PatternSeq),
     Midi(MidiSeq),
-    SequenceContainer(SequenceContainer)
+    SequenceContainer(SequenceContainer),
 }
-                                                                                               
+
 impl EventStreamSource for Sequence {
     fn to_event_stream(&self) -> EventStream {
         debug!("Picking Sequence to convert to event stream");
         match &self {
             Sequence::Pattern(seq) => seq.to_event_stream(),
             Sequence::Midi(seq) => seq.to_event_stream(),
-            Sequence::SequenceContainer(seq) => seq.to_event_stream()
+            Sequence::SequenceContainer(seq) => seq.to_event_stream(),
         }
     }
 }
@@ -366,9 +424,8 @@ impl TSequence for Sequence {
     }
 }
 
-
 /// Sequence Container: one container to rule them all
-/// 
+///
 pub type Tick = u32;
 
 #[derive(Debug, Clone)]
@@ -378,10 +435,10 @@ pub struct SequenceContainer {
 }
 
 impl SequenceContainer {
-    pub fn new(ppq: u32)-> Self {
+    pub fn new(ppq: u32) -> Self {
         Self {
             sequences: HashMap::new(),
-            ppq
+            ppq,
         }
     }
 
@@ -428,13 +485,17 @@ impl EventStreamSource for SequenceContainer {
     fn to_event_stream(&self) -> EventStream {
         let mut event_stream = EventStream::new(self.ppq, self.length_in_ticks());
         debug!("Converting {} sequences into events", self.sequences.len());
-        for (offset, sequence) in  self.sequences.iter() {
+        for (offset, sequence) in self.sequences.iter() {
             debug!("Operating on sequence at {}", offset);
             let sequence_events = sequence.to_event_stream();
             // Check whether we need to resample due to different sample rates
             // we want 1 second in source sequence = 1 second in target
             // so 1 tick in source = tick duration => n ticks in target where n = tick duration * sample rate
-            let tick_ratio = if event_stream.ppq == self.ppq { 1.0 } else { event_stream.ppq as f64 / self.ppq as f64 };
+            let tick_ratio = if event_stream.ppq == self.ppq {
+                1.0
+            } else {
+                event_stream.ppq as f64 / self.ppq as f64
+            };
             for tick in 0..sequence_events.get_length_in_ticks() {
                 for priority in EventPriority::iter() {
                     let new_tick = (tick as f64 * tick_ratio).round() as u32 + offset;
@@ -442,16 +503,13 @@ impl EventStreamSource for SequenceContainer {
                         // debug!("Event at {}", tick);
                         let new_event = event.clone_at(new_tick);
                         event_stream.store_event(new_event);
-                    }                        
+                    }
                 }
             }
         }
         event_stream
     }
 }
-
-
-
 
 /////////////////////////
 ///  Tests
@@ -472,42 +530,56 @@ mod tests {
     //////// Event stream
     #[test]
     fn event_stream_can_be_created() {
-        let length_in_ticks = 960*4;
+        let length_in_ticks = 960 * 4;
         let event_stream = EventStream::new(24000, length_in_ticks);
         assert_eq!(event_stream.get_length_in_ticks(), length_in_ticks)
     }
 
     #[test]
     fn event_stream_can_store_and_retreve_events() {
-        let length_in_ticks = 960*4;
+        let length_in_ticks = 960 * 4;
         let mut event_stream = EventStream::new(24000, length_in_ticks);
-        let event = MidiEventAt { event: MidiEvent::SystemReset {}, ticks: 12 };
+        let event = MidiEventAt {
+            event: MidiEvent::SystemReset {},
+            ticks: 12,
+        };
         event_stream.store_event(event);
-        assert!(event_stream.get_events( 12, EventPriority::Audio).contains(&event)); // All midi events are currently Audio. TODO: distriguish
+        assert!(
+            event_stream
+                .get_events(12, EventPriority::Audio)
+                .contains(&event)
+        ); // All midi events are currently Audio. TODO: distriguish
         // assert!(event_stream.get_events( 0, EventPriority::System).is_empty());  TODO: create tests showing that these calls panick, or make return is empty
         // assert!(event_stream.get_events( 12, EventPriority::Other).is_empty());
         // assert!(event_stream.get_events( 12, EventPriority::Audio).is_empty());
     }
 
-
     #[test]
     fn pattern_seq_can_be_created() {
-        let length_in_ticks = 960*4;
+        let length_in_ticks = 960 * 4;
         let pattern = PatternSeq::new(
-            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
-            960);
+            RegionIdentifier {
+                track_id: TrackIdentifier { track_id: 1 },
+                region_id: 1,
+            },
+            960,
+        );
         assert_eq!(pattern.ppq, 960);
         assert_eq!(pattern.beats_per_quarter_note, 4);
         assert_eq!(pattern.num_beats, 16);
-        assert_eq!(960*16/4, length_in_ticks);
+        assert_eq!(960 * 16 / 4, length_in_ticks);
         assert_eq!(pattern.length_in_ticks(), length_in_ticks);
     }
 
     #[test]
     fn pattern_seq_all_beats_are_initially_off() {
         let pattern = PatternSeq::new(
-            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
-            960);
+            RegionIdentifier {
+                track_id: TrackIdentifier { track_id: 1 },
+                region_id: 1,
+            },
+            960,
+        );
         for note in 0..pattern.num_notes {
             for beat in 0..pattern.num_beats {
                 assert_eq!(pattern.is_on(beat, note), &false)
@@ -518,9 +590,13 @@ mod tests {
     #[test]
     fn pattern_seq_can_turn_beats_on_and_off() {
         let mut pattern = PatternSeq::new(
-            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
-            960);
-        let beat=3;
+            RegionIdentifier {
+                track_id: TrackIdentifier { track_id: 1 },
+                region_id: 1,
+            },
+            960,
+        );
+        let beat = 3;
         let note = 5;
         assert_eq!(pattern.is_on(beat, note), &false);
         pattern.toggle_on(beat, note);
@@ -532,9 +608,16 @@ mod tests {
     #[test]
     fn pattern_seq_can_create_event_stream() {
         let pattern = PatternSeq::new(
-            RegionIdentifier { track_id: TrackIdentifier { track_id: 1 }, region_id: 1 }, 
-            960);
+            RegionIdentifier {
+                track_id: TrackIdentifier { track_id: 1 },
+                region_id: 1,
+            },
+            960,
+        );
         let event_stream = pattern.to_event_stream();
-        assert_eq!(event_stream.get_length_in_ticks(), pattern.length_in_ticks()); // We should rationalise naming here.
+        assert_eq!(
+            event_stream.get_length_in_ticks(),
+            pattern.length_in_ticks()
+        ); // We should rationalise naming here.
     }
 }

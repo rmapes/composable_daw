@@ -4,7 +4,7 @@ const SOUNDFONT_DIR_PATH: &str = "./soundfonts/";
 pub struct SimpleSynth {
     pub soundfont: String,
     pub bank: u32,
-    pub program: u8, 
+    pub program: u8,
 }
 
 impl Default for SimpleSynth {
@@ -25,9 +25,9 @@ impl SimpleSynth {
 
 #[derive(Debug, Clone)]
 pub enum Instrument {
-    Synth(SimpleSynth)
+    Synth(SimpleSynth),
 }
 
 pub fn get_soundfont_path(soundfont: &String) -> String {
-	format!("{SOUNDFONT_DIR_PATH}{0}", soundfont)
+    format!("{SOUNDFONT_DIR_PATH}{0}", soundfont)
 }

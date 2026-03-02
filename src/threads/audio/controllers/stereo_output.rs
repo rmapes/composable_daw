@@ -1,4 +1,4 @@
-use super::super::buss::{Buss, BussProducer, BussConsumer};
+use super::super::buss::{Buss, BussConsumer, BussProducer};
 
 /// Controller for stereo output that manages the ring buffer producer
 /// and populates it from a final buss when capacity is available
@@ -9,9 +9,7 @@ pub struct StereoOutputController {
 impl StereoOutputController {
     pub fn new() -> (BussConsumer, StereoOutputController) {
         let (consumer, producer) = BussProducer::new();
-        let controller = StereoOutputController {
-            producer,
-        };
+        let controller = StereoOutputController { producer };
         (consumer, controller)
     }
 

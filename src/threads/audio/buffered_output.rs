@@ -23,25 +23,40 @@ impl BufferedOutput {
     pub fn read_f32<T: Output>(&mut self, len: usize, input: &mut T) {
         let loff = self.left_buf.len();
         let roff = self.right_buf.len();
-        self.left_buf.resize(loff+len, 0.0_f32);
-        self.right_buf.resize(roff+len, 0.0_f32);
-        input.write_f32(len, self.left_buf.as_mut_slice(), loff, 1, self.right_buf.as_mut_slice(), roff, 1);
+        self.left_buf.resize(loff + len, 0.0_f32);
+        self.right_buf.resize(roff + len, 0.0_f32);
+        input.write_f32(
+            len,
+            self.left_buf.as_mut_slice(),
+            loff,
+            1,
+            self.right_buf.as_mut_slice(),
+            roff,
+            1,
+        );
     }
 }
 
 impl Output for BufferedOutput {
-    fn write_f32(&mut self, 
-        len: usize, 
-        left_out: &mut [f32], 
-        loff: usize, 
-        lincr: usize, 
-        right_out: &mut [f32], 
-        roff: usize, 
+    fn write_f32(
+        &mut self,
+        len: usize,
+        left_out: &mut [f32],
+        loff: usize,
+        lincr: usize,
+        right_out: &mut [f32],
+        roff: usize,
         rincr: usize,
     ) {
         for i in 0..len {
-            left_out[loff + lincr*i] = *self.left_buf.get(self.left_read_start + i).unwrap_or(&0.0_f32);
-            right_out[roff + rincr*i] = *self.right_buf.get(self.right_read_start + i).unwrap_or(&0.0_f32);
+            left_out[loff + lincr * i] = *self
+                .left_buf
+                .get(self.left_read_start + i)
+                .unwrap_or(&0.0_f32);
+            right_out[roff + rincr * i] = *self
+                .right_buf
+                .get(self.right_read_start + i)
+                .unwrap_or(&0.0_f32);
         }
         self.left_read_start += len;
         self.right_read_start += len;
@@ -53,14 +68,14 @@ impl Output for BufferedOutput {
 ///
 #[cfg(test)]
 mod tests {
- 
+
     use super::*;
 
     // Mock Input (duplicate from buss TODO: refactor into shared resource)
-    const MOCK_INPUT_LEN: usize = 10; 
+    const MOCK_INPUT_LEN: usize = 10;
     struct MockInput {
-        lbuff: [f32;MOCK_INPUT_LEN],
-        rbuff: [f32;MOCK_INPUT_LEN],
+        lbuff: [f32; MOCK_INPUT_LEN],
+        rbuff: [f32; MOCK_INPUT_LEN],
     }
     impl MockInput {
         fn new() -> Self {
@@ -71,14 +86,22 @@ mod tests {
         }
     }
     impl Output for MockInput {
-        fn write_f32(&mut self, len: usize, left_out: &mut [f32], loff: usize, lincr: usize, right_out: &mut [f32], roff: usize, rincr: usize) {
+        fn write_f32(
+            &mut self,
+            len: usize,
+            left_out: &mut [f32],
+            loff: usize,
+            lincr: usize,
+            right_out: &mut [f32],
+            roff: usize,
+            rincr: usize,
+        ) {
             for i in 0..len {
-                left_out[loff + lincr*i] = self.lbuff[i];
-                right_out[roff + rincr*i] = self.rbuff[i];
+                left_out[loff + lincr * i] = self.lbuff[i];
+                right_out[roff + rincr * i] = self.rbuff[i];
             }
         }
     }
-
 
     // BufferedOutput
 

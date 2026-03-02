@@ -24,6 +24,5 @@ pub enum MidiInputMessage {
     MidiEvent(oxisynth::MidiEvent),
 }
 
-
- /// Shared map of per-track MIDI senders so the preview thread can inject note_on/note_off.
+/// Shared map of per-track MIDI senders so the preview thread can inject note_on/note_off.
 pub type MidiSendersMap = Arc<RwLock<HashMap<TrackIdentifier, flume::Sender<MidiInputMessage>>>>;

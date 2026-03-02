@@ -5,4 +5,4 @@
  * They will generate bytes on demand, using a pull model from the end of the pipeline.
  */
 
- pub mod synth;
+pub mod synth;

@@ -19,9 +19,7 @@ pub enum PreviewMessage {
 /// Pending NoteOff: track and (channel, key) for reconstructing oxisynth::MidiEvent::NoteOff.
 type PendingNoteOff = (TrackIdentifier, u8, u8);
 
-pub(crate) fn spawn_preview_thread(
-    midi_senders: MidiSendersMap,
-) -> flume::Sender<PreviewMessage> {
+pub(crate) fn spawn_preview_thread(midi_senders: MidiSendersMap) -> flume::Sender<PreviewMessage> {
     let (preview_tx, preview_rx) = flume::unbounded::<PreviewMessage>();
     thread::spawn(move || {
         let start = Instant::now();
@@ -44,10 +42,11 @@ pub(crate) fn spawn_preview_thread(
                     }));
                     let now_ms = start.elapsed().as_millis() as u64;
                     let note_off_at = now_ms + (duration_ms as u64);
-                    pending_note_offs
-                        .entry(note_off_at)
-                        .or_default()
-                        .push((track_id, note.channel, note.key));
+                    pending_note_offs.entry(note_off_at).or_default().push((
+                        track_id,
+                        note.channel,
+                        note.key,
+                    ));
                 }
                 PreviewMessage::Clock => {
                     let now_ms = start.elapsed().as_millis() as u64;

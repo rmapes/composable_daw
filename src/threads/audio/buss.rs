@@ -35,13 +35,14 @@ impl Buss {
 }
 
 impl Output for Buss {
-    fn write_f32(&mut self, 
-        len: usize, 
-        left_out: &mut [f32], 
-        loff: usize, 
-        lincr: usize, 
-        right_out: &mut [f32], 
-        roff: usize, 
+    fn write_f32(
+        &mut self,
+        len: usize,
+        left_out: &mut [f32],
+        loff: usize,
+        lincr: usize,
+        right_out: &mut [f32],
+        roff: usize,
         rincr: usize,
     ) {
         for input in self.inputs.iter_mut() {
@@ -51,7 +52,15 @@ impl Output for Buss {
             let mut bytes_left = len;
             while bytes_left > 0 {
                 let bytes_to_read = min(buf_size, bytes_left);
-                input.write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
+                input.write_f32(
+                    bytes_to_read,
+                    &mut self.left_buf,
+                    0,
+                    1,
+                    &mut self.right_buf,
+                    0,
+                    1,
+                );
                 bytes_left -= bytes_to_read;
                 for i in 0..bytes_to_read {
                     left_out[loff_local] = 1.0_f32.min(left_out[loff_local] + self.left_buf[i]);
@@ -69,7 +78,7 @@ pub struct BussConsumer {
     #[allow(dead_code)]
     buf_size: usize,
     left_input: HeapCons<f32>,
-    right_input: HeapCons<f32>
+    right_input: HeapCons<f32>,
 }
 
 // SAFETY: BussConsumer is only used in the CPAL audio callback thread, which is single-threaded.
@@ -78,21 +87,30 @@ unsafe impl Sync for BussConsumer {}
 
 impl Output for BussConsumer {
     /// Pulls samples from the ringbuffer into the provided output slices
-    fn write_f32(&mut self, 
-        len: usize, 
-        left_out: &mut [f32], 
-        _loff: usize, 
-        _lincr: usize, 
-        right_out: &mut [f32], 
-        _roff: usize, 
+    fn write_f32(
+        &mut self,
+        len: usize,
+        left_out: &mut [f32],
+        _loff: usize,
+        _lincr: usize,
+        right_out: &mut [f32],
+        _roff: usize,
         _rincr: usize,
     ) {
         // pop_slice returns how many items were actually copied
         // We only use the first len elements, ignoring offset/increment for simplicity
-        let left_slice = if len <= left_out.len() { &mut left_out[..len] } else { left_out };
-        let right_slice = if len <= right_out.len() { &mut right_out[..len] } else { right_out };
+        let left_slice = if len <= left_out.len() {
+            &mut left_out[..len]
+        } else {
+            left_out
+        };
+        let right_slice = if len <= right_out.len() {
+            &mut right_out[..len]
+        } else {
+            right_out
+        };
         let _ = self.left_input.pop_slice(left_slice);
-        let _ = self.right_input.pop_slice(right_slice);        
+        let _ = self.right_input.pop_slice(right_slice);
     }
 }
 
@@ -104,7 +122,7 @@ pub struct BussProducer {
     left_buf: [f32; BUF_SIZE],
     right_buf: [f32; BUF_SIZE],
     left_output: HeapProd<f32>,
-    right_output: HeapProd<f32>
+    right_output: HeapProd<f32>,
 }
 
 impl BussProducer {
@@ -117,7 +135,7 @@ impl BussProducer {
             left_buf: [0.0_f32; BUF_SIZE],
             right_buf: [0.0_f32; BUF_SIZE],
             left_output: left_prod,
-            right_output: right_prod
+            right_output: right_prod,
         };
         let consumer = BussConsumer {
             buf_size: BUF_SIZE,
@@ -142,19 +160,23 @@ impl BussProducer {
         let left = left_buf.as_mut_slice();
         let right_buf = &mut vec![0.0_f32; right_space];
         let right = right_buf.as_mut_slice();
-        self.write_f32(min(left_space, right_space), left,0, 1, right, 0, 1);
+        self.write_f32(min(left_space, right_space), left, 0, 1, right, 0, 1);
         self.left_output.push_slice(left);
         self.right_output.push_slice(right);
     }
 
     /// Check if there's capacity in the ring buffer
     pub fn has_capacity(&self) -> bool {
-        self.left_output.vacant_len() >= self.buf_size && self.right_output.vacant_len() >= self.buf_size
+        self.left_output.vacant_len() >= self.buf_size
+            && self.right_output.vacant_len() >= self.buf_size
     }
 
     /// Get the available capacity (minimum of left and right)
     pub fn available_capacity(&self) -> usize {
-        min(self.left_output.vacant_len(), self.right_output.vacant_len())
+        min(
+            self.left_output.vacant_len(),
+            self.right_output.vacant_len(),
+        )
     }
 
     /// Write audio from a Buss into the ring buffer
@@ -177,13 +199,14 @@ impl BussProducer {
 unsafe impl Sync for BussProducer {}
 
 impl Output for BussProducer {
-    fn write_f32(&mut self, 
-        len: usize, 
-        left_out: &mut [f32], 
-        loff: usize, 
-        lincr: usize, 
-        right_out: &mut [f32], 
-        roff: usize, 
+    fn write_f32(
+        &mut self,
+        len: usize,
+        left_out: &mut [f32],
+        loff: usize,
+        lincr: usize,
+        right_out: &mut [f32],
+        roff: usize,
         rincr: usize,
     ) {
         for input in self.inputs.iter_mut() {
@@ -193,7 +216,15 @@ impl Output for BussProducer {
             let mut bytes_left = len;
             while bytes_left > 0 {
                 let bytes_to_read = min(buf_size, bytes_left);
-                input.write_f32(bytes_to_read, &mut self.left_buf, 0, 1, &mut self.right_buf, 0, 1);
+                input.write_f32(
+                    bytes_to_read,
+                    &mut self.left_buf,
+                    0,
+                    1,
+                    &mut self.right_buf,
+                    0,
+                    1,
+                );
                 bytes_left -= bytes_to_read;
                 for i in 0..bytes_to_read {
                     left_out[loff_local] = 1.0_f32.min(left_out[loff_local] + self.left_buf[i]);
@@ -206,19 +237,18 @@ impl Output for BussProducer {
     }
 }
 
-
 // /////////////////////////
 // ///  Tests
-// /// 
+// ///
 
 // #[cfg(test)]
 // mod tests {
- 
+
 //     use super::super::buffered_output::BufferedOutput;
 
 //     use super::*;
 
-//     const MOCK_INPUT_LEN: usize = 10; 
+//     const MOCK_INPUT_LEN: usize = 10;
 //     struct MockInput {
 //         lbuff: [f32;MOCK_INPUT_LEN],
 //         rbuff: [f32;MOCK_INPUT_LEN],
@@ -239,7 +269,6 @@ impl Output for BussProducer {
 //             }
 //         }
 //     }
-
 
 //     // Buss
 
