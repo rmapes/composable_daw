@@ -52,6 +52,9 @@ pub struct MainWindow {
     player_state: Arc<RwLock<PlayerState>>,
     project_data: ProjectData,
 
+    // Cached state
+    is_audio_initialized: bool,
+
     // Mutable state
     selected_track: usize,
     selected_region: Option<RegionIdentifier>,
@@ -106,6 +109,7 @@ impl Default for MainWindow {
             engine,
             player_state,
             project_data,
+            is_audio_initialized: false,
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier { track_id: selected_track, region_id: 0 }), // Temporary: select pattern by default. Relies on track beging created with initial pattern
             dragging_region: None,
@@ -126,6 +130,13 @@ impl MainWindow {
     //////////////////
     /// Actions triggered by UI components. Look for main handlers here
     pub fn update(&mut self, msg: Message) -> Task<Message> {
+        // Cache state
+        self.is_audio_initialized = self
+        .player_state
+        .try_read()
+        .map(|s| s.is_audio_initialized)
+        .unwrap_or(self.is_audio_initialized);    
+        // Handle messages
         match msg {
             //////////////////
             // System Window Events eg close requested
@@ -381,12 +392,6 @@ impl MainWindow {
     //////////////////
     /// UI layout for the application. This is the entry point for the UI and where all the UI components are rendered.
     pub fn view(&self) ->Element<'_, Message> {
-        let is_audio_initialized = self
-            .player_state
-            .try_read()
-            .map(|s| s.is_audio_initialized)
-            .unwrap_or(false);
-
         let selected_track = if self.selected_track < self.project_data.tracks.len() {
             &self.project_data.tracks[self.selected_track]
         } else {
@@ -427,7 +432,7 @@ impl MainWindow {
         .width(self.width)
         .height(self.height);
 
-        let toast_layer: Element<'_, Message> = if is_audio_initialized {
+        let toast_layer: Element<'_, Message> = if self.is_audio_initialized {
             Space::new().into()
         } else {
             Container::new(
