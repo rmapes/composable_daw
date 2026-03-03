@@ -17,7 +17,6 @@ use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::sequences::MidiNote;
 use crate::models::shared::{ProjectData, RegionType};
-use audio::sources::synth::SynthActions;
 use sources::AudioSources;
 
 #[derive(Debug)]
@@ -393,45 +392,25 @@ where
                             ActionFollowUp::ProjectDataUpdate
                         }
                     }
-                    actions::Actions::Synth(action) => {
-                        if let Err(e) = audio_sources.handle_synth_action(action.clone()) {
+                    actions::Actions::Instrument(track_id, action) => {
+                        if let Err(e) =
+                            audio_sources.handle_instrument_action(track_id, action.clone())
+                        {
                             error!(
                                 "FATAL: Unexpected error forwarding action to instrument: {}",
                                 e
                             );
                             ActionFollowUp::Exit
                         } else {
-                            match action {
-                                SynthActions::SetSoundFont(track_id, soundfont_path) => {
-                                    if let Some(path) = soundfont_path {
-                                        let instrument =
-                                            &mut project.tracks[track_id.track_id].instrument.kind;
-                                        let Instrument::Synth(synth) = instrument;
-                                        synth.soundfont = path
-                                            .file_name()
-                                            .map(|x| x.to_str())
-                                            .expect("File picker should return valid string")
-                                            .unwrap()
-                                            .to_string();
-                                        ActionFollowUp::ProjectDataUpdate
-                                    } else {
-                                        ActionFollowUp::Continue
-                                    }
-                                }
-                                SynthActions::SetBank(track_id, bank) => {
-                                    let instrument =
-                                        &mut project.tracks[track_id.track_id].instrument.kind;
-                                    let Instrument::Synth(synth) = instrument;
-                                    synth.bank = bank;
-                                    ActionFollowUp::ProjectDataUpdate
-                                }
-                                SynthActions::SetProgram(track_id, program) => {
-                                    let instrument =
-                                        &mut project.tracks[track_id.track_id].instrument.kind;
-                                    let Instrument::Synth(synth) = instrument;
-                                    synth.program = program;
-                                    ActionFollowUp::ProjectDataUpdate
-                                }
+                            let instrument =
+                                &mut project.tracks[track_id.track_id].instrument.kind;
+                            let Instrument::Synth(synth) = instrument;
+                            let changed = synth.handle_instrument_action(&action);
+
+                            if changed {
+                                ActionFollowUp::ProjectDataUpdate
+                            } else {
+                                ActionFollowUp::Continue
                             }
                         }
                     }

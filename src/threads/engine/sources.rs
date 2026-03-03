@@ -9,6 +9,7 @@ use super::audio::sources::synth::TrackSynth;
 use super::audio::{
     AudioEngine, buss::Buss, controllers::stereo_output::StereoOutputController, interfaces::Output,
 };
+use crate::models::instuments::InstrumentActions;
 use crate::models::sequences::{EventStreamSource, Tick};
 use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
 
@@ -139,16 +140,16 @@ impl AudioSources {
         current_tick >= max_end_tick
     }
 
-    /// Handle synth actions (soundfont, bank, program changes)
-    /// TODO: Decouple specific instrument actions and use a pluggable map instead
-    pub fn handle_synth_action(
+    /// Handle instrument actions (e.g. synth soundfont, bank, program changes)
+    pub fn handle_instrument_action(
         &mut self,
-        action: super::audio::sources::synth::SynthActions,
+        track_id: TrackIdentifier,
+        action: InstrumentActions,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for track_synth in self.tracks.values() {
+        if let Some(track_synth) = self.tracks.get(&track_id) {
             track_synth
                 .borrow_mut()
-                .handle_synth_action(action.clone())?;
+                .handle_instrument_action(track_id, &action)?;
         }
         Ok(())
     }

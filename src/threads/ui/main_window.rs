@@ -13,7 +13,6 @@ use log::{error, info};
 use crate::models::sequences::{Sequence, TSequence, Tick};
 use crate::models::shared::{ProjectData, RegionIdentifier, TrackIdentifier};
 
-use super::super::audio::sources::synth::SynthActions;
 use super::super::engine::actions::Actions;
 use super::super::engine::{self, PlayerState};
 use super::actions::{Message, SynthMessage};
@@ -189,9 +188,10 @@ impl MainWindow {
                     })
                 }
                 SynthMessage::SetSoundFont(track_id, path) => self
-                    .send_to_engine_and_handle_errors(Actions::Synth(SynthActions::SetSoundFont(
-                        track_id, path,
-                    ))),
+                    .send_to_engine_and_handle_errors(Actions::Instrument(
+                        track_id,
+                        crate::models::instuments::InstrumentActions::SetSoundFont(path),
+                    )),
             },
             //////////////////
             // UI Actions

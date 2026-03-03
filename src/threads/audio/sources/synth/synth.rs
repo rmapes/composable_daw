@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
+use crate::models::instuments::InstrumentActions;
 use crate::threads::audio::interfaces::Output;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStream, EventStreamSource, Tick};
@@ -205,6 +206,28 @@ impl TrackSynth {
 
     pub fn get_event_stream(&self) -> &EventStream {
         &self.event_stream
+    }
+
+    pub fn handle_instrument_action(
+        &mut self,
+        track_id: TrackIdentifier,
+        action: &InstrumentActions,
+    ) -> Result<(), Box<dyn Error>> {
+        if track_id != self.id {
+            return Ok(());
+        }
+
+        match action {
+            InstrumentActions::SetSoundFont(soundfont_path) => {
+                self.handle_synth_action(SynthActions::SetSoundFont(track_id, soundfont_path.clone()))
+            }
+            InstrumentActions::SetBank(bank) => {
+                self.handle_synth_action(SynthActions::SetBank(track_id, *bank))
+            }
+            InstrumentActions::SetProgram(program) => {
+                self.handle_synth_action(SynthActions::SetProgram(track_id, *program))
+            }
+        }
     }
 
     pub fn handle_synth_action(&mut self, action: SynthActions) -> Result<(), Box<dyn Error>> {

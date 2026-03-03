@@ -2,10 +2,9 @@ use iced::widget::{button, column, pick_list, row, text};
 use iced::{Element, Length};
 
 use crate::models::components::Track;
-use crate::models::instuments::Instrument;
+use crate::models::instuments::{Instrument, InstrumentActions};
 use crate::models::shared::TrackIdentifier;
 
-use super::super::audio::sources::synth::SynthActions;
 use super::super::engine::actions::Actions;
 use super::actions::{Message, SynthMessage};
 use super::components;
@@ -40,19 +39,20 @@ impl Component {
                     self.number_selector(0, 127, synth.bank as u8, {
                         let track_id = track.id;
                         move |val: u8| {
-                            Message::Engine(Actions::Synth(SynthActions::SetBank(
+                            Message::Engine(Actions::Instrument(
                                 track_id,
-                                val as u32,
-                            )))
+                                InstrumentActions::SetBank(val as u32),
+                            ))
                         }
                     }),
                     components::label(text("Program").into()),
                     self.number_selector(0, 127, synth.program, {
                         let track_id = track.id;
                         move |val: u8| {
-                            Message::Engine(Actions::Synth(SynthActions::SetProgram(
-                                track_id, val,
-                            )))
+                            Message::Engine(Actions::Instrument(
+                                track_id,
+                                InstrumentActions::SetProgram(val),
+                            ))
                         }
                     }),
                     row![button(text("Done")).on_press(Message::CloseInstrumentEditor)]
