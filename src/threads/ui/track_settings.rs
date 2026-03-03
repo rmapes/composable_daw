@@ -1,13 +1,10 @@
-use super::super::audio::sources::synth::SynthActions;
-use super::super::engine::actions::Actions;
 use crate::models::components::Track;
 use crate::models::instuments::Instrument;
 use crate::models::shared::TrackIdentifier;
-use iced::widget::{Column, button, column, pick_list, row, text};
+use iced::widget::{Column, button, column, row, text};
 use iced::{Element, Length};
 
 use super::actions::Message;
-use super::actions::SynthMessage;
 use super::components;
 
 #[derive(Debug, Clone)]
@@ -47,29 +44,10 @@ impl Component {
         track_id: TrackIdentifier,
     ) -> Column<'_, Message> {
         match instrument {
-            Instrument::Synth(synth) => {
-                column![
-                    button(text(synth.soundfont.clone()).size(12))
-                        .on_press(Message::Synth(SynthMessage::SelectSoundFont(track_id))),
-                    components::label(text("Bank").into()),
-                    self.number_selector(0, 127, synth.bank as u8, move |val: u8| {
-                        Message::Engine(Actions::Synth(SynthActions::SetBank(track_id, val as u32)))
-                    }),
-                    components::label(text("Program").into()),
-                    self.number_selector(0, 127, synth.program, move |val: u8| {
-                        Message::Engine(Actions::Synth(SynthActions::SetProgram(track_id, val)))
-                    }),
-                ]
-            }
+            Instrument::Synth(_) => column![
+                button(text("Instrument…").size(12))
+                    .on_press(Message::OpenInstrumentEditor(track_id)),
+            ],
         }
-    }
-
-    fn number_selector<F>(&self, min: u8, max: u8, current: u8, on_set: F) -> Element<'_, Message>
-    where
-        F: Fn(u8) -> Message + 'static,
-    {
-        let options: Vec<u8> = (min..=max).collect();
-        // let options = vec![min..max];
-        pick_list(options, Some(current), on_set).into()
     }
 }

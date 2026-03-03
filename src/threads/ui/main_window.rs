@@ -21,6 +21,7 @@ use super::components;
 use super::composer_window;
 use super::control_bar;
 use super::editor_window;
+use super::instrument_editor;
 use super::file_picker::pick_file;
 use super::main_menu::top_menu_view;
 use super::track_settings;
@@ -66,10 +67,14 @@ pub struct MainWindow {
     width: Length,
     height: Length,
 
+    // Instrument editor state
+    instrument_editor_track: Option<TrackIdentifier>,
+
     // UI subcomponents
     control_bar: control_bar::Component,
     composer_window: composer_window::Component,
     editor_window: editor_window::Component,
+    instrument_editor: instrument_editor::Component,
     track_settings: track_settings::Component,
 }
 
@@ -118,12 +123,17 @@ impl Default for MainWindow {
             midi_editor_offset: DEFAULT_MIDI_OFFSET,
             width: Length::Fill,  //600_f32,
             height: Length::Fill, //400_f32,
+            instrument_editor_track: None,
             control_bar: control_bar::Component::new(
                 Length::Fill,
                 Length::Fixed(CONTROL_BAR_HEIGHT),
             ),
             composer_window: composer_window::Component::new(Length::Fill, Length::FillPortion(2)),
             editor_window: editor_window::Component::new(Length::Fill, Length::FillPortion(1)),
+            instrument_editor: instrument_editor::Component::new(
+                Length::Fill,
+                Length::FillPortion(1),
+            ),
             track_settings: track_settings::Component::new(
                 Length::Fixed(TRACK_SETTINGS_WIDTH),
                 Length::Fill,
@@ -203,6 +213,14 @@ impl MainWindow {
             Message::RegionClick(region_id) => {
                 self.selected_region = Some(region_id);
                 self.dragging_region = None;
+                Task::none()
+            }
+            Message::OpenInstrumentEditor(track_id) => {
+                self.instrument_editor_track = Some(track_id);
+                Task::none()
+            }
+            Message::CloseInstrumentEditor => {
+                self.instrument_editor_track = None;
                 Task::none()
             }
             Message::StartRegionDrag(region_id, initial_x, current_x, current_y) => {
@@ -424,26 +442,36 @@ impl MainWindow {
                 .and_then(|sequence| sequence.sequences.get(&selection.region_id))
         });
 
+        let mut right_column: Column<'_, Message> = column![
+            components::module_slot(self.composer_window.view(
+                &self.project_data.tracks,
+                self.selected_track,
+                self.project_data.ppq,
+                self.playhead,
+                self.dragging_region.as_ref(),
+            ),),
+            components::module_slot(self.editor_window.view(
+                selected_region,
+                self.midi_editor_snap,
+                self.midi_editor_offset
+            ),),
+        ];
+
+        if let Some(track_id) = self.instrument_editor_track {
+            if let Some(track) = self.project_data.tracks.get(track_id.track_id) {
+                right_column = right_column.push(components::module_slot(
+                    self.instrument_editor.view(track),
+                ));
+            }
+        }
+
         let main_content: Column<'_, Message> = column![
             top_menu_view(),
             self.control_bar.view(),
             row![
                 components::module_slot(self.track_settings.view(selected_track))
                     .width(Length::Shrink),
-                column![
-                    components::module_slot(self.composer_window.view(
-                        &self.project_data.tracks,
-                        self.selected_track,
-                        self.project_data.ppq,
-                        self.playhead,
-                        self.dragging_region.as_ref(),
-                    ),),
-                    components::module_slot(self.editor_window.view(
-                        selected_region,
-                        self.midi_editor_snap,
-                        self.midi_editor_offset
-                    ),),
-                ]
+                right_column
             ]
         ]
         .width(self.width)
@@ -490,6 +518,25 @@ impl MainWindow {
     fn shutdown(&self) {
         info!("Shutting down");
         self.engine.quit();
+    }
+}
+
+#[cfg(test)]
+mod instrument_editor_tests {
+    use super::*;
+
+    #[test]
+    fn instrument_editor_open_and_close_updates_state() {
+        let mut app = MainWindow::default();
+        let track_id = TrackIdentifier { track_id: 0 };
+
+        assert!(app.instrument_editor_track.is_none());
+
+        let _ = app.update(Message::OpenInstrumentEditor(track_id));
+        assert_eq!(app.instrument_editor_track, Some(track_id));
+
+        let _ = app.update(Message::CloseInstrumentEditor);
+        assert!(app.instrument_editor_track.is_none());
     }
 }
 

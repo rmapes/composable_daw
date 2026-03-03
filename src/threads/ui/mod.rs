@@ -3,6 +3,7 @@ mod components;
 mod composer_window;
 mod control_bar;
 mod editor_window;
+mod instrument_editor;
 mod file_picker;
 mod main_menu;
 mod main_window;

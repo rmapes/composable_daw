@@ -34,6 +34,9 @@ pub enum Message {
     Tick,
     // Synth
     Synth(SynthMessage),
+    // Instrument editor
+    OpenInstrumentEditor(TrackIdentifier),
+    CloseInstrumentEditor,
     // Menu
     NewFile,
     OpenFile,
