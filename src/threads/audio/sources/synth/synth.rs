@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-use super::super::interfaces::Output;
+use crate::threads::audio::interfaces::Output;
 use crate::models::instuments::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStream, EventStreamSource, Tick};
 use crate::models::shared::TrackIdentifier;
@@ -393,3 +393,4 @@ impl TrackThread {
         })
     }
 }
+
