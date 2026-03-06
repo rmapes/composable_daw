@@ -27,7 +27,7 @@ pub enum Actions {
 ## UI Messages
 - Single `Message` enum in `threads/ui/actions.rs` for all events
 - Group: `WindowEvent`, `Engine(Actions)`, `ProjectDataChanged(ProjectData)`, local messages
-- Subcomponents: `MidiEditor(MidiEditorMessage)`, `Synth(SynthMessage)`
+- Subcomponents: `MidiEditor(MidiEditorMessage)`, `InstrumentEditor(InstrumentEditorEvent)` (instrument-specific events, e.g. synth, handled inside instrument editor)
 
 ## Data Flow
 - UI sends `Message::Engine(action)` → engine processes → `data_change_sender.send(project.clone())`

@@ -15,13 +15,12 @@ use crate::models::shared::{ProjectData, RegionIdentifier, TrackIdentifier};
 
 use super::super::engine::actions::Actions;
 use super::super::engine::{self, PlayerState};
-use super::actions::{Message, SynthMessage};
+use super::actions::Message;
 use super::components;
 use super::composer_window;
 use super::control_bar;
 use super::editor_window;
 use super::instrument_editor;
-use super::file_picker::pick_file;
 use super::main_menu::top_menu_view;
 use super::track_settings;
 
@@ -180,19 +179,14 @@ impl MainWindow {
                 Task::none()
             }
             //////////////////
-            // Actions to be handled by pluggable components e.g Synth.
-            Message::Synth(synth_message) => match synth_message {
-                SynthMessage::SelectSoundFont(track_id) => {
-                    Task::perform(pick_file(track_id, "./soundfonts"), |(track_id, path)| {
-                        Message::Synth(SynthMessage::SetSoundFont(track_id, path))
-                    })
+            // Instrument editor: file picker and engine actions are handled inside the editor.
+            Message::InstrumentEditor(evt) => {
+                let (task, action) = instrument_editor::Component::update(evt);
+                if let Some(a) = action {
+                    return self.send_to_engine_and_handle_errors(a);
                 }
-                SynthMessage::SetSoundFont(track_id, path) => self
-                    .send_to_engine_and_handle_errors(Actions::Instrument(
-                        track_id,
-                        crate::models::instuments::InstrumentActions::SetSoundFont(path),
-                    )),
-            },
+                task
+            }
             //////////////////
             // UI Actions
             Message::GoToStart => {

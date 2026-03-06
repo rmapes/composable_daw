@@ -1,6 +1,15 @@
 use std::path::PathBuf;
 
+use crate::models::shared::TrackIdentifier;
+
 const SOUNDFONT_DIR_PATH: &str = "./soundfonts/";
+
+/// UI messages for the synth instrument editor. Only the synth module and instrument editor handle these.
+#[derive(Debug, Clone)]
+pub enum SynthMessage {
+    SelectSoundFont(TrackIdentifier),
+    SetSoundFont(TrackIdentifier, Option<PathBuf>),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SimpleSynth {

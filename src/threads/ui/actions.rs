@@ -1,7 +1,6 @@
-use std::path::PathBuf;
-
 use iced::window;
 
+use super::instrument_editor_event::Event as InstrumentEditorEvent;
 use super::super::engine::actions::Actions;
 use crate::models::sequences::Tick;
 use crate::models::shared::{ProjectData, RegionIdentifier, RegionType, TrackIdentifier};
@@ -32,8 +31,8 @@ pub enum Message {
     SetPlayhead(Tick),
     AddRegionAtPlayhead(RegionType),
     Tick,
-    // Synth
-    Synth(SynthMessage),
+    // Instrument editor (synth and other instrument-specific messages)
+    InstrumentEditor(InstrumentEditorEvent),
     // Instrument editor
     OpenInstrumentEditor(TrackIdentifier),
     CloseInstrumentEditor,
@@ -42,10 +41,4 @@ pub enum Message {
     OpenFile,
     // Midi Editor
     MidiEditor(super::midi_editor::MidiEditorMessage),
-}
-
-#[derive(Debug, Clone)]
-pub enum SynthMessage {
-    SelectSoundFont(TrackIdentifier),
-    SetSoundFont(TrackIdentifier, Option<PathBuf>),
 }

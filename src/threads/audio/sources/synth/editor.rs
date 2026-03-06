@@ -2,21 +2,22 @@ use iced::widget::{button, column, pick_list, row, text};
 use iced::Element;
 
 use crate::models::components::Track;
-use crate::models::instuments::InstrumentActions;
+use crate::models::instuments::{InstrumentActions, SynthMessage};
 
 use crate::threads::engine::actions::Actions;
 use crate::threads::ui::actions::Message;
-use crate::threads::ui::actions::SynthMessage;
 
-
-pub fn synth_editor_ui(track: &Track, synth: &crate::models::instuments::SimpleSynth) -> Element<'static, Message> 
+/// Builds the synth instrument editor UI. `to_message` maps synth-specific messages into the app `Message` type.
+pub fn synth_editor_ui<F>(track: &Track, synth: &crate::models::instuments::SimpleSynth, to_message: F) -> Element<'static, Message>
+where
+    F: Fn(SynthMessage) -> Message + 'static,
 {
     column![
         text("Instrument Settings"),
         row![
             text("Soundfont:").size(12),
             button(text(synth.soundfont.clone()).size(12)).on_press(
-                Message::Synth(SynthMessage::SelectSoundFont(track.id))
+                to_message(SynthMessage::SelectSoundFont(track.id))
             )
         ]
         .spacing(8),
