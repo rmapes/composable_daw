@@ -1,4 +1,4 @@
-mod actions;
+pub mod actions;
 mod components;
 mod composer_window;
 mod control_bar;
