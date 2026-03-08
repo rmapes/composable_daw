@@ -464,12 +464,12 @@ impl MainWindow {
             ),),
         ];
 
-        if let Some(track_id) = self.instrument_editor_track {
-            if let Some(track) = self.project_data.tracks.get(track_id.track_id) {
-                right_column = right_column.push(components::module_slot(
-                    self.instrument_editor.view(track),
-                ));
-            }
+        if let Some(track_id) = self.instrument_editor_track
+            && let Some(track) = self.project_data.tracks.get(track_id.track_id)
+        {
+            right_column = right_column.push(components::module_slot(
+                self.instrument_editor.view(track),
+            ));
         }
 
         let main_content: Column<'_, Message> = column![

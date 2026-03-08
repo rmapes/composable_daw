@@ -1,5 +1,6 @@
 mod config;
 mod editor;
+#[allow(clippy::module_inception)]
 mod synth;
 
 use std::collections::HashMap;
@@ -16,6 +17,24 @@ use iced::{Element, Task};
 
 use super::super::super::engine::actions::Actions;
 
+type CreateTrackSynthFn = Box<
+    dyn Fn(
+            TrackIdentifier,
+            &dyn EventStreamSource,
+            u32,
+            &dyn InstrumentConfig,
+            flume::Receiver<MidiInputMessage>,
+        ) -> Result<TrackSynth, Box<dyn std::error::Error + Send + Sync>>
+        + Send
+        + Sync,
+>;
+type ApplyActionToConfigFn =
+    Box<dyn Fn(&mut dyn InstrumentConfig, &dyn std::any::Any) -> bool + Send + Sync>;
+type ViewEditorFn =
+    Box<dyn Fn(&Track, &dyn InstrumentConfig) -> Option<Element<'static, Message>> + Send + Sync>;
+type HandleEditorEventFn =
+    Box<dyn Fn(InstrumentEditorEvent) -> Option<(Task<Message>, Option<Actions>)> + Send + Sync>;
+
 /// Re-export so the engine can hold `Rc<RefCell<TrackSynth>>`; no other synth types are public.
 pub use synth::TrackSynth;
 
@@ -26,29 +45,10 @@ pub use config::SynthMessage;
 /// All boxed Fn traits are Send + Sync so that Arc<InstrumentRegistry> can be shared with the engine thread.
 struct RegistryEntry {
     default_config: Box<dyn Fn() -> Box<dyn InstrumentConfig> + Send + Sync>,
-    create_track_synth: Box<
-        dyn Fn(
-                TrackIdentifier,
-                &dyn EventStreamSource,
-                u32,
-                &dyn InstrumentConfig,
-                flume::Receiver<MidiInputMessage>,
-            ) -> Result<TrackSynth, Box<dyn std::error::Error + Send + Sync>>
-            + Send
-            + Sync,
-    >,
-    apply_action_to_config:
-        Box<dyn Fn(&mut dyn InstrumentConfig, &dyn std::any::Any) -> bool + Send + Sync>,
-    view_editor: Box<
-        dyn Fn(&Track, &dyn InstrumentConfig) -> Option<Element<'static, Message>> + Send + Sync,
-    >,
-    handle_editor_event: Option<
-        Box<
-            dyn Fn(InstrumentEditorEvent) -> Option<(Task<Message>, Option<Actions>)>
-                + Send
-                + Sync,
-        >,
-    >,
+    create_track_synth: CreateTrackSynthFn,
+    apply_action_to_config: ApplyActionToConfigFn,
+    view_editor: ViewEditorFn,
+    handle_editor_event: Option<HandleEditorEventFn>,
 }
 
 /// Maps instrument kind strings (e.g. "simple_synth") to constructors and handlers.
@@ -147,10 +147,10 @@ impl InstrumentRegistry {
         evt: InstrumentEditorEvent,
     ) -> Option<(Task<Message>, Option<Actions>)> {
         for entry in self.entries.values() {
-            if let Some(handler) = &entry.handle_editor_event {
-                if let Some(result) = handler(evt.clone()) {
-                    return Some(result);
-                }
+            if let Some(handler) = &entry.handle_editor_event
+                && let Some(result) = handler(evt.clone())
+            {
+                return Some(result);
             }
         }
         None
@@ -195,7 +195,7 @@ pub fn register_simple_synth(registry: &mut InstrumentRegistry) {
                     .downcast_ref::<config::SimpleSynth>()
                     .map(|synth| editor::synth_editor_ui(track, synth))
             }),
-            handle_editor_event: Some(Box::new(|evt| editor::handle_event(evt))),
+            handle_editor_event: Some(Box::new(editor::handle_event)),
         },
     );
 }

@@ -7,6 +7,7 @@ const SOUNDFONT_DIR_PATH: &str = "./soundfonts/";
 
 /// Synth-specific actions. Contained within the synth directory; main code uses opaque InstrumentAction.
 #[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
 pub enum SynthActions {
     SetSoundFont(Option<PathBuf>),
     SetBank(u32),

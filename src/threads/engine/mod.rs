@@ -398,12 +398,11 @@ where
                     actions::Actions::Instrument(track_id, action) => {
                         let instrument =
                             &mut project.tracks[track_id.track_id].instrument;
-                        if instrument.config.is_none() {
-                            if let Some(default) =
+                        if instrument.config.is_none()
+                            && let Some(default) =
                                 registry.default_config(&instrument.kind)
-                            {
-                                instrument.config = Some(default);
-                            }
+                        {
+                            instrument.config = Some(default);
                         }
                         let kind = instrument.kind.clone();
                         match instrument.config.as_mut() {
@@ -413,12 +412,11 @@ where
                                 &action,
                                 config.as_mut(),
                                 |tid, a| {
-                                    audio_sources.handle_instrument_action(tid, a)
+                                    audio_sources
+                                        .handle_instrument_action(tid, a)
                                         .map_err(|e| {
-                                            Box::new(std::io::Error::new(
-                                                std::io::ErrorKind::Other,
-                                                e.to_string(),
-                                            )) as Box<dyn std::error::Error + Send + Sync>
+                                            Box::new(std::io::Error::other(e.to_string()))
+                                                as Box<dyn std::error::Error + Send + Sync>
                                         })
                                 },
                             ) {

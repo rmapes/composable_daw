@@ -18,9 +18,7 @@ const SOUNDFONTS_DIR: &str = "./soundfonts/";
 /// Handles instrument editor events for the synth. Returns `Some(task, action)` when the event
 /// is a synth message, `None` otherwise.
 pub fn handle_event(evt: Event) -> Option<(Task<Message>, Option<Actions>)> {
-    let sm = match evt {
-        Event::Synth(sm) => sm,
-    };
+    let Event::Synth(sm) = evt;
     let out = match sm {
         SynthMessage::SelectSoundFont(track_id) => (
             Task::perform(
