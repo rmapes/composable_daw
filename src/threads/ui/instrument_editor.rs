@@ -1,7 +1,7 @@
 use iced::{Element, Length, Task};
 
 use crate::models::components::Track;
-use crate::models::instuments::Instrument;
+use crate::threads::audio::sources::synth::config::Instrument;
 use crate::models::shared::TrackIdentifier;
 
 // TODO: Decouple via instrument registry

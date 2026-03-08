@@ -38,14 +38,13 @@ impl SimpleSynth {
     pub fn handle_instrument_action(&mut self, action: &InstrumentActions) -> bool {
         match action {
             InstrumentActions::SetSoundFont(soundfont_path) => {
-                if let Some(path) = soundfont_path {
-                    if let Some(file_name) = path
+                if let Some(path) = soundfont_path &&
+                    let Some(file_name) = path
                         .file_name()
                         .and_then(|os| os.to_str())
-                    {
-                        self.soundfont = file_name.to_string();
-                        return true;
-                    }
+                {
+                    self.soundfont = file_name.to_string();
+                    return true;
                 }
                 false
             }

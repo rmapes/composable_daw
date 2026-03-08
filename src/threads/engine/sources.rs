@@ -9,9 +9,10 @@ use super::audio::sources::synth::TrackSynth;
 use super::audio::{
     AudioEngine, buss::Buss, controllers::stereo_output::StereoOutputController, interfaces::Output,
 };
-use crate::models::instuments::InstrumentActions;
+use crate::threads::audio::sources::synth::config::InstrumentActions;
 use crate::models::sequences::{EventStreamSource, Tick};
-use crate::models::{components::Track, instuments::Instrument, shared::TrackIdentifier};
+use crate::models::{components::Track, shared::TrackIdentifier};
+use crate::threads::audio::sources::synth::config::Instrument;
 
 /**
  * Manages audio sources (synths) in the engine thread.

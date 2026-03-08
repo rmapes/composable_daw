@@ -1,4 +1,5 @@
-use crate::models::instuments::SynthMessage;
+use crate::threads::audio::sources::synth::config::SynthMessage;
+
 
 /// Events for the instrument editor. Dispatched by the editor; only the instrument editor and
 /// instrument-specific UIs (e.g. synth editor) need to know the variants.

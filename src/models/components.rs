@@ -25,7 +25,8 @@ All of the components that make up the structure of a 'song'
 use std::error::Error;
 use std::fmt;
 
-use crate::models::instuments::{Instrument, SimpleSynth};
+use crate::threads::audio::sources::synth::config::Instrument;
+use crate::threads::audio::sources::synth::config::SimpleSynth;
 use crate::models::sequences::{MidiSeq, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{RegionIdentifier, TrackIdentifier};
 

@@ -14,9 +14,9 @@ use super::audio;
 use super::audio::controllers::MidiSendersMap;
 use super::audio::controllers::preview::{self, PreviewMessage};
 use crate::models::components::Track;
-use crate::models::instuments::Instrument;
 use crate::models::sequences::MidiNote;
 use crate::models::shared::{ProjectData, RegionType};
+use crate::threads::audio::sources::synth::config::Instrument;
 use sources::AudioSources;
 
 #[derive(Debug)]

@@ -1,6 +1,6 @@
 use crate::models::components::Track;
-use crate::models::instuments::Instrument;
 use crate::models::shared::TrackIdentifier;
+use crate::threads::audio::sources::synth::config::Instrument;
 use iced::widget::{Column, button, column, row, text};
 use iced::{Element, Length};
 

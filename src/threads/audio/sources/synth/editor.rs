@@ -2,7 +2,7 @@ use iced::widget::{button, column, pick_list, row, text};
 use iced::{Element, Task};
 
 use crate::models::components::Track;
-use crate::models::instuments::{InstrumentActions, SimpleSynth, SynthMessage};
+use super::config::{InstrumentActions, SimpleSynth, SynthMessage};
 
 use crate::threads::engine::actions::Actions;
 use crate::threads::ui::actions::Message;
