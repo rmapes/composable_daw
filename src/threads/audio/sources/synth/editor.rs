@@ -1,23 +1,46 @@
 use iced::widget::{button, column, pick_list, row, text};
-use iced::Element;
+use iced::{Element, Task};
 
 use crate::models::components::Track;
-use crate::models::instuments::{InstrumentActions, SynthMessage};
+use crate::models::instuments::{InstrumentActions, SimpleSynth, SynthMessage};
 
 use crate::threads::engine::actions::Actions;
 use crate::threads::ui::actions::Message;
+use crate::threads::ui::file_picker;
+use crate::threads::ui::instrument_editor_event::Event;
 
-/// Builds the synth instrument editor UI. `to_message` maps synth-specific messages into the app `Message` type.
-pub fn synth_editor_ui<F>(track: &Track, synth: &crate::models::instuments::SimpleSynth, to_message: F) -> Element<'static, Message>
-where
-    F: Fn(SynthMessage) -> Message + 'static,
-{
+const SOUNDFONTS_DIR: &str = "./soundfonts/";
+
+/// Handles instrument editor events for the synth. Returns `Some(task, action)` when the event
+/// is a synth message, `None` otherwise.
+pub fn handle_event(evt: Event) -> Option<(Task<Message>, Option<Actions>)> {
+    let sm = match evt {
+        Event::Synth(sm) => sm,
+    };
+    let out = match sm {
+        SynthMessage::SelectSoundFont(track_id) => (
+            Task::perform(
+                file_picker::pick_file(track_id, SOUNDFONTS_DIR),
+                |(track_id, path)| Message::InstrumentEditor(Event::Synth(SynthMessage::SetSoundFont(track_id, path))),
+            ),
+            None,
+        ),
+        SynthMessage::SetSoundFont(track_id, path) => (
+            Task::none(),
+            Some(Actions::Instrument(track_id, InstrumentActions::SetSoundFont(path))),
+        ),
+    };
+    Some(out)
+}
+
+/// Builds the synth instrument editor UI. Produces `Message::InstrumentEditor(Event::Synth(...))` for synth actions.
+pub fn synth_editor_ui(track: &Track, synth: &SimpleSynth) -> Element<'static, Message> {
     column![
         text("Instrument Settings"),
         row![
             text("Soundfont:").size(12),
             button(text(synth.soundfont.clone()).size(12)).on_press(
-                to_message(SynthMessage::SelectSoundFont(track.id))
+                Message::InstrumentEditor(Event::Synth(SynthMessage::SelectSoundFont(track.id)))
             )
         ]
         .spacing(8),
