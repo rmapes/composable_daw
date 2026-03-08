@@ -1,4 +1,4 @@
-use crate::models::instrument::InstrumentActions;
+use crate::models::instrument::InstrumentAction;
 use crate::models::sequences::{MidiNote, Tick};
 use crate::models::shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier};
 
@@ -22,7 +22,7 @@ pub enum Actions {
     DeleteMultipleMidiNotes(RegionIdentifier, Vec<(Tick, usize)>), // region, vec of (start_tick, note_index) pairs
     UpdateMidiNote(RegionIdentifier, Tick, usize, Tick, MidiNote), // region, old_start_tick, note_index, new_start_tick, updated_note
     // Instrument Actions
-    Instrument(TrackIdentifier, InstrumentActions),
+    Instrument(TrackIdentifier, InstrumentAction),
     // Actions local to engine itself
     Internal(SystemActions),
 }

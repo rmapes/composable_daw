@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use iced::widget::{button, column, pick_list, row, text};
 use iced::{Element, Task};
 
 use crate::models::components::Track;
-use crate::models::instrument::InstrumentActions;
+use crate::models::instrument::InstrumentAction;
 
-use super::config::{SimpleSynth, SynthMessage};
+use super::config::{SimpleSynth, SynthActions, SynthMessage};
 
 use crate::threads::engine::actions::Actions;
 use crate::threads::ui::actions::Message;
@@ -29,7 +31,10 @@ pub fn handle_event(evt: Event) -> Option<(Task<Message>, Option<Actions>)> {
         ),
         SynthMessage::SetSoundFont(track_id, path) => (
             Task::none(),
-            Some(Actions::Instrument(track_id, InstrumentActions::SetSoundFont(path))),
+            Some(Actions::Instrument(
+                track_id,
+                Arc::new(SynthActions::SetSoundFont(path)) as InstrumentAction,
+            )),
         ),
     };
     Some(out)
@@ -52,7 +57,7 @@ pub fn synth_editor_ui(track: &Track, synth: &SimpleSynth) -> Element<'static, M
             move |val: u8| {
                 Message::Engine(Actions::Instrument(
                     track_id,
-                    InstrumentActions::SetBank(val as u32),
+                    Arc::new(SynthActions::SetBank(val as u32)) as InstrumentAction,
                 ))
             }
         }),
@@ -62,7 +67,7 @@ pub fn synth_editor_ui(track: &Track, synth: &SimpleSynth) -> Element<'static, M
             move |val: u8| {
                 Message::Engine(Actions::Instrument(
                     track_id,
-                    InstrumentActions::SetProgram(val),
+                    Arc::new(SynthActions::SetProgram(val)) as InstrumentAction,
                 ))
             }
         }),

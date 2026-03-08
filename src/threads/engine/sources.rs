@@ -10,7 +10,7 @@ use super::audio::sources::synth::{InstrumentRegistry, TrackSynth};
 use super::audio::{
     AudioEngine, buss::Buss, controllers::stereo_output::StereoOutputController, interfaces::Output,
 };
-use crate::models::instrument::InstrumentActions;
+use crate::models::instrument::InstrumentAction;
 use crate::models::sequences::{EventStreamSource, Tick};
 use crate::models::{components::Track, shared::TrackIdentifier};
 
@@ -153,12 +153,12 @@ impl AudioSources {
     pub fn handle_instrument_action(
         &mut self,
         track_id: TrackIdentifier,
-        action: InstrumentActions,
+        action: &InstrumentAction,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(track_synth) = self.tracks.get(&track_id) {
             track_synth
                 .borrow_mut()
-                .handle_instrument_action(track_id, &action)?;
+                .handle_instrument_action(track_id, action.as_ref())?;
         }
         Ok(())
     }

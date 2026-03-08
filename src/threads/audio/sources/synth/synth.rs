@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-use crate::models::instrument::InstrumentActions;
+use super::config::SynthActions as ConfigSynthActions;
 use crate::threads::audio::interfaces::Output;
 use crate::threads::audio::sources::synth::config::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStream, EventStreamSource, Tick};
@@ -211,20 +211,22 @@ impl TrackSynth {
     pub fn handle_instrument_action(
         &mut self,
         track_id: TrackIdentifier,
-        action: &InstrumentActions,
+        action: &dyn std::any::Any,
     ) -> Result<(), Box<dyn Error>> {
         if track_id != self.id {
             return Ok(());
         }
-
-        match action {
-            InstrumentActions::SetSoundFont(soundfont_path) => {
+        let Some(a) = action.downcast_ref::<ConfigSynthActions>() else {
+            return Ok(());
+        };
+        match a {
+            ConfigSynthActions::SetSoundFont(soundfont_path) => {
                 self.handle_synth_action(SynthActions::SetSoundFont(track_id, soundfont_path.clone()))
             }
-            InstrumentActions::SetBank(bank) => {
+            ConfigSynthActions::SetBank(bank) => {
                 self.handle_synth_action(SynthActions::SetBank(track_id, *bank))
             }
-            InstrumentActions::SetProgram(program) => {
+            ConfigSynthActions::SetProgram(program) => {
                 self.handle_synth_action(SynthActions::SetProgram(track_id, *program))
             }
         }

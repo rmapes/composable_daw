@@ -1,9 +1,17 @@
 use std::path::PathBuf;
 
-use crate::models::instrument::{InstrumentActions, InstrumentConfig};
+use crate::models::instrument::InstrumentConfig;
 use crate::models::shared::TrackIdentifier;
 
 const SOUNDFONT_DIR_PATH: &str = "./soundfonts/";
+
+/// Synth-specific actions. Contained within the synth directory; main code uses opaque InstrumentAction.
+#[derive(Debug, Clone)]
+pub enum SynthActions {
+    SetSoundFont(Option<PathBuf>),
+    SetBank(u32),
+    SetProgram(u8),
+}
 
 /// UI messages for the synth instrument editor. Only the synth module and instrument editor handle these.
 #[derive(Debug, Clone)]
@@ -45,9 +53,12 @@ impl InstrumentConfig for SimpleSynth {
         Box::new(self.clone())
     }
 
-    fn apply_action(&mut self, action: &InstrumentActions) -> bool {
-        match action {
-            InstrumentActions::SetSoundFont(soundfont_path) => {
+    fn apply_action(&mut self, action: &dyn std::any::Any) -> bool {
+        let Some(a) = action.downcast_ref::<SynthActions>() else {
+            return false;
+        };
+        match a {
+            SynthActions::SetSoundFont(soundfont_path) => {
                 if let Some(path) = soundfont_path
                     && let Some(file_name) = path.file_name().and_then(|os| os.to_str())
                 {
@@ -56,11 +67,11 @@ impl InstrumentConfig for SimpleSynth {
                 }
                 false
             }
-            InstrumentActions::SetBank(bank) => {
+            SynthActions::SetBank(bank) => {
                 self.bank = *bank;
                 true
             }
-            InstrumentActions::SetProgram(program) => {
+            SynthActions::SetProgram(program) => {
                 self.program = *program;
                 true
             }

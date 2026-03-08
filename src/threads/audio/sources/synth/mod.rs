@@ -5,7 +5,7 @@ mod synth;
 use std::collections::HashMap;
 
 use crate::models::components::Track;
-use crate::models::instrument::{InstrumentActions, InstrumentConfig};
+use crate::models::instrument::{InstrumentAction, InstrumentConfig};
 use crate::models::sequences::EventStreamSource;
 use crate::models::shared::TrackIdentifier;
 use crate::threads::audio::controllers::MidiInputMessage;
@@ -38,7 +38,7 @@ struct RegistryEntry {
             + Sync,
     >,
     apply_action_to_config:
-        Box<dyn Fn(&mut dyn InstrumentConfig, &InstrumentActions) -> bool + Send + Sync>,
+        Box<dyn Fn(&mut dyn InstrumentConfig, &dyn std::any::Any) -> bool + Send + Sync>,
     view_editor: Box<
         dyn Fn(&Track, &dyn InstrumentConfig) -> Option<Element<'static, Message>> + Send + Sync,
     >,
@@ -98,11 +98,11 @@ impl InstrumentRegistry {
         &self,
         kind: &str,
         config: &mut dyn InstrumentConfig,
-        action: &InstrumentActions,
+        action: &InstrumentAction,
     ) -> bool {
         self.entries
             .get(kind)
-            .map(|e| (e.apply_action_to_config)(config, action))
+            .map(|e| (e.apply_action_to_config)(config, action.as_ref()))
             .unwrap_or(false)
     }
 
@@ -113,11 +113,11 @@ impl InstrumentRegistry {
         &self,
         kind: &str,
         track_id: TrackIdentifier,
-        action: &InstrumentActions,
+        action: &InstrumentAction,
         config: &mut dyn InstrumentConfig,
         live_synth_updater: impl FnOnce(
             TrackIdentifier,
-            &InstrumentActions,
+            &InstrumentAction,
         ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         live_synth_updater(track_id, action)?;

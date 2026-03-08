@@ -413,8 +413,7 @@ where
                                 &action,
                                 config.as_mut(),
                                 |tid, a| {
-                                    audio_sources
-                                        .handle_instrument_action(tid, a.clone())
+                                    audio_sources.handle_instrument_action(tid, a)
                                         .map_err(|e| {
                                             Box::new(std::io::Error::new(
                                                 std::io::ErrorKind::Other,
