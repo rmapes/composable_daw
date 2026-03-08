@@ -1,18 +1,18 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use log::info;
 
 use super::audio::controllers::{MidiInputMessage, MidiSendersMap};
-use super::audio::sources::synth::TrackSynth;
+use super::audio::sources::synth::{InstrumentRegistry, TrackSynth};
 use super::audio::{
     AudioEngine, buss::Buss, controllers::stereo_output::StereoOutputController, interfaces::Output,
 };
-use crate::threads::audio::sources::synth::config::InstrumentActions;
+use crate::models::instrument::InstrumentActions;
 use crate::models::sequences::{EventStreamSource, Tick};
 use crate::models::{components::Track, shared::TrackIdentifier};
-use crate::threads::audio::sources::synth::config::Instrument;
 
 /**
  * Manages audio sources (synths) in the engine thread.
@@ -24,6 +24,7 @@ pub struct AudioSources {
     final_buss: Buss,
     tracks: HashMap<TrackIdentifier, Rc<RefCell<TrackSynth>>>,
     midi_senders: MidiSendersMap,
+    registry: Arc<InstrumentRegistry>,
 }
 
 impl AudioSources {
@@ -32,6 +33,7 @@ impl AudioSources {
         stereo_output: StereoOutputController,
         tracks: &Vec<Track>,
         midi_senders: MidiSendersMap,
+        registry: Arc<InstrumentRegistry>,
     ) -> Self {
         info!(
             "Creating new Audio Source Controller with {} tracks",
@@ -43,6 +45,7 @@ impl AudioSources {
             final_buss: Buss::new(),
             tracks: HashMap::new(),
             midi_senders,
+            registry,
         };
         for track in tracks {
             let _ = this.add_track(track);
@@ -52,33 +55,38 @@ impl AudioSources {
 
     pub fn add_track(&mut self, track: &Track) -> Result<(), &str> {
         info!("Adding track {}", track.id.track_id);
-        match &track.instrument.kind {
-            Instrument::Synth(instrument) => {
-                if let Some(seq) = &track.midi {
-                    let (midi_tx, midi_rx) = flume::unbounded();
-                    let track_synth = TrackSynth::new(
-                        track.id,
-                        seq,
-                        self.audio.sample_rate,
-                        &instrument.get_soundfont_path(),
-                        instrument.bank,
-                        instrument.program,
-                        midi_rx,
-                    );
-                    if let Ok(mut senders) = self.midi_senders.write() {
-                        senders.insert(track.id, midi_tx);
-                    }
-                    let track_synth_rc = Rc::new(RefCell::new(track_synth));
-                    let wrapper = Rc::clone(&track_synth_rc);
-                    self.final_buss
-                        .add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
-                    self.tracks.insert(track.id, track_synth_rc);
-                    Ok(())
-                } else {
-                    Err("Not midi")
-                }
-            }
+        let Some(seq) = &track.midi else {
+            return Err("Not midi");
+        };
+        let default_config = self.registry.default_config(&track.instrument.kind);
+        let config: &dyn crate::models::instrument::InstrumentConfig = match &track.instrument.config {
+            Some(c) => c.as_ref(),
+            None => default_config
+                .as_ref()
+                .ok_or("unknown instrument kind")?
+                .as_ref(),
+        };
+        let (midi_tx, midi_rx) = flume::unbounded();
+        let track_synth = self
+            .registry
+            .create_track_synth(
+                &track.instrument.kind,
+                track.id,
+                seq,
+                self.audio.sample_rate,
+                config,
+                midi_rx,
+            )
+            .map_err(|_| "create_track_synth failed")?;
+        if let Ok(mut senders) = self.midi_senders.write() {
+            senders.insert(track.id, midi_tx);
         }
+        let track_synth_rc = Rc::new(RefCell::new(track_synth));
+        let wrapper = Rc::clone(&track_synth_rc);
+        self.final_buss
+            .add_input(Box::new(RefCellOutputWrapper { inner: wrapper }));
+        self.tracks.insert(track.id, track_synth_rc);
+        Ok(())
     }
 
     pub fn update_track(&mut self, track: &Track) -> Result<(), &str> {

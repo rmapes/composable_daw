@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
-use crate::threads::audio::sources::synth::config::InstrumentActions;
+use crate::models::instrument::InstrumentActions;
 use crate::threads::audio::interfaces::Output;
 use crate::threads::audio::sources::synth::config::get_soundfont_path;
 use crate::models::sequences::{EventPriority, EventStream, EventStreamSource, Tick};

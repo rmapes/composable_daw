@@ -1,4 +1,4 @@
-use crate::threads::audio::sources::synth::config::SynthMessage;
+use crate::threads::audio::sources::synth::SynthMessage;
 
 
 /// Events for the instrument editor. Dispatched by the editor; only the instrument editor and

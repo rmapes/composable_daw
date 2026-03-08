@@ -16,7 +16,7 @@ use super::audio::controllers::preview::{self, PreviewMessage};
 use crate::models::components::Track;
 use crate::models::sequences::MidiNote;
 use crate::models::shared::{ProjectData, RegionType};
-use crate::threads::audio::sources::synth::config::Instrument;
+use crate::threads::audio::sources::synth::InstrumentRegistry;
 use sources::AudioSources;
 
 #[derive(Debug)]
@@ -100,6 +100,7 @@ const ENGINE_FILL_TIMEOUT_MS: u64 = 5;
 pub fn start<F>(
     observer_callback: F,
     project_ref: &ProjectData,
+    registry: Arc<InstrumentRegistry>,
 ) -> (EngineController, Arc<RwLock<PlayerState>>)
 where
     F: Fn(&PlayerState) + Send + Sync + 'static,
@@ -116,6 +117,7 @@ where
         let tx = tx.clone();
         let player_state = player_state.clone();
         let midi_senders = Arc::clone(&midi_senders);
+        let registry = registry;
         let mut project = project_ref.clone();
         move || {
             let (audio, stereo_output) = match audio::init_audio(&tx.clone()) {
@@ -145,6 +147,7 @@ where
                 stereo_output,
                 &project.tracks,
                 Arc::clone(&midi_senders),
+                registry.clone(),
             );
             let preview_tx = preview::spawn_preview_thread(Arc::clone(&midi_senders));
             let fill_timeout = Duration::from_millis(ENGINE_FILL_TIMEOUT_MS);
@@ -393,25 +396,49 @@ where
                         }
                     }
                     actions::Actions::Instrument(track_id, action) => {
-                        if let Err(e) =
-                            audio_sources.handle_instrument_action(track_id, action.clone())
-                        {
-                            error!(
-                                "FATAL: Unexpected error forwarding action to instrument: {}",
-                                e
-                            );
-                            ActionFollowUp::Exit
-                        } else {
-                            let instrument =
-                                &mut project.tracks[track_id.track_id].instrument.kind;
-                            let Instrument::Synth(synth) = instrument;
-                            let changed = synth.handle_instrument_action(&action);
-
-                            if changed {
-                                ActionFollowUp::ProjectDataUpdate
-                            } else {
-                                ActionFollowUp::Continue
+                        let instrument =
+                            &mut project.tracks[track_id.track_id].instrument;
+                        if instrument.config.is_none() {
+                            if let Some(default) =
+                                registry.default_config(&instrument.kind)
+                            {
+                                instrument.config = Some(default);
                             }
+                        }
+                        let kind = instrument.kind.clone();
+                        match instrument.config.as_mut() {
+                            Some(config) => match registry.apply_instrument_action(
+                                &kind,
+                                track_id,
+                                &action,
+                                config.as_mut(),
+                                |tid, a| {
+                                    audio_sources
+                                        .handle_instrument_action(tid, a.clone())
+                                        .map_err(|e| {
+                                            Box::new(std::io::Error::new(
+                                                std::io::ErrorKind::Other,
+                                                e.to_string(),
+                                            )) as Box<dyn std::error::Error + Send + Sync>
+                                        })
+                                },
+                            ) {
+                                Err(e) => {
+                                    error!(
+                                        "FATAL: Unexpected error forwarding action to instrument: {}",
+                                        e
+                                    );
+                                    ActionFollowUp::Exit
+                                }
+                                Ok(changed) => {
+                                    if changed {
+                                        ActionFollowUp::ProjectDataUpdate
+                                    } else {
+                                        ActionFollowUp::Continue
+                                    }
+                                }
+                            },
+                            None => ActionFollowUp::Continue,
                         }
                     }
                     actions::Actions::Internal(sys_ev) => {

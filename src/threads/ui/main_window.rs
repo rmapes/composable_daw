@@ -1,6 +1,8 @@
 use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 
+use crate::threads::audio::sources::synth::{register_simple_synth, InstrumentRegistry};
+
 use iced::advanced::subscription::{EventStream, Recipe};
 use iced::futures::SinkExt;
 use iced::futures::channel::mpsc;
@@ -50,6 +52,8 @@ pub struct MainWindow {
     engine: engine::EngineController,
     player_state: Arc<RwLock<PlayerState>>,
     project_data: ProjectData,
+    #[allow(dead_code)] // Passed to engine and components; kept for future use (e.g. add track)
+    instrument_registry: Arc<InstrumentRegistry>,
 
     // Cached state
     is_audio_initialized: bool,
@@ -91,6 +95,11 @@ impl std::hash::Hash for MainWindow {
 impl Default for MainWindow {
     fn default() -> Self {
         let project_data = ProjectData::new();
+        let instrument_registry = Arc::new({
+            let mut r = InstrumentRegistry::new();
+            register_simple_synth(&mut r);
+            r
+        });
         let (engine, player_state) = {
             let (engine, player_state) = engine::start(
                 {
@@ -100,6 +109,7 @@ impl Default for MainWindow {
                     }
                 },
                 &project_data,
+                Arc::clone(&instrument_registry),
             );
             (engine, player_state)
         };
@@ -109,6 +119,7 @@ impl Default for MainWindow {
             engine,
             player_state,
             project_data,
+            instrument_registry: Arc::clone(&instrument_registry),
             is_audio_initialized: false,
             selected_track: selected_track.track_id,
             selected_region: Some(RegionIdentifier {
@@ -131,10 +142,12 @@ impl Default for MainWindow {
             instrument_editor: instrument_editor::Component::new(
                 Length::Fill,
                 Length::FillPortion(1),
+                Arc::clone(&instrument_registry),
             ),
             track_settings: track_settings::Component::new(
                 Length::Fixed(TRACK_SETTINGS_WIDTH),
                 Length::Fill,
+                Arc::clone(&instrument_registry),
             ),
         }
     }
@@ -181,7 +194,7 @@ impl MainWindow {
             //////////////////
             // Instrument editor: file picker and engine actions are handled inside the editor.
             Message::InstrumentEditor(evt) => {
-                let (task, action) = instrument_editor::Component::update(evt);
+                let (task, action) = self.instrument_editor.update(evt);
                 if let Some(a) = action {
                     return self.send_to_engine_and_handle_errors(a);
                 }

@@ -1,4 +1,4 @@
-use crate::threads::audio::sources::synth::config::InstrumentActions;
+use crate::models::instrument::InstrumentActions;
 use crate::models::sequences::{MidiNote, Tick};
 use crate::models::shared::{PatternNoteIdentifier, RegionIdentifier, RegionType, TrackIdentifier};
 

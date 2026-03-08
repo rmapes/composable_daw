@@ -25,20 +25,33 @@ All of the components that make up the structure of a 'song'
 use std::error::Error;
 use std::fmt;
 
-use crate::threads::audio::sources::synth::config::Instrument;
-use crate::threads::audio::sources::synth::config::SimpleSynth;
+use crate::models::instrument::InstrumentConfig;
 use crate::models::sequences::{MidiSeq, PatternSeq, Sequence, SequenceContainer, TSequence, Tick};
 use crate::models::shared::{RegionIdentifier, TrackIdentifier};
 
-#[derive(Debug, Clone)]
+pub const DEFAULT_INSTRUMENT_KIND: &str = "simple_synth";
+
+#[derive(Debug)]
 pub struct VirtualInstrument {
-    pub kind: Instrument,
+    pub kind: String,
+    /// None until filled from InstrumentRegistry::default_config(kind) when needed.
+    pub config: Option<Box<dyn InstrumentConfig>>,
 }
 
 impl Default for VirtualInstrument {
     fn default() -> Self {
         Self {
-            kind: Instrument::Synth(SimpleSynth::default()),
+            kind: DEFAULT_INSTRUMENT_KIND.to_string(),
+            config: None,
+        }
+    }
+}
+
+impl Clone for VirtualInstrument {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            config: self.config.as_ref().map(|c| c.clone_box()),
         }
     }
 }

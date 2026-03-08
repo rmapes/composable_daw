@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::models::instrument::{InstrumentActions, InstrumentConfig};
 use crate::models::shared::TrackIdentifier;
 
 const SOUNDFONT_DIR_PATH: &str = "./soundfonts/";
@@ -33,15 +34,22 @@ impl SimpleSynth {
         get_soundfont_path(&self.soundfont)
     }
 
-    /// Apply an instrument-level action to this synth.
-    /// Returns true if this synth's configuration changed.
-    pub fn handle_instrument_action(&mut self, action: &InstrumentActions) -> bool {
+}
+
+impl InstrumentConfig for SimpleSynth {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn crate::models::instrument::InstrumentConfig> {
+        Box::new(self.clone())
+    }
+
+    fn apply_action(&mut self, action: &InstrumentActions) -> bool {
         match action {
             InstrumentActions::SetSoundFont(soundfont_path) => {
-                if let Some(path) = soundfont_path &&
-                    let Some(file_name) = path
-                        .file_name()
-                        .and_then(|os| os.to_str())
+                if let Some(path) = soundfont_path
+                    && let Some(file_name) = path.file_name().and_then(|os| os.to_str())
                 {
                     self.soundfont = file_name.to_string();
                     return true;
@@ -58,18 +66,6 @@ impl SimpleSynth {
             }
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum Instrument {
-    Synth(SimpleSynth),
-}
-
-#[derive(Debug, Clone)]
-pub enum InstrumentActions {
-    SetSoundFont(Option<PathBuf>),
-    SetBank(u32),
-    SetProgram(u8),
 }
 
 pub fn get_soundfont_path(soundfont: &String) -> String {
